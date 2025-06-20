@@ -1,11 +1,9 @@
 # 🚀 Open-Coze-AI Agent应用开发平台
-
+![Snipaste_2025-06-20_13-45-59](https://github.com/user-attachments/assets/08eefb6f-e636-428b-91c5-e700315eb088)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://www.docker.com/)
-![Snipaste_2025-06-20_13-45-59](https://github.com/user-attachments/assets/08eefb6f-e636-428b-91c5-e700315eb088)
 在线地址: http://114.132.198.194/
-企业级大语言模型运维平台，提供模块化架构、多模型支持和全链路监控。
 
 ## 🔐 重要配置说明
 
