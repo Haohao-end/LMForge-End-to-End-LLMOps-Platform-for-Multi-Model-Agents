@@ -1,0 +1,15 @@
+- category: search
+  name: 搜索
+  icon: search.svg
+- category: image
+  name: 图片
+  icon: image.svg
+- category: weather
+  name: 天气
+  icon: weather.svg
+- category: tool
+  name: 工具
+  icon: tool.svg
+- category: other
+  name: 其他
+  icon: other.svg

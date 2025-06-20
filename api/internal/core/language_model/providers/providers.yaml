@@ -1,0 +1,43 @@
+- name: openai
+  label: OpenAI
+  description: OpenAI提供的模型，例如GPT-4o-mini和GPT-4o。
+  icon: icon.svg
+  background: "#E5E7EB"
+  supported_model_types:
+    - chat
+    - completion
+- name: moonshot
+  label: 月之暗面
+  description: Moonshot提供的模型，例如moonshot-v1-8k、moonshot-v1-32k和moonshot-v1-128k。
+  icon: icon.png
+  background: "#FFFFFF"
+  supported_model_types:
+    - chat
+- name: tongyi
+  label: 通义千问
+  description: 通义千问提供的模型，例如千问-max、千问-plus等。
+  icon: icon.png
+  background: "#FFFFFF"
+  supported_model_types:
+    - chat
+- name: wenxin
+  label: 文心一言
+  description: 百度文心一言提供的模型，例如ERNIE-3.5、ERNIE-4等。
+  icon: icon.png
+  background: "#FFFFFF"
+  supported_model_types:
+    - chat
+- name: deepseek
+  label: DeepSeek
+  description: DeepSeek提供的模型，例如deepseek-v3、deepseek-r1等。
+  icon: icon.png
+  background: "#FFFFFF"
+  supported_model_types:
+    - chat
+- name: ollama
+  label: Ollama
+  description: Ollama提供的本地离线大语言模型，例如deepseek-r1-8b等。
+  icon: icon.svg
+  background: "#FFFFFF"
+  supported_model_types:
+    - chat

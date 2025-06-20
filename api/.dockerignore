@@ -1,0 +1,59 @@
+# 通用忽略规则
+**/.gitignore
+**/.DS_Store
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/*.swp
+**/*.bak
+**/*.tmp
+**/*.log
+**/*.sqlite
+**/*.pid
+**/*.pid.lock
+**/Thumbs.db
+**/ehthumbs.db
+**/Desktop.ini
+
+# 开发工具相关
+**/.idea
+**/.vscode
+**/.vs
+**/.history
+**/*.code-workspace
+**/*.iml
+
+# 测试相关
+**/test
+**/tests
+**/testing
+**/tmp
+**/.pytest_cache
+**/coverage.xml
+**/.coverage
+**/htmlcov
+**/*.cover
+**/.hypothesis
+
+# 构建和包管理
+**/dist
+**/build
+**/*.egg-info
+**/*.whl
+**/pip-log.txt
+**/Pipfile*
+**/poetry.lock
+**/requirements-dev.txt
+**/setup.cfg
+**/setup.py
+
+# 文档
+**/*.rst
+**/docs
+**/CHANGELOG*
+
+# 数据文件
+**/storage/log/*
+**/storage/memory/*
+**/storage/vector_store/*

@@ -1,0 +1,4 @@
+name: wikipedia_search
+label: 维基百科搜索
+description: 一个用于执行维基百科搜索并提取片段和网页的工具
+params: []

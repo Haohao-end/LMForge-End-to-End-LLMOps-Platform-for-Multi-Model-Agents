@@ -1,0 +1,36 @@
+model: ernie-4-8k
+label: ernie-4-8k
+model_type: chat
+features:
+  - agent_thought
+context_window: 8192
+max_output_tokens: 2048
+attributes:
+  model: ERNIE-4.0-8K
+parameters:
+  - name: temperature
+    use_template: temperature
+    max: 1
+    default: 0.8
+  - name: top_p
+    use_template: top_p
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: frequency_penalty
+    use_template: frequency_penalty
+  - name: max_output_tokens
+    use_template: max_tokens
+    default: 2048
+    max: 2048
+  - name: disable_search
+    label: 禁用搜索
+    type: boolean
+    help: 禁用模型自行进行外部搜索。
+    required: false
+    default: false
+metadata:
+  pricing:
+    input: 0.1200
+    output: 0.1200
+    unit: 0.001
+    currency: RMB

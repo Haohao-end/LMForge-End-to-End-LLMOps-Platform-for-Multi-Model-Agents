@@ -1,0 +1,26 @@
+model: deepseek-r1:8b
+label: deepseek-r1:8b
+model_type: chat
+features:
+  - agent_thought
+context_window: 131072
+max_output_tokens: 8196
+attributes:
+  model: "deepseek-r1:8b"
+parameters:
+  - name: temperature
+    use_template: temperature
+  - name: top_p
+    use_template: top_p
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: max_tokens
+    use_template: max_tokens
+    default: 4096
+    max: 8196
+metadata:
+  pricing:
+    input: 0.0000
+    output: 0.0000
+    unit: 0.001
+    currency: RMB

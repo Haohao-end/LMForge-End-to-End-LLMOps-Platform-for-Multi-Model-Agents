@@ -1,0 +1,38 @@
+model: deepseek-chat
+label: deepseek-chat
+model_type: chat
+features:
+  - tool_call
+  - agent_thought
+context_window: 8192
+max_output_tokens: 8192
+attributes:
+  model: deepseek-chat
+parameters:
+  - name: temperature
+    use_template: temperature
+    type: float
+    default: 0.85
+    max: 1.0
+  - name: top_p
+    use_template: temperature
+    type: float
+    default: 0.9
+  - name: presence_penalty
+    use_template: temperature
+    type: float
+    default: 0.0
+  - name: frequency_penalty
+    use_template: temperature
+    type: float
+    default: 0.0
+  - name: max_tokens
+    use_template: temperature
+    type: int
+    default: 4096
+metadata:
+  pricing:
+    input: 0.0015
+    output: 0.0030
+    unit: 0.001
+    currency: RMB

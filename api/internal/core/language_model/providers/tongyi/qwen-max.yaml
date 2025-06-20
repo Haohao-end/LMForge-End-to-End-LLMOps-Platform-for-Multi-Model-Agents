@@ -1,0 +1,31 @@
+model: qwen-max
+label: qwen-max
+model_type: chat
+features:
+  - tool_call
+  - agent_thought
+context_window: 32768
+max_output_tokens: 8192
+attributes:
+  model: qwen-max
+parameters:
+  - name: temperature
+    use_template: temperature
+  - name: top_p
+    use_template: top_p
+    min: 0.01
+    default: 0.5
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: frequency_penalty
+    use_template: frequency_penalty
+  - name: max_tokens
+    use_template: max_tokens
+    default: 4096
+    max: 8192
+metadata:
+  pricing:
+    input: 0.1200
+    output: 0.1200
+    unit: 0.001
+    currency: RMB

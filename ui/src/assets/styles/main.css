@@ -1,0 +1,20 @@
+@import 'markdown.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  .scrollbar-w-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-w-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  html,
+  body {
+    @apply min-h-[600px] min-w-[1200px] h-full w-full;
+  }
+}
