@@ -1,5 +1,5 @@
 # 🚀 LLMOps - Large Language Model Operations Platform 
-![image](https://github.com/user-attachments/assets/955ba250-44aa-4e4e-89c8-6cd729756531)
+![image](https://github.com/user-attachments/assets/f4cad915-411e-4e0f-95bc-8f8afdcf1019)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://www.docker.com/)
