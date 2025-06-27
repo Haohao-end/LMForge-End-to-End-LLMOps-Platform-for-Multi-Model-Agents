@@ -58,7 +58,7 @@ GITHUB_CLIENT_SECRET=your-github-oauth-secret
 
 ```bash
 # Clone repository
-git clone https://github.com/Haohao-end/Open-Coze.git
+git clone https://github.com/Haohao-end/LMForge-End-to-End-LLMOps-Platform-for-Multi-Model-Agents.git
 cd Open-Coze/docker
 
 # Configure environment
