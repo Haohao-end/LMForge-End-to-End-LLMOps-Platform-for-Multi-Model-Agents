@@ -47,6 +47,13 @@ class AssistantAgentHandler:
         return compact_generate_response(response)
 
     @login_required
+    def get_assistant_agent_capabilities(self):
+        """获取辅助 Agent 当前可用能力。"""
+        return success_json({
+            "capabilities": self.assistant_agent_service.get_capabilities(),
+        })
+
+    @login_required
     def stop_assistant_agent_chat(self, task_id: UUID):
         """停止与辅助智能体的对话聊天"""
         self.assistant_agent_service.stop_chat(task_id, current_user)

@@ -1,0 +1,16 @@
+source_key: playwright-interactive
+name: playwright-interactive
+label: playwright-interactive
+description: Persistent browser and Electron interaction through `js_repl` for fast
+  iterative UI debugging.
+category: 内容处理
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

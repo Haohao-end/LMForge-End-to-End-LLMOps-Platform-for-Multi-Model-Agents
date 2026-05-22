@@ -292,6 +292,7 @@ class PublicAgentRegistryService(BaseService):
         tags = " ".join(app.tags or [])
         opening_statement = app_config.opening_statement if app_config else ""
         tools_summary = self._build_tools_summary(app_config.tools if app_config else [])
+        mcp_summary = self._build_mcp_summary(app_config.mcp_bindings if app_config else [])
         workflows_summary = self._build_workflows_summary(app_config.workflows if app_config else [])
         return " ".join(
             [
@@ -300,6 +301,7 @@ class PublicAgentRegistryService(BaseService):
                 tags,
                 str(opening_statement or ""),
                 tools_summary,
+                mcp_summary,
                 workflows_summary,
             ]
         ).strip()
@@ -346,6 +348,7 @@ class PublicAgentRegistryService(BaseService):
     def build_page_content(self, app: App, app_config: Any) -> str:
         """构建用于Embedding的公共Agent文本。"""
         tools_summary = self._build_tools_summary(app_config.tools if app_config else [])
+        mcp_summary = self._build_mcp_summary(app_config.mcp_bindings if app_config else [])
         workflows_summary = self._build_workflows_summary(app_config.workflows if app_config else [])
         opening_statement = app_config.opening_statement if app_config else ""
         tags = ", ".join(app.tags or [])
@@ -356,6 +359,7 @@ class PublicAgentRegistryService(BaseService):
             f"Agent标签: {tags}" if tags else "Agent标签: 无",
             f"开场白: {opening_statement}" if opening_statement else "开场白: 无",
             f"工具摘要: {tools_summary}" if tools_summary else "工具摘要: 无",
+            f"MCP摘要: {mcp_summary}" if mcp_summary else "MCP摘要: 无",
             f"工作流摘要: {workflows_summary}" if workflows_summary else "工作流摘要: 无",
         ]
         return "\n".join(lines)
@@ -383,6 +387,25 @@ class PublicAgentRegistryService(BaseService):
             tool_id = str(tool.get("tool_id", "")).strip()
             if provider_id and tool_id:
                 summaries.append(f"{provider_id}:{tool_id}")
+        return ", ".join(summaries[:10])
+
+    def _build_mcp_summary(self, mcp_bindings: list[dict[str, Any]] | None) -> str:
+        if not mcp_bindings:
+            return ""
+
+        summaries = []
+        for binding in mcp_bindings:
+            if not isinstance(binding, dict):
+                continue
+            name = str(binding.get("name", "")).strip()
+            transport = str(binding.get("transport", "")).strip()
+            target = str(binding.get("url") or binding.get("command") or "").strip()
+            if not name:
+                continue
+            if target:
+                summaries.append(f"{name}:{transport}:{target}")
+            else:
+                summaries.append(f"{name}:{transport}")
         return ", ".join(summaries[:10])
 
     def _build_workflows_summary(self, workflow_ids: list[Any] | None) -> str:

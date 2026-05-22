@@ -1,0 +1,17 @@
+source_key: write-a-skill
+name: write-a-skill
+label: 写技能
+description: 创建新的 agent skills，保持结构清晰、说明准确、触发条件明确。Use when the user wants to create or update a skill.
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - skills
+  - authoring
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

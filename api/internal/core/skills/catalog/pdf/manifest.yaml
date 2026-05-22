@@ -1,0 +1,18 @@
+source_key: pdf
+name: pdf
+label: pdf
+description: Use when tasks involve reading, creating, or reviewing PDF files where
+  rendering and layout matter; prefer visual checks by rendering pages (Poppler) and
+  use Python tools such as `reportlab`, `pdfplumber`, and `pypdf` for generation and
+  extraction.
+category: 内容处理
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

@@ -1,0 +1,17 @@
+source_key: cloudflare-deploy
+name: cloudflare-deploy
+label: cloudflare-deploy
+description: Deploy applications and infrastructure to Cloudflare using Workers, Pages,
+  and related platform services. Use when the user asks to deploy, host, publish,
+  or set up a project on Cloudflare.
+category: 部署
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

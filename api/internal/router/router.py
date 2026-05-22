@@ -27,6 +27,8 @@ from internal.handler import (
     WechatHandler,
     PublicAppHandler,
     PublicWorkflowHandler,
+    McpHandler,
+    SkillHandler,
     LikeHandler,
     FavoriteHandler,
     HomeHandler,
@@ -63,6 +65,8 @@ class Router:
     wechat_handler: WechatHandler
     public_app_handler: PublicAppHandler
     public_workflow_handler: PublicWorkflowHandler
+    mcp_handler: McpHandler
+    skill_handler: SkillHandler
     like_handler: LikeHandler
     favorite_handler: FavoriteHandler
     home_handler: HomeHandler
@@ -187,6 +191,33 @@ class Router:
         bp.add_url_rule(
             "/builtin-tools/categories",
             view_func=self.builtin_tool_handler.get_categories,
+        )
+
+        # 3.1技能包广场模块
+        bp.add_url_rule("/skills/categories", view_func=self.skill_handler.get_skill_categories)
+        bp.add_url_rule("/skills", view_func=self.skill_handler.get_skills_with_page)
+        bp.add_url_rule("/skills/<uuid:skill_id>", view_func=self.skill_handler.get_skill_package)
+        bp.add_url_rule("/skills/<uuid:skill_id>/icon", view_func=self.skill_handler.get_skill_package_icon)
+        bp.add_url_rule("/skills/<uuid:skill_id>/versions", view_func=self.skill_handler.get_skill_package_versions)
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/enable",
+            methods=["POST"],
+            view_func=self.skill_handler.enable_skill_package,
+        )
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/disable",
+            methods=["POST"],
+            view_func=self.skill_handler.disable_skill_package,
+        )
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/sync",
+            methods=["POST"],
+            view_func=self.skill_handler.sync_skill_package,
+        )
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/rollback",
+            methods=["POST"],
+            view_func=self.skill_handler.rollback_skill_package,
         )
 
         # 4.自定义API插件模块
@@ -412,6 +443,74 @@ class Router:
             methods=["POST"],
             view_func=self.ai_handler.openapi_schema_assistant_chat,
         )
+        bp.add_url_rule(
+            "/ai/mcp-schema-chat",
+            methods=["POST"],
+            view_func=self.ai_handler.mcp_schema_assistant_chat,
+        )
+
+        # 8.1.MCP模块
+        bp.add_url_rule(
+            "/public/mcp-providers/categories",
+            view_func=self.mcp_handler.get_mcp_categories,
+        )
+        bp.add_url_rule(
+            "/public/mcp-providers",
+            view_func=self.mcp_handler.get_public_mcp_providers_with_page,
+        )
+        bp.add_url_rule(
+            "/public/mcp-providers/<string:provider_key>",
+            view_func=self.mcp_handler.get_public_mcp_provider,
+        )
+        bp.add_url_rule(
+            "/mcp-providers/categories",
+            view_func=self.mcp_handler.get_mcp_categories_for_space,
+        )
+        bp.add_url_rule(
+            "/mcp-providers",
+            view_func=self.mcp_handler.get_mcp_providers_with_page,
+        )
+        bp.add_url_rule(
+            "/mcp-providers",
+            methods=["POST"],
+            view_func=self.mcp_handler.create_mcp_provider,
+        )
+        bp.add_url_rule(
+            "/mcp-providers/<uuid:provider_id>",
+            view_func=self.mcp_handler.get_mcp_provider,
+        )
+        bp.add_url_rule(
+            "/mcp-providers/<uuid:provider_id>",
+            methods=["POST"],
+            view_func=self.mcp_handler.update_mcp_provider,
+        )
+        bp.add_url_rule(
+            "/mcp-providers/<uuid:provider_id>/delete",
+            methods=["POST"],
+            view_func=self.mcp_handler.delete_mcp_provider,
+        )
+        bp.add_url_rule(
+            "/mcp-providers/<uuid:provider_id>/publish",
+            methods=["POST"],
+            view_func=self.mcp_handler.publish_mcp_provider,
+        )
+        bp.add_url_rule(
+            "/mcp-providers/<uuid:provider_id>/unpublish",
+            methods=["POST"],
+            view_func=self.mcp_handler.unpublish_mcp_provider,
+        )
+        bp.add_url_rule(
+            "/mcp-providers/<uuid:provider_id>/regenerate-icon",
+            methods=["POST"],
+            view_func=self.mcp_handler.regenerate_icon,
+            endpoint="mcp_provider_regenerate_icon",
+        )
+        bp.add_url_rule(
+            "/mcp-providers/generate-icon-preview",
+            methods=["POST"],
+            view_func=self.mcp_handler.generate_icon_preview,
+            endpoint="mcp_provider_generate_icon_preview",
+        )
 
         # 9.API秘钥模块
         bp.add_url_rule("/openapi/api-keys", view_func=self.api_key_handler.get_api_keys_with_page)
@@ -518,6 +617,10 @@ class Router:
             "/assistant-agent/introduction",
             methods=["POST"],
             view_func=self.assistant_agent_handler.generate_assistant_agent_introduction,
+        )
+        bp.add_url_rule(
+            "/assistant-agent/capabilities",
+            view_func=self.assistant_agent_handler.get_assistant_agent_capabilities,
         )
         bp.add_url_rule(
             "/assistant-agent/chat/<uuid:task_id>/stop",

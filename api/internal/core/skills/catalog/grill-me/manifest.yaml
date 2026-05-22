@@ -1,0 +1,17 @@
+source_key: grill-me
+name: grill-me
+label: 计划质询
+description: 对计划或设计进行逐层追问和压力测试，帮助形成共享理解。Use when the user wants to be grilled on a plan or design.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - planning
+  - review
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

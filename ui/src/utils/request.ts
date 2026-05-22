@@ -156,6 +156,8 @@ const NO_PROMPT_PUBLIC_GET_ROUTE_NAMES = new Set([
   'store-public-apps-preview',
   'store-public-apps-analysis',
   'store-tools-list',
+  'store-skills-list',
+  'store-mcp-list',
   'store-workflows-list',
   'store-workflows-preview',
   'openapi-index',

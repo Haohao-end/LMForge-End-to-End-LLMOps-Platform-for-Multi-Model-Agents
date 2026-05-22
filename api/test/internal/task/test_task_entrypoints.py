@@ -172,3 +172,49 @@ def test_app_task_sync_public_app_registry_should_retry_on_connection_error(monk
     assert len(retry_calls) == 1
     assert isinstance(retry_calls[0][0], APIConnectionError)
     assert retry_calls[0][1] == 30
+
+
+def test_app_task_prewarm_mcp_tool_snapshots_should_delegate(monkeypatch):
+    calls = []
+
+    service = SimpleNamespace(
+        refresh_mcp_tool_snapshots=lambda app_id, config_type: calls.append((app_id, config_type))
+        or [{"binding_identity": "binding-a", "status": "ready", "retryable": False}],
+    )
+    injector = _RecordingInjector(service)
+    monkeypatch.setattr("app.http.app.injector", injector)
+
+    app_id = uuid4()
+    app_task.prewarm_mcp_tool_snapshots.run(str(app_id), "draft")
+
+    assert calls == [(app_id, "draft")]
+    assert injector.requested_classes[-1].__name__ == "AppService"
+
+
+def test_app_task_prewarm_mcp_tool_snapshots_should_retry_on_pending_snapshot(monkeypatch):
+    class _RetryTriggered(Exception):
+        pass
+
+    service = SimpleNamespace(
+        refresh_mcp_tool_snapshots=lambda _app_id, _config_type: [
+            {"binding_identity": "binding-a", "status": "stale", "retryable": True}
+        ],
+    )
+    injector = _RecordingInjector(service)
+
+    retry_calls = []
+
+    def _retry(*, exc, countdown):
+        retry_calls.append((exc, countdown))
+        raise _RetryTriggered()
+
+    monkeypatch.setattr("app.http.app.injector", injector)
+    monkeypatch.setattr(app_task.prewarm_mcp_tool_snapshots, "retry", _retry)
+
+    with pytest.raises(_RetryTriggered):
+        app_task.prewarm_mcp_tool_snapshots.run(str(uuid4()), "draft")
+
+    assert injector.requested_classes[-1].__name__ == "AppService"
+    assert len(retry_calls) == 1
+    assert isinstance(retry_calls[0][0], RuntimeError)
+    assert retry_calls[0][1] == 20

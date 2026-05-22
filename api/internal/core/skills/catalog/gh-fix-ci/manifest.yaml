@@ -1,0 +1,18 @@
+source_key: gh-fix-ci
+name: gh-fix-ci
+label: gh-fix-ci
+description: Use when a user asks to debug or fix failing GitHub PR checks that run
+  in GitHub Actions; use `gh` to inspect checks and logs, summarize failure context,
+  draft a fix plan, and implement only after explicit approval. Treat external providers
+  (for example Buildkite) as out of scope and report only the details URL.
+category: GitHub
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

@@ -11,6 +11,7 @@ import { useChatImageUpload } from '@/hooks/use-chat-image-upload'
 import { useChatQueryInput } from '@/hooks/use-chat-query-input'
 import {
   useAssistantAgentChat,
+  useGetAssistantAgentCapabilities,
   useGenerateAssistantAgentIntroduction,
   useDeleteAssistantAgentConversation,
   useGetAssistantAgentMessagesWithPage,
@@ -71,6 +72,7 @@ defineOptions({
 const homePageRef = ref<HTMLElement | null>(null)
 const bottomAnchorRef = ref<HTMLElement | null>(null)
 const image_urls = ref<string[]>([])
+const enableDeepThinking = ref(false)
 const HOME_QUERY_DRAFT_STORAGE_KEY = 'draft:home:query'
 const HOME_INTRO_AUDIO_PLAYED_KEY = 'home:intro:audio:played' // localStorage key for tracking audio play status
 const INPUT_BREATHE_TIMEOUT_MS = 1200
@@ -171,6 +173,10 @@ const {
   loading: generateAssistantAgentIntroductionLoading,
   handleGenerateAssistantAgentIntroduction,
 } = useGenerateAssistantAgentIntroduction()
+const {
+  capabilities: assistantAgentCapabilities,
+  loadAssistantAgentCapabilities,
+} = useGetAssistantAgentCapabilities()
 const { loading: assistantAgentChatLoading, handleAssistantAgentChat } = useAssistantAgentChat()
 const {
   loading: stopAssistantAgentChatLoading,
@@ -205,6 +211,9 @@ const triggerTypingBreathing = () => {
 }
 const isInputBreathing = computed(() => {
   return typingBreathing.value || isRecording.value || audioToTextLoading.value
+})
+const canAssistantImageInput = computed(() => {
+  return assistantAgentCapabilities.value?.image_input?.enabled === true
 })
 
 const normalizeConversationId = (value: unknown) => String(value || '').trim()
@@ -388,6 +397,11 @@ const initializeHomeAfterLogin = async () => {
   await loadCurrentUser()
   if (current_user.value && Object.keys(current_user.value).length > 0) {
     accountStore.update(current_user.value)
+  }
+  try {
+    await loadAssistantAgentCapabilities()
+  } catch {
+    // 能力接口失败时保持默认文本模式，不阻塞首页加载。
   }
 
   // 无论是否指定了 conversation_id，都应该加载消息
@@ -1009,6 +1023,10 @@ const handleSubmit = async () => {
     Message.warning('上一次提问还未结束，请稍等')
     return
   }
+  if (image_urls.value.length > 0 && !canAssistantImageInput.value) {
+    Message.warning('当前辅助 Agent 不支持图片输入，请移除图片后重试')
+    return
+  }
 
   // 5.3 满足条件，处理正式提问的前置工作，涵盖：清空建议问题、删除消息id、任务id
   suggested_questions.value = []
@@ -1024,6 +1042,8 @@ const handleSubmit = async () => {
     query: query.value,
     image_urls: image_urls.value,
     answer: '',
+    answer_parts: [],
+    artifacts: [],
     total_token_count: 0,
     latency: 0,
     agent_thoughts: [],
@@ -1079,6 +1099,7 @@ const handleSubmit = async () => {
           scheduleScrollToBottom()
         }
       },
+      enableDeepThinking.value,
     )
   } finally {
     isStreamingResponse.value = false
@@ -1322,6 +1343,8 @@ onUnmounted(() => {
               :enable_text_to_speech="true"
               :agent_thoughts="item.agent_thoughts"
               :answer="item.answer"
+              :answer_parts="item.answer_parts || []"
+              :artifacts="item.artifacts || []"
               :app="OPEN_AGENT_ASSISTANT_APP"
               :suggested_questions="
                 item.suggested_questions && item.suggested_questions.length > 0
@@ -1462,8 +1485,12 @@ onUnmounted(() => {
         <div class="w-full max-w-[600px] mx-auto px-2 sm:px-4">
           <chat-composer
             v-model="query"
+            v-model:deep-thinking-enabled="enableDeepThinking"
             :textarea-ref-setter="setQueryTextareaRef"
             :file-input-ref-setter="setFileInputRef"
+            :image-urls="image_urls"
+            :show-image-previews="true"
+            :show-upload-button="true"
             :clear-disabled="deleteAssistantAgentConversationLoading || messages.length === 0"
             :clear-loading="deleteAssistantAgentConversationLoading"
             :upload-loading="uploadFileLoading"
@@ -1471,6 +1498,7 @@ onUnmounted(() => {
             :audio-to-text-loading="audioToTextLoading"
             :is-recording="isRecording"
             :is-input-breathing="isInputBreathing"
+            :show-deep-thinking-toggle="true"
             clear-title="清空会话"
             placeholder="发送消息或创建AI应用..."
             @clear="handleClearConversation"
@@ -1478,6 +1506,11 @@ onUnmounted(() => {
             @file-change="(event) => handleFileChange(event)"
             @input="() => handleQueryInput()"
             @keydown="(event) => handleQueryKeydown(event)"
+            @remove-image="
+              (index) => {
+                image_urls.splice(index, 1)
+              }
+            "
             @start-record="handleStartRecord"
             @stop-record="handleStopRecord"
             @submit="handleSubmit"

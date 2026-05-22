@@ -1,0 +1,17 @@
+source_key: setup-matt-pocock-skills
+name: setup-matt-pocock-skills
+label: 配置工程技能
+description: 为工程类技能准备仓库级配置，包括 issue tracker、triage 标签和领域文档布局。Use before first use of to-issues, to-prd, triage, diagnose, tdd, improve-codebase-architecture, or zoom-out.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - setup
+  - planning
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

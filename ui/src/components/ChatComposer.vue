@@ -19,7 +19,10 @@ const props = defineProps({
   showImagePreviews: { type: Boolean, default: false },
   showClearButton: { type: Boolean, default: true },
   showUploadButton: { type: Boolean, default: true },
+  uploadDisabled: { type: Boolean, default: false },
+  uploadDisabledTitle: { type: String, default: '当前不支持图片上传' },
   showVoiceButton: { type: Boolean, default: true },
+  showDeepThinkingToggle: { type: Boolean, default: false },
   clearTitle: { type: String, default: '清空会话' },
   clearDisabled: { type: Boolean, default: false },
   clearLoading: { type: Boolean, default: false },
@@ -28,10 +31,12 @@ const props = defineProps({
   audioToTextLoading: { type: Boolean, default: false },
   isRecording: { type: Boolean, default: false },
   isInputBreathing: { type: Boolean, default: false },
+  deepThinkingEnabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
   'update:modelValue',
+  'update:deepThinkingEnabled',
   'clear',
   'upload',
   'remove-image',
@@ -46,9 +51,11 @@ const emit = defineEmits([
 ])
 
 const isFocused = ref(false)
+const isDragOver = ref(false)
 const localTextareaRef = ref<HTMLTextAreaElement | null>(null)
 const localFileInputRef = ref<HTMLInputElement | null>(null)
 const isCompact = computed(() => props.size === 'compact')
+const canUploadImages = computed(() => props.showUploadButton && !props.uploadDisabled)
 
 const rootClass = computed(() => {
   if (!props.showClearButton) return 'w-full'
@@ -77,6 +84,7 @@ const shellClass = computed(() => {
     {
       'chat-composer-shell--breathing': props.isInputBreathing,
       'chat-composer-shell--focused': isFocused.value,
+      'chat-composer-shell--drag-over': isDragOver.value && canUploadImages.value,
       'chat-composer-shell--with-images': props.showImagePreviews && props.imageUrls.length > 0,
     },
   ]
@@ -110,6 +118,15 @@ const previewSizeClass = computed(() => {
   return isCompact.value ? 'h-9 w-9 rounded-lg' : 'h-10 w-10 rounded-lg'
 })
 
+const deepThinkingButtonClass = computed(() => {
+  return [
+    actionButtonClass.value,
+    props.deepThinkingEnabled
+      ? 'bg-violet-500/15 text-violet-700 ring-1 ring-violet-300 hover:bg-violet-500/20'
+      : 'text-gray-600 hover:bg-white/20 hover:text-violet-700',
+  ]
+})
+
 const assignTextareaRef = (element: unknown) => {
   localTextareaRef.value = element as HTMLTextAreaElement | null
   props.textareaRefSetter?.(localTextareaRef.value)
@@ -122,6 +139,45 @@ const assignFileInputRef = (element: unknown) => {
 
 const focusTextarea = () => {
   localTextareaRef.value?.focus()
+}
+
+const buildSyntheticFileChangeEvent = (file: File) => {
+  return {
+    target: {
+      files: [file],
+      value: '',
+    },
+  } as unknown as Event
+}
+
+const handleUpload = () => {
+  if (!canUploadImages.value || props.uploadLoading) return
+  emit('upload')
+}
+
+const handleDragOver = (event: DragEvent) => {
+  if (!canUploadImages.value || props.uploadLoading) return
+  const files = Array.from(event.dataTransfer?.files || [])
+  if (files.length === 0) return
+  if (!files.some((file) => file.type.startsWith('image/'))) return
+  isDragOver.value = true
+}
+
+const handleDragLeave = () => {
+  if (!canUploadImages.value || props.uploadLoading) return
+  isDragOver.value = false
+}
+
+const handleDrop = (event: DragEvent) => {
+  isDragOver.value = false
+  if (!canUploadImages.value || props.uploadLoading) return
+
+  const file = Array.from(event.dataTransfer?.files || []).find((item) =>
+    item.type.startsWith('image/'),
+  )
+  if (!file) return
+
+  emit('file-change', buildSyntheticFileChangeEvent(file))
 }
 
 const handleInput = (event: Event) => {
@@ -181,7 +237,14 @@ const handleBlur = (event: FocusEvent) => {
       </svg>
     </button>
 
-    <div :class="shellClass" @click="focusTextarea">
+    <div
+      :class="shellClass"
+      @click="focusTextarea"
+      @dragenter.prevent="handleDragOver"
+      @dragover.prevent="handleDragOver"
+      @dragleave.prevent="handleDragLeave"
+      @drop.prevent="handleDrop"
+    >
       <div
         v-if="showImagePreviews && imageUrls.length > 0"
         class="flex flex-wrap items-center gap-2"
@@ -214,13 +277,14 @@ const handleBlur = (event: FocusEvent) => {
         <button
           v-if="showUploadButton"
           type="button"
-          :disabled="uploadLoading"
+          :disabled="uploadLoading || uploadDisabled"
+          :title="uploadDisabled ? uploadDisabledTitle : '上传图片'"
+          aria-label="上传图片"
           :class="[
             actionButtonClass,
             'text-gray-600 hover:bg-white/20 hover:text-gray-800 disabled:opacity-60',
           ]"
-          title="上传图片"
-          @click.stop="$emit('upload')"
+          @click.stop="handleUpload"
         >
           <svg
             v-if="!uploadLoading"
@@ -264,6 +328,7 @@ const handleBlur = (event: FocusEvent) => {
           type="file"
           :ref="assignFileInputRef"
           accept="image/*"
+          :disabled="uploadDisabled"
           class="hidden"
           @change="$emit('file-change', $event)"
         />
@@ -350,6 +415,29 @@ const handleBlur = (event: FocusEvent) => {
           </button>
 
           <button
+            v-if="showDeepThinkingToggle"
+            type="button"
+            :class="deepThinkingButtonClass"
+            :title="deepThinkingEnabled ? '关闭深度思考' : '开启深度思考'"
+            :aria-pressed="deepThinkingEnabled"
+            @click.stop="$emit('update:deepThinkingEnabled', !deepThinkingEnabled)"
+          >
+            <svg
+              :class="isCompact ? 'h-4 w-4' : 'h-5 w-5'"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M9.5 4.5c-2.5 0-4.5 2-4.5 4.5 0 1.7.9 3.2 2.3 4 .1 2 1.8 3.5 3.7 3.5h1c1.9 0 3.6-1.5 3.7-3.5 1.4-.8 2.3-2.3 2.3-4 0-2.5-2-4.5-4.5-4.5h-4z" />
+              <path d="M10 18h4" />
+              <path d="M11 21h2" />
+            </svg>
+          </button>
+
+          <button
             type="button"
             :disabled="submitLoading"
             :class="[
@@ -417,6 +505,18 @@ const handleBlur = (event: FocusEvent) => {
     inset 0 -1px 0 rgba(15, 23, 42, 0.04),
     0 0 0 4px rgba(125, 211, 252, 0.12),
     0 14px 40px rgba(14, 165, 233, 0.1);
+}
+
+.chat-composer-shell--drag-over {
+  background:
+    linear-gradient(0deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 1)) padding-box,
+    linear-gradient(135deg, rgba(14, 165, 233, 0.8) 0%, rgba(167, 139, 250, 0.5) 52%, rgba(244, 114, 182, 0.55) 100%)
+      border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.04),
+    0 0 0 4px rgba(14, 165, 233, 0.12),
+    0 18px 44px rgba(14, 165, 233, 0.14);
 }
 
 .chat-composer-shell--breathing {

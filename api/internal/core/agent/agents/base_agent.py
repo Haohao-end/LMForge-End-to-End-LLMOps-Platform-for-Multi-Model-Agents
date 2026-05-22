@@ -9,6 +9,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 from internal.core.agent.entities.agent_entity import AgentConfig, AgentState
 from internal.core.agent.entities.queue_entity import AgentResult, AgentThought, QueueEvent
+from internal.core.agent.usage_utils import summarize_agent_thoughts
 from internal.exception import FailException
 from .agent_queue_manager import AgentQueueManager
 
@@ -96,8 +97,11 @@ class BaseAgent(Serializable, Runnable):
             []
         )
 
-        # 13.更新总耗时
-        agent_result.latency = sum([agent_thought.latency for agent_thought in agent_thoughts.values()])
+        # 13.更新消息级统计
+        usage_summary = summarize_agent_thoughts(agent_thoughts.values())
+        agent_result.total_token_count = usage_summary.total_token_count
+        agent_result.total_price = usage_summary.total_price
+        agent_result.latency = usage_summary.latency
 
         return agent_result
 

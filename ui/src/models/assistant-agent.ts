@@ -12,7 +12,10 @@ export type GetAssistantAgentMessagesWithPageResponse = BasePaginatorResponse<{
   conversation_id: string
   query: string
   image_urls: string[]
+  input_parts: Array<Record<string, any>>
   answer: string
+  answer_parts: Array<Record<string, any>>
+  artifacts: Array<Record<string, any>>
   total_token_count: number
   latency: number
   agent_thoughts: {
@@ -39,3 +42,25 @@ export type AssistantAgentConversation = {
 }
 
 export type GetAssistantAgentConversationsResponse = BaseResponse<AssistantAgentConversation[]>
+
+export type GetAssistantAgentCapabilitiesResponse = BaseResponse<{
+  capabilities: {
+    requested_model: { provider: string; model: string }
+    effective_model: { provider: string; model: string }
+    features: string[]
+    requested_features: string[]
+    image_input: {
+      enabled: boolean
+      via_fallback: boolean
+      policy: string
+      requested_model_supports: boolean
+      effective_model_supports: boolean
+      fallback_model: { provider: string; model: string } | null
+      fallback_model_supports: boolean
+      reason_code: string
+      message: string
+    }
+    image_output: { enabled: boolean; reason_code: string }
+    artifact_output: { enabled: boolean; reason_code: string }
+  }
+}>

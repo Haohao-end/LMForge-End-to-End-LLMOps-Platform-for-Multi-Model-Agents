@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any
 from kombu import Queue
@@ -32,6 +33,17 @@ def _get_list_env(key: str) -> list[str]:
     if isinstance(value, (list, tuple)):
         return [str(item).strip() for item in value if str(item).strip()]
     return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
+def _get_json_env(key: str, default: Any = None) -> Any:
+    """从环境变量中获取 JSON 配置，解析失败时回退到默认值。"""
+    value = os.getenv(key)
+    if value is None or str(value).strip() == "":
+        return DEFAULT_CONFIG.get(key, default)
+    try:
+        return json.loads(value)
+    except Exception:
+        return DEFAULT_CONFIG.get(key, default)
 
 
 def _build_redis_auth(username: Any, password: Any) -> str:
@@ -154,6 +166,10 @@ class Config:
 
         # 辅助Agent应用id标识
         self.ASSISTANT_AGENT_ID = _get_env("ASSISTANT_AGENT_ID")
+        self.ASSISTANT_MCP_BINDINGS = _get_json_env("ASSISTANT_MCP_BINDINGS", [])
+        self.IMAGE_REQUEST_POLICY = _get_env("IMAGE_REQUEST_POLICY")
+        self.VISION_FALLBACK_PROVIDER = _get_env("VISION_FALLBACK_PROVIDER")
+        self.VISION_FALLBACK_MODEL = _get_env("VISION_FALLBACK_MODEL")
 
         # 图标生成服务 API Key
         self.SILICONFLOW_API_KEY = _get_env("SILICONFLOW_API_KEY")

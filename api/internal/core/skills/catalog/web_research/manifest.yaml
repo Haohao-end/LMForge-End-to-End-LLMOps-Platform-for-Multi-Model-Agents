@@ -1,0 +1,49 @@
+source_key: web_research
+name: 网页研究
+label: 网页研究
+description: 面向网页检索、内容提炼和资料对比的技能包。
+category: 研究
+tags:
+  - 网络
+  - 检索
+  - 总结
+  - SCF
+  - skill-md
+icon: icon.svg
+enabled: true
+version: 1
+executor_type: scf
+capabilities:
+  code: false
+  network: true
+  file_output: false
+tools:
+  - name: search_web
+    label: 网页检索
+    description: 对公开网页进行查询并返回候选结果。
+    entrypoint: search_web
+    input_schema:
+      type: object
+      properties:
+        query:
+          type: string
+          description: 需要检索的关键词或问题
+      required:
+        - query
+  - name: summarize_sources
+    label: 来源总结
+    description: 对多个来源的内容进行综合摘要。
+    entrypoint: summarize_sources
+    input_schema:
+      type: object
+      properties:
+        sources:
+          type: array
+          description: 待总结的来源列表
+          items:
+            type: string
+        prompt:
+          type: string
+          description: 摘要要求
+      required:
+        - sources

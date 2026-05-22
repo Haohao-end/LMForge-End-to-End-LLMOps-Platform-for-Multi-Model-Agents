@@ -1,0 +1,15 @@
+source_key: creative
+name: creative
+label: 创意解法
+description: 用于需要更原创、不落俗套的解决方案的代码、设计、写作、命名、架构、调试和策略任务。
+category: 协作
+tags:
+  - github
+  - experimental
+  - prompt-only
+  - ideation
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

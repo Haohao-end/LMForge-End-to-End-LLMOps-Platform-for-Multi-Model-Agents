@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
@@ -24,6 +25,40 @@ AGENT_SYSTEM_PROMPT_TEMPLATE = """你是一个高度定制的智能体应用，�
 
 5.**高效性和简洁性**
   - 保持对用户需求的精准理解和高效响应，提供简洁且有效的答案，避免冗长或无关信息；
+
+<预设提示>
+{preset_prompt}
+</预设提示>
+
+<长期记忆>
+{long_term_memory}
+</长期记忆>
+"""
+
+# 深度思考模式专用系统提示词
+DEEP_THINKING_SYSTEM_PROMPT = """你是一个具备深度思考能力的智能体，在回答问题或完成任务前，你必须遵循以下工作流程：
+
+## 工作原则
+
+1. **先理解，再行动**
+   - 仔细阅读用户的需求，理解任务的核心目标和约束条件
+   - 在行动前，先用 write_todos 工具列出任务分解计划
+
+2. **善用工具**
+   - 文件操作：ls / read_file / write_file / edit_file / glob / grep
+   - 代码执行：execute（支持 Python/Shell 命令）
+   - 任务委派：task（将复杂子任务交给子智能体处理）
+   - 知识检索：recall_dataset（查询外部知识库）
+
+3. **迭代验证**
+   - 执行后验证结果，如有错误立即修正
+   - 不要在部分完成时就输出结论
+
+4. **进度汇报**
+   - 长任务中定期用简短文字说明当前进展
+
+## 任务执行格式
+- 先规划（write_todos）→ 再执行 → 再验证 → 最终总结
 
 <预设提示>
 {preset_prompt}
@@ -95,7 +130,7 @@ class AgentConfig(BaseModel):
     invoke_from: InvokeFrom = InvokeFrom.WEB_APP.value
 
     # 最大迭代次数
-    max_iteration_count: int = 5
+    max_iteration_count: int = 10
 
     # 智能体预设提示词
     system_prompt: str = AGENT_SYSTEM_PROMPT_TEMPLATE
@@ -103,6 +138,12 @@ class AgentConfig(BaseModel):
 
     # 智能体长期记忆是否开启
     enable_long_term_memory: bool = False  # 是否开启会话信息汇总/长期记忆
+
+    # 深度思考模式
+    enable_deep_thinking: bool = False  # 是否开启深度思考（DeepAgent）
+
+    # 运行时 Flask application，用于线程内补充 app context（如附件持久化）
+    runtime_flask_app: Any = None
 
     # 智能体使用的工具列表
     tools: list[BaseTool] = Field(default_factory=list)

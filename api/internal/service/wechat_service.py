@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
 from threading import Thread
 from typing import Any
 from uuid import UUID
@@ -23,6 +24,7 @@ from internal.exception import FailException
 from internal.model import App, WechatEndUser, EndUser, Message, WechatMessage, Conversation
 from pkg.sqlalchemy import SQLAlchemy
 from .app_config_service import AppConfigService
+from .app_service import AppService
 from .base_service import BaseService
 from .conversation_service import ConversationService
 from .language_model_service import LanguageModelService
@@ -199,29 +201,16 @@ class WechatService(BaseService):
                 message_limit=app_config["dialog_round"],
             )
 
-            # 3.将草稿配置中的tools转换成LangChain工具
-            tools = self.app_config_service.get_langchain_tools_by_tools_config(app_config["tools"])
+            # 3.根据应用配置构建运行时工具
+            tools = AppService._build_runtime_tools_for_config(
+                app_config_service=self.app_config_service,
+                retrieval_service=self.retrieval_service,
+                account=SimpleNamespace(id=app.account_id),
+                draft_app_config=app_config,
+                flask_app=flask_app._get_current_object(),
+            )
 
-            # 4.检测是否关联了知识库
-            if app_config["datasets"]:
-                # 5.构建LangChain知识库检索工具
-                dataset_retrieval = self.retrieval_service.create_langchain_tool_from_search(
-                    flask_app=flask_app._get_current_object(),
-                    dataset_ids=[dataset["id"] for dataset in app_config["datasets"]],
-                    account_id=app.account_id,
-                    retrival_source=RetrievalSource.APP,
-                    **app_config["retrieval_config"],
-                )
-                tools.append(dataset_retrieval)
-
-            # 6.检测是否关联工作流，如果关联了工作流则将工作流构建成工具添加到tools中
-            if app_config["workflows"]:
-                workflow_tools = self.app_config_service.get_langchain_tools_by_workflow_ids(
-                    [workflow["id"] for workflow in app_config["workflows"]]
-                )
-                tools.extend(workflow_tools)
-
-            # 7.根据LLM是否支持tool_call决定使用不同的Agent
+            # 4.根据LLM是否支持tool_call决定使用不同的Agent
             agent_class = FunctionCallAgent if ModelFeature.TOOL_CALL in llm.features else ReACTAgent
             agent = agent_class(
                 llm=llm,
@@ -235,17 +224,17 @@ class WechatService(BaseService):
                 ),
             )
 
-            # 8.定义智能体状态基础数据
+            # 5.定义智能体状态基础数据
             agent_state = {
                 "messages": [llm.convert_to_human_message(query, [])],
                 "history": history,
                 "long_term_memory": conversation.summary,
             }
 
-            # 9.调用智能体获取执行结果
+            # 6.调用智能体获取执行结果
             agent_result = agent.invoke(agent_state)
 
-            # 10.将数据存储到数据库中，包含会话、消息、推理过程
+            # 7.将数据存储到数据库中，包含会话、消息、推理过程
             self.conversation_service.save_agent_thoughts(
                 account_id=app.account_id,
                 app_id=app.id,

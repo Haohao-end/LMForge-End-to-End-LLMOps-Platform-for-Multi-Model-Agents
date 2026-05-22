@@ -1,0 +1,16 @@
+source_key: figma-implement-design
+name: figma-implement-design
+label: Figma 落地实现
+description: 用于将 Figma 设计转成生产代码的结构化实现任务，强调布局、组件和像素级一致性。
+category: 设计
+tags:
+  - github
+  - curated
+  - prompt-only
+  - figma
+icon: icon.svg
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

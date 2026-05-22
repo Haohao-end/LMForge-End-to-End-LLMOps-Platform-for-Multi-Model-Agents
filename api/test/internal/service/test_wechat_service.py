@@ -11,6 +11,7 @@ from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
 from internal.core.language_model.entities.model_entity import ModelFeature
 from internal.entity.app_entity import AppStatus
 from internal.entity.conversation_entity import MessageStatus
+from internal.entity.dataset_entity import RetrievalSource
 from internal.entity.platform_entity import WechatConfigStatus
 from internal.exception import FailException
 from internal.model import Message, WechatEndUser, WechatMessage
@@ -841,7 +842,7 @@ class TestWechatService:
         assert len(captured_tools["tools"]) == 3
         assert retrieval_capture["dataset_ids"] == ["dataset-1"]
         assert retrieval_capture["account_id"] == app.account_id
-        assert "retrival_source" in retrieval_capture
+        assert retrieval_capture["retrieval_source"] == RetrievalSource.APP.value
         assert save_payload["conversation_id"] == conversation.id
         assert len(save_payload["agent_thoughts"]) == 1
 

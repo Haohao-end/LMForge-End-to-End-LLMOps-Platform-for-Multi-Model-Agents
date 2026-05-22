@@ -10,6 +10,10 @@ class QueueEvent(str, Enum):
     AGENT_MESSAGE = "agent_message"  # 智能体消息事件
     AGENT_ACTION = "agent_action"  # 智能体动作
     DATASET_RETRIEVAL = "dataset_retrieval"  # 知识库检索事件
+    DEEP_THINKING = "deep_thinking"  # 深度思考规划事件（DeepAgent 专用）
+    DEEP_STEP = "deep_step"  # 深度思考时间线步骤事件
+    DEEP_COMPLETE = "deep_complete"  # 深度思考执行完成事件
+    DEEP_ARTIFACT_CREATED = "deep_artifact_created"  # 深度思考产物创建事件
     AGENT_END = "agent_end"  # 智能体结束事件
     STOP = "stop"  # 智能体停止事件
     ERROR = "error"  # 智能体错误事件

@@ -49,4 +49,19 @@ describe('chat-metrics', () => {
     expect(message.latency).toBe(2.8)
     expect(message.total_token_count).toBe(10)
   })
+
+  it('prefers the longer request duration when streamed latency is incomplete', () => {
+    const message: MessageMetrics = {
+      query: 'q',
+      answer: 'a',
+      latency: 40.36,
+      total_token_count: 10,
+      agent_thoughts: [{ latency: 120 }, { latency: 262.74 }],
+    }
+
+    normalizeMessageMetrics(message, 302000)
+
+    expect(message.latency).toBe(302)
+    expect(message.total_token_count).toBe(10)
+  })
 })

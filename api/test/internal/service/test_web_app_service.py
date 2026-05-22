@@ -119,6 +119,48 @@ class TestWebAppService:
         assert result["app_config"]["opening_questions"] == ["q1", "q2"]
         assert result["app_config"]["features"] == ["tool_call", "agent_thought"]
 
+    def test_get_web_app_info_should_include_runtime_capabilities_when_available(
+        self, monkeypatch
+    ):
+        service = _build_service()
+        app = SimpleNamespace(
+            id=uuid4(),
+            icon="https://a.com/icon.png",
+            name="WebApp",
+            description="desc",
+        )
+        app_config = {
+            "opening_statement": "hello",
+            "opening_questions": ["q1"],
+            "suggested_after_answer": {"enable": True},
+            "text_to_speech": {"enable": True},
+            "speech_to_text": {"enable": True},
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+        }
+        capture = {}
+        capabilities = {
+            "features": ["tool_call", "image_input"],
+            "image_input": {"enabled": True, "via_fallback": False},
+        }
+
+        monkeypatch.setattr(service, "get_web_app", lambda _token: app)
+        service.app_config_service = SimpleNamespace(get_app_config=lambda _app: app_config)
+        service.language_model_service = SimpleNamespace(
+            describe_runtime_capabilities=lambda model_config, entrypoint: capture.update(
+                {"model_config": model_config, "entrypoint": entrypoint}
+            )
+            or capabilities
+        )
+
+        result = service.get_web_app_info("token")
+
+        assert result["app_config"]["features"] == ["tool_call", "image_input"]
+        assert result["app_config"]["capabilities"] == capabilities
+        assert capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "entrypoint": "web_app",
+        }
+
     def test_stop_web_app_chat_should_validate_token_then_set_stop_flag(self, monkeypatch):
         service = _build_service()
         account = SimpleNamespace(id=uuid4())
@@ -192,6 +234,7 @@ class TestWebAppService:
             conversation_id=SimpleNamespace(data=bad_conversation.id),
             query=SimpleNamespace(data="hello"),
             image_urls=SimpleNamespace(data=[]),
+            enable_deep_thinking=SimpleNamespace(data=False),
         )
 
         monkeypatch.setattr(service, "get_web_app", lambda _token: app)
@@ -208,6 +251,7 @@ class TestWebAppService:
             conversation_id=SimpleNamespace(data=""),
             query=SimpleNamespace(data="hello"),
             image_urls=SimpleNamespace(data=["https://a.com/1.png"]),
+            enable_deep_thinking=SimpleNamespace(data=True),
         )
 
         monkeypatch.setattr(service, "get_web_app", lambda _token: app)
@@ -290,21 +334,20 @@ class TestWebAppService:
                 observation="ok",
             ),
         ]
-        captured_agent_tools = {}
+        captured_agent_factory = {}
 
-        class _FakeFunctionCallAgent:
-            def __init__(self, llm, agent_config):
-                captured_agent_tools["tools"] = agent_config.tools
-
+        class _FakeAgent:
             def stream(self, _state):
                 return iter(stream_events)
 
-        # AgentConfig 会强校验 tools 为 BaseTool；测试这里用简单对象专注验证流程与聚合逻辑。
+        def _fake_create_runtime_agent(**kwargs):
+            captured_agent_factory.update(kwargs)
+            return _FakeAgent()
+
         monkeypatch.setattr(
-            "internal.service.web_app_service.AgentConfig",
-            lambda **kwargs: SimpleNamespace(**kwargs),
+            "internal.service.web_app_service.AppService._create_runtime_agent",
+            _fake_create_runtime_agent,
         )
-        monkeypatch.setattr("internal.service.web_app_service.FunctionCallAgent", _FakeFunctionCallAgent)
         save_payload = {}
         service.conversation_service = SimpleNamespace(
             save_agent_thoughts=lambda **kwargs: save_payload.update(kwargs)
@@ -317,7 +360,9 @@ class TestWebAppService:
         assert created[1][0] is Message
         assert len(events) == 4
         assert events[0].startswith("event: ping")
-        assert len(captured_agent_tools["tools"]) == 3
+        assert len(captured_agent_factory["tools"]) == 3
+        assert captured_agent_factory["enable_deep_thinking"] is True
+        assert captured_agent_factory["invoke_from"] == InvokeFrom.WEB_APP.value
         assert retrieval_capture["retrieval_source"] == RetrievalSource.APP.value
         assert len(save_payload["agent_thoughts"]) == 2
         assert save_payload["agent_thoughts"][0].thought == "AB"
@@ -339,6 +384,7 @@ class TestWebAppService:
             conversation_id=SimpleNamespace(data=conversation.id),
             query=SimpleNamespace(data="hello"),
             image_urls=SimpleNamespace(data=[]),
+            enable_deep_thinking=SimpleNamespace(data=False),
         )
 
         monkeypatch.setattr(service, "get_web_app", lambda _token: app)
@@ -383,12 +429,9 @@ class TestWebAppService:
 
         monkeypatch.setattr("internal.service.web_app_service.TokenBufferMemory", _FakeTokenBufferMemory)
 
-        captured_react = {}
+        captured_agent_factory = {}
 
-        class _FakeReACTAgent:
-            def __init__(self, llm, agent_config):
-                captured_react["invoke_from"] = agent_config.invoke_from
-
+        class _FakeAgent:
             def stream(self, _state):
                 return iter(
                     [
@@ -401,7 +444,14 @@ class TestWebAppService:
                     ]
                 )
 
-        monkeypatch.setattr("internal.service.web_app_service.ReACTAgent", _FakeReACTAgent)
+        def _fake_create_runtime_agent(**kwargs):
+            captured_agent_factory.update(kwargs)
+            return _FakeAgent()
+
+        monkeypatch.setattr(
+            "internal.service.web_app_service.AppService._create_runtime_agent",
+            _fake_create_runtime_agent,
+        )
         save_payload = {}
         service.conversation_service = SimpleNamespace(
             save_agent_thoughts=lambda **kwargs: save_payload.update(kwargs)
@@ -412,6 +462,116 @@ class TestWebAppService:
 
         assert create_models == [Message]
         assert events[0].startswith("event: agent_end")
-        assert captured_react["invoke_from"] == InvokeFrom.WEB_APP.value
+        assert captured_agent_factory["enable_deep_thinking"] is False
+        assert captured_agent_factory["invoke_from"] == InvokeFrom.WEB_APP.value
         assert save_payload["conversation_id"] == conversation.id
         assert save_payload["message_id"] == message.id
+
+    def test_web_app_chat_should_attach_runtime_capabilities_when_resolution_available(
+        self, monkeypatch
+    ):
+        service = _build_service()
+        account = SimpleNamespace(id=uuid4())
+        app = SimpleNamespace(id=uuid4(), account_id=uuid4(), status=AppStatus.PUBLISHED.value)
+        conversation = SimpleNamespace(
+            id=uuid4(),
+            app_id=app.id,
+            invoke_from=InvokeFrom.WEB_APP.value,
+            created_by=account.id,
+            is_deleted=False,
+            summary="memory",
+        )
+        req = SimpleNamespace(
+            conversation_id=SimpleNamespace(data=conversation.id),
+            query=SimpleNamespace(data="请分析图片"),
+            image_urls=SimpleNamespace(data=["https://a.com/1.png"]),
+            enable_deep_thinking=SimpleNamespace(data=True),
+        )
+
+        monkeypatch.setattr(service, "get_web_app", lambda _token: app)
+        monkeypatch.setattr(service, "get", lambda _model, _id: conversation)
+        message = SimpleNamespace(id=uuid4())
+        monkeypatch.setattr(service, "create", lambda _model, **_kwargs: message)
+
+        app_config = {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "dialog_round": 1,
+            "tools": [],
+            "datasets": [],
+            "retrieval_config": {"retrieval_strategy": "semantic", "k": 2, "score": 0.6},
+            "workflows": [],
+            "preset_prompt": "preset",
+            "long_term_memory": {"enable": False},
+            "review_config": {"enable": False},
+        }
+        llm = SimpleNamespace(
+            features=[ModelFeature.TOOL_CALL.value],
+            convert_to_human_message=lambda query, image_urls: f"{query}:{len(image_urls)}",
+        )
+        capabilities = {"image_input": {"enabled": True, "via_fallback": False}}
+        resolution_capture = {}
+        service.app_config_service = SimpleNamespace(
+            get_app_config=lambda _app: app_config,
+            get_langchain_tools_by_tools_config=lambda _tools: [],
+        )
+        service.language_model_service = SimpleNamespace(
+            resolve_runtime_language_model=lambda model_config, image_urls, entrypoint: resolution_capture.update(
+                {
+                    "model_config": model_config,
+                    "image_urls": image_urls,
+                    "entrypoint": entrypoint,
+                }
+            )
+            or SimpleNamespace(llm=llm, capabilities=capabilities)
+        )
+
+        class _FakeTokenBufferMemory:
+            def __init__(self, **_kwargs):
+                pass
+
+            def get_history_prompt_messages(self, message_limit):
+                assert message_limit == 1
+                return ["history"]
+
+        monkeypatch.setattr("internal.service.web_app_service.TokenBufferMemory", _FakeTokenBufferMemory)
+
+        captured_agent_factory = {}
+
+        class _FakeAgent:
+            def stream(self, _state):
+                return iter(
+                    [
+                        AgentThought(
+                            id=uuid4(),
+                            task_id=uuid4(),
+                            event=QueueEvent.AGENT_END,
+                            answer="done",
+                        )
+                    ]
+                )
+
+        def _fake_create_runtime_agent(**kwargs):
+            captured_agent_factory.update(kwargs)
+            return _FakeAgent()
+
+        monkeypatch.setattr(
+            "internal.service.web_app_service.AppService._create_runtime_agent",
+            _fake_create_runtime_agent,
+        )
+        save_payload = {}
+        service.conversation_service = SimpleNamespace(
+            save_agent_thoughts=lambda **kwargs: save_payload.update(kwargs)
+        )
+
+        with Flask(__name__).app_context():
+            events = list(service.web_app_chat("public-token", req, account))
+
+        assert events[0].startswith("event: agent_end")
+        assert app_config["capabilities"] == capabilities
+        assert captured_agent_factory["enable_deep_thinking"] is True
+        assert save_payload["app_config"]["capabilities"] == capabilities
+        assert resolution_capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "image_urls": req.image_urls.data,
+            "entrypoint": "web_app",
+        }

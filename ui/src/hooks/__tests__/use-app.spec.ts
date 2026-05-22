@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useGetVersions } from '@/hooks/use-app'
+import { useGetDraftAppConfig, useGetVersions } from '@/hooks/use-app'
 import * as appService from '@/services/app'
 
 vi.mock('@/services/app', async () => {
   const actual = await vi.importActual<typeof import('@/services/app')>('@/services/app')
   return {
     ...actual,
+    getDraftAppConfig: vi.fn(),
     getVersions: vi.fn(),
   }
 })
@@ -53,6 +54,42 @@ describe('useGetVersions', () => {
     expect(appService.getVersions).toHaveBeenCalledWith('app-1')
     expect(versions.value).toEqual(payload)
     expect(loading.value).toBe(false)
+  })
+
+  it('loads draft capabilities with the draft app config', async () => {
+    vi.mocked(appService.getDraftAppConfig).mockResolvedValue({
+      data: {
+        dialog_round: 3,
+        model_config: { provider: 'openai', model: 'gpt-4o-mini', parameters: {} },
+        capabilities: {
+          image_input: { enabled: true },
+        },
+        preset_prompt: 'prompt',
+        long_term_memory: { enable: false },
+        opening_statement: '',
+        opening_questions: [],
+        suggested_after_answer: { enable: false },
+        review_config: { enable: false },
+        datasets: [],
+        retrieval_config: { retrieval_strategy: 'semantic', k: 10, score: 0.5 },
+        tools: [],
+        mcp_bindings: [],
+        mcp_tool_snapshots: [],
+        workflows: [],
+        speech_to_text: { enable: false },
+        text_to_speech: { enable: false, voice: 'alex', auto_play: false },
+      },
+    } as never)
+
+    const { draftAppConfigForm, loadDraftAppConfig } = useGetDraftAppConfig()
+
+    await loadDraftAppConfig('app-1')
+
+    expect(appService.getDraftAppConfig).toHaveBeenCalledWith('app-1')
+    expect(draftAppConfigForm.value.capabilities).toEqual({
+      image_input: { enabled: true },
+    })
+    expect(draftAppConfigForm.value.mcp_tool_snapshots).toEqual([])
   })
 
   it('resets loading when request fails', async () => {

@@ -1,0 +1,17 @@
+source_key: caveman
+name: caveman
+label: caveman
+description: Ultra-compressed communication mode that cuts token usage while keeping technical accuracy. Use when the user wants shorter answers or the session needs token reduction.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - productivity
+  - compression
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

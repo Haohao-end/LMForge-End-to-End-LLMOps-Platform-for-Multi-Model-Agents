@@ -2,11 +2,11 @@ from uuid import UUID
 from urllib.parse import urlparse
 from flask_wtf import FlaskForm
 from marshmallow import Schema, fields, pre_dump
-from wtforms import StringField, IntegerField
+from wtforms import StringField, IntegerField, BooleanField
 from wtforms.validators import DataRequired, Length, URL, ValidationError, Optional, NumberRange
 
 from internal.entity.app_entity import AppConfigType, AppStatus
-from internal.lib.helper import datetime_to_timestamp
+from internal.lib.helper import datetime_to_timestamp, build_input_parts, build_output_payload
 from internal.model import App, AppConfigVersion, Message
 from pkg.paginator import PaginatorReq
 from internal.schema import DictField, ListField
@@ -155,6 +155,12 @@ class GetPublishHistoriesWithPageResp(Schema):
                 "dialog_round": display_config.get("dialog_round", data.dialog_round),
                 "preset_prompt": display_config.get("preset_prompt", data.preset_prompt),
                 "tools": display_config.get("tools", data.tools),
+                "mcp_bindings": display_config.get("mcp_bindings", getattr(data, "mcp_bindings", [])),
+                "mcp_tool_snapshots": display_config.get(
+                    "mcp_tool_snapshots",
+                    getattr(data, "mcp_tool_snapshots", []),
+                ),
+                "skills": display_config.get("skills", getattr(data, "skills", [])),
                 "workflows": display_config.get("workflows", data.workflows),
                 "datasets": display_config.get("datasets", data.datasets),
                 "retrieval_config": display_config.get("retrieval_config", data.retrieval_config),
@@ -200,6 +206,7 @@ class DebugChatReq(FlaskForm):
     query = StringField("query", validators=[
         DataRequired("用户提问query不能为空"),
     ])
+    enable_deep_thinking = BooleanField("enable_deep_thinking", default=False)
 
     def validate_conversation_id(self, field: StringField) -> None:
         """校验传递的会话id是否是UUID"""
@@ -306,7 +313,10 @@ class GetDebugConversationMessagesWithPageResp(Schema):
     conversation_id = fields.UUID(dump_default="")
     query = fields.String(dump_default="")
     image_urls = fields.List(fields.String, dump_default=[])
+    input_parts = fields.List(fields.Dict, dump_default=[])
     answer = fields.String(dump_default="")
+    answer_parts = fields.List(fields.Dict, dump_default=[])
+    artifacts = fields.List(fields.Dict, dump_default=[])
     total_token_count = fields.Integer(dump_default=0)
     latency = fields.Float(dump_default=0)
     agent_thoughts = fields.List(fields.Dict, dump_default=[])
@@ -315,12 +325,16 @@ class GetDebugConversationMessagesWithPageResp(Schema):
 
     @pre_dump
     def process_data(self, data: Message, **kwargs):
+        output_payload = build_output_payload(data.answer, getattr(data, "agent_thoughts", []) or [])
         return {
             "id": data.id,
             "conversation_id": data.conversation_id,
             "query": data.query,
             "image_urls": data.image_urls,
+            "input_parts": build_input_parts(data.query, data.image_urls),
             "answer": data.answer,
+            "answer_parts": output_payload["answer_parts"],
+            "artifacts": output_payload["artifacts"],
             "total_token_count": data.total_token_count,
             "latency": data.latency,
             "agent_thoughts": [{

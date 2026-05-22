@@ -69,6 +69,40 @@ def _message_payload():
     )
 
 
+def _multimodal_message_payload():
+    artifact_thought = ns(
+        id=uuid4(),
+        position=1,
+        event="deep_artifact_created",
+        thought="chart.png",
+        observation="https://cos.example.com/chart.png",
+        tool="artifact",
+        tool_input={
+            "artifact": {
+                "name": "chart.png",
+                "url": "https://cos.example.com/chart.png",
+                "mime_type": "image/png",
+                "extension": "png",
+                "path": "/workspace/artifacts/chart.png",
+            }
+        },
+        latency=0.12,
+        created_at=utc_dt(2024, 1, 1, 1, 5, 0),
+    )
+    return ns(
+        id=uuid4(),
+        conversation_id=uuid4(),
+        query="生成图表",
+        image_urls=[],
+        answer="已生成图表",
+        total_token_count=12,
+        latency=0.4,
+        agent_thoughts=[artifact_thought],
+        suggested_questions=[],
+        created_at=utc_dt(2024, 1, 1, 2, 10, 0),
+    )
+
+
 def test_create_app_req_should_validate_required_fields(form_request):
     ok, form = _validate_form(
         form_request,
@@ -278,6 +312,12 @@ def test_get_debug_conversation_messages_with_page_req_should_validate_cursor(fo
 def test_get_debug_conversation_messages_with_page_resp_should_dump_agent_thoughts():
     data = GetDebugConversationMessagesWithPageResp().dump(_message_payload())
     assert data["query"] == "hello"
+    assert data["input_parts"] == [
+        {"type": "text", "text": "hello"},
+        {"type": "image", "url": "https://img.example.com/1.png"},
+    ]
+    assert data["answer_parts"] == [{"type": "text", "text": "world"}]
+    assert data["artifacts"] == []
     assert len(data["agent_thoughts"]) == 1
     assert "created_at" in data["agent_thoughts"][0]
 
@@ -292,6 +332,12 @@ def test_conversation_schema_should_validate_and_dump(form_request):
 
     payload = GetConversationMessagesWithPageResp().dump(_message_payload())
     assert payload["answer"] == "world"
+    assert payload["input_parts"] == [
+        {"type": "text", "text": "hello"},
+        {"type": "image", "url": "https://img.example.com/1.png"},
+    ]
+    assert payload["answer_parts"] == [{"type": "text", "text": "world"}]
+    assert payload["artifacts"] == []
     assert payload["total_token_count"] == 10
 
     ok, form = _validate_form(form_request, UpdateConversationNameReq, data={"name": "n" * 100})
@@ -303,6 +349,29 @@ def test_conversation_schema_should_validate_and_dump(form_request):
     ok, form = _validate_form(form_request, UpdateConversationIsPinnedReq, data={"is_pinned": "y"})
     assert ok, form.errors
     assert form.is_pinned.data is True
+
+
+def test_conversation_schema_should_promote_artifacts_into_multimodal_output():
+    payload = GetConversationMessagesWithPageResp().dump(_multimodal_message_payload())
+
+    assert payload["answer_parts"] == [
+        {"type": "text", "text": "已生成图表"},
+        {
+            "type": "image",
+            "url": "https://cos.example.com/chart.png",
+            "name": "chart.png",
+            "mime_type": "image/png",
+            "extension": "png",
+        },
+    ]
+    assert payload["artifacts"] == [
+        {
+            "name": "chart.png",
+            "url": "https://cos.example.com/chart.png",
+            "mime_type": "image/png",
+            "extension": "png",
+        }
+    ]
 
 
 def test_web_app_schema_should_validate_and_dump(form_request):
@@ -458,6 +527,12 @@ def test_assistant_agent_schema_should_validate_and_dump(form_request):
 
     payload = GetAssistantAgentMessagesWithPageResp().dump(_message_payload())
     assert payload["answer"] == "world"
+    assert payload["input_parts"] == [
+        {"type": "text", "text": "hello"},
+        {"type": "image", "url": "https://img.example.com/1.png"},
+    ]
+    assert payload["answer_parts"] == [{"type": "text", "text": "world"}]
+    assert payload["artifacts"] == []
     assert len(payload["agent_thoughts"]) == 1
 
     ok, form = _validate_form(form_request, AssistantAgentGenerateIntroduction, data={})
@@ -472,6 +547,14 @@ def test_assistant_agent_chat_validate_image_urls_should_ignore_non_list_input(f
 
 
 def test_web_app_chat_req_should_validate_image_url_length_and_format(form_request):
+    ok, form = _validate_form(
+        form_request,
+        WebAppChatReq,
+        data={"query": "hello", "enable_deep_thinking": "true"},
+    )
+    assert ok, form.errors
+    assert form.enable_deep_thinking.data is True
+
     ok, form = _validate_form(
         form_request,
         WebAppChatReq,
@@ -494,3 +577,13 @@ def test_web_app_chat_req_validate_image_urls_should_ignore_non_list_input(form_
         form = WebAppChatReq(meta={"csrf": False})
         form.image_urls.data = None  # type: ignore[assignment]
         assert form.validate_image_urls(form.image_urls) == []
+
+
+def test_assistant_agent_chat_should_accept_enable_deep_thinking(form_request):
+    ok, form = _validate_form(
+        form_request,
+        AssistantAgentChat,
+        data={"query": "hello", "enable_deep_thinking": "true"},
+    )
+    assert ok, form.errors
+    assert form.enable_deep_thinking.data is True

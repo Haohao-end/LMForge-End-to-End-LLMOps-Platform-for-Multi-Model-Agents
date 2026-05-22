@@ -10,7 +10,11 @@ export type GetConversationMessagesWithPageResponse = BasePaginatorResponse<{
   id: string
   conversation_id: string
   query: string
+  image_urls: string[]
+  input_parts: Array<Record<string, any>>
   answer: string
+  answer_parts: Array<Record<string, any>>
+  artifacts: Array<Record<string, any>>
   total_token_count: number
   latency: number
   agent_thoughts: {

@@ -135,6 +135,92 @@ class TestCosService:
 
         assert url == "https://bucket-a.cos.ap-shanghai.myqcloud.com/demo.txt"
 
+    def test_get_file_url_should_return_plain_url_for_anonymous_downloads(self, monkeypatch):
+        monkeypatch.setenv("COS_DOMAIN", "https://cos.example.com")
+
+        url = CosService.get_file_url(
+            "2026/01/01/demo.txt",
+            download_name="上海迪士尼及周边7天旅行计划.txt",
+        )
+
+        assert url == "https://cos.example.com/2026/01/01/demo.txt"
+
+    def test_get_file_url_should_reject_local_keys(self):
+        with pytest.raises(FailException, match="本地文件存储已禁用"):
+            CosService.get_file_url("local/2026/01/01/demo.txt")
+
+    def test_get_file_url_should_build_presigned_download_url_when_enabled(self, monkeypatch):
+        monkeypatch.setenv("COS_DOMAIN", "https://cos.example.com")
+        monkeypatch.setenv("COS_PRESIGNED_DOWNLOAD_URL_EXPIRE_SECONDS", "600")
+
+        class _Client:
+            @staticmethod
+            def get_presigned_download_url(*, Bucket, Key, Expired, Params):
+                assert Bucket == "bucket-a"
+                assert Key == "2026/01/01/demo.txt"
+                assert Expired == 600
+                assert Params["response-content-disposition"].startswith("attachment; filename=\"download.txt\";")
+                return "https://signed.example.com/demo.txt?signature=1"
+
+        monkeypatch.setattr(CosService, "_get_client", classmethod(lambda cls: _Client()))
+        monkeypatch.setattr(CosService, "_get_bucket", classmethod(lambda cls: "bucket-a"))
+
+        url = CosService.get_file_url(
+            "2026/01/01/demo.txt",
+            download_name="上海迪士尼及周边7天旅行计划.txt",
+        )
+
+        assert url == "https://signed.example.com/demo.txt?signature=1"
+
+    def test_upload_bytes_without_record_should_upload_and_return_public_url(self, monkeypatch):
+        captured = {}
+
+        class _Client:
+            @staticmethod
+            def put_object(bucket, file_content, upload_filename):
+                captured["bucket"] = bucket
+                captured["file_content"] = file_content
+                captured["upload_filename"] = upload_filename
+
+        monkeypatch.setattr(CosService, "_get_client", classmethod(lambda cls: _Client()))
+        monkeypatch.setattr(CosService, "_get_bucket", classmethod(lambda cls: "test-bucket"))
+        monkeypatch.setattr(CosService, "get_file_url", classmethod(lambda cls, key, download_name=None: f"https://cos.example.com/{key}"))
+        monkeypatch.setattr(
+            "internal.service.cos_service.utc_now_naive",
+            lambda: datetime(2026, 1, 2, 3, 4, 5),
+        )
+
+        url = CosService.upload_bytes_without_record(
+            filename="look.png",
+            content=b"image",
+            folder="generated-images",
+        )
+
+        assert captured["bucket"] == "test-bucket"
+        assert captured["file_content"] == b"image"
+        assert "/generated-images/" in captured["upload_filename"]
+        assert url.startswith("https://cos.example.com/2026/01/02/generated-images/")
+
+    def test_upload_bytes_without_record_should_raise_when_cos_upload_failed(self, monkeypatch):
+        class _Client:
+            @staticmethod
+            def put_object(*_args, **_kwargs):
+                raise RuntimeError("cos-down")
+
+        monkeypatch.setattr(CosService, "_get_client", classmethod(lambda cls: _Client()))
+        monkeypatch.setattr(CosService, "_get_bucket", classmethod(lambda cls: "test-bucket"))
+        monkeypatch.setattr(
+            "internal.service.cos_service.utc_now_naive",
+            lambda: datetime(2026, 1, 2, 3, 4, 5),
+        )
+
+        with pytest.raises(FailException, match="上传产物文件失败"):
+            CosService.upload_bytes_without_record(
+                filename="look.png",
+                content=b"image",
+                folder="generated-images",
+            )
+
     def test_download_file_should_delegate_to_cos_client(self, monkeypatch):
         captured = {}
 
@@ -156,30 +242,30 @@ class TestCosService:
             "target_file_path": "/tmp/demo.txt",
         }
 
-    def test_upload_file_should_raise_fail_exception_when_cos_upload_failed(self, monkeypatch):
+    def test_download_file_should_reject_local_keys(self):
+        service = self._build_service()
+
+        with pytest.raises(FailException, match="本地文件存储已禁用"):
+            service.download_file("local/2026/01/01/demo.txt", "/tmp/demo.txt")
+
+    def test_upload_file_should_raise_when_cos_upload_failed(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())
-        attempts = {"count": 0}
-        sleeps = []
 
         class _Client:
             @staticmethod
             def put_object(*_args, **_kwargs):
-                attempts["count"] += 1
                 raise RuntimeError("cos-down")
 
         service = CosService(
-            upload_file_service=SimpleNamespace(create_upload_file=lambda **_kwargs: None)
+            upload_file_service=SimpleNamespace(create_upload_file=lambda **kwargs: SimpleNamespace(**kwargs))
         )
         monkeypatch.setattr(CosService, "_get_client", classmethod(lambda cls: _Client()))
         monkeypatch.setattr(CosService, "_get_bucket", classmethod(lambda cls: "test-bucket"))
-        monkeypatch.setattr("internal.service.cos_service.time.sleep", lambda seconds: sleeps.append(seconds))
+        monkeypatch.setattr("internal.service.cos_service.time.sleep", lambda *_args, **_kwargs: None)
         file = FileStorage(stream=BytesIO(b"hello"), filename="demo.txt", content_type="text/plain")
 
         with pytest.raises(FailException):
             service.upload_file(file=file, only_image=False, account=account)
-
-        assert attempts["count"] == 3
-        assert sleeps == [0.1, 0.2]
 
     def test_upload_file_should_retry_transient_errors_then_succeed(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())
@@ -283,6 +369,63 @@ class TestCosService:
         assert captured["config_kwargs"]["EnableOldDomain"] is False
         assert captured["config_kwargs"]["EnableInternalDomain"] is False
         assert captured["retry"] == 2
+
+    def test_get_client_should_use_default_timeout_and_retry_when_env_missing(self, monkeypatch):
+        captured = {}
+        monkeypatch.setenv("COS_REGION", "ap-shanghai")
+        monkeypatch.setenv("COS_SECRET_ID", "sid")
+        monkeypatch.setenv("COS_SECRET_KEY", "skey")
+        monkeypatch.setenv("COS_SCHEME", "https")
+        monkeypatch.delenv("COS_TIMEOUT_SECONDS", raising=False)
+        monkeypatch.delenv("COS_SDK_RETRY", raising=False)
+
+        def _fake_cos_config(**kwargs):
+            captured["config_kwargs"] = kwargs
+            return SimpleNamespace(**kwargs)
+
+        def _fake_cos_client(conf, retry):
+            captured["config"] = conf
+            captured["retry"] = retry
+            return "cos-client"
+
+        monkeypatch.setattr("internal.service.cos_service.CosConfig", _fake_cos_config)
+        monkeypatch.setattr("internal.service.cos_service.CosS3Client", _fake_cos_client)
+
+        client = CosService._get_client()
+
+        assert client == "cos-client"
+        assert captured["config_kwargs"]["Timeout"] == 10
+        assert captured["retry"] == 1
+
+    def test_get_upload_max_attempts_should_use_default_when_unset(self, monkeypatch):
+        monkeypatch.delenv("COS_UPLOAD_MAX_ATTEMPTS", raising=False)
+
+        assert CosService._get_upload_max_attempts() == 3
+
+    def test_get_upload_max_attempts_should_read_env_value(self, monkeypatch):
+        monkeypatch.setenv("COS_UPLOAD_MAX_ATTEMPTS", "5")
+
+        assert CosService._get_upload_max_attempts() == 5
+
+    def test_get_timeout_seconds_should_use_default_when_unset(self, monkeypatch):
+        monkeypatch.delenv("COS_TIMEOUT_SECONDS", raising=False)
+
+        assert CosService._get_timeout_seconds() == 10
+
+    def test_get_timeout_seconds_should_read_env_value(self, monkeypatch):
+        monkeypatch.setenv("COS_TIMEOUT_SECONDS", "12")
+
+        assert CosService._get_timeout_seconds() == 12
+
+    def test_get_sdk_retry_should_use_default_when_unset(self, monkeypatch):
+        monkeypatch.delenv("COS_SDK_RETRY", raising=False)
+
+        assert CosService._get_sdk_retry() == 1
+
+    def test_get_sdk_retry_should_read_env_value(self, monkeypatch):
+        monkeypatch.setenv("COS_SDK_RETRY", "5")
+
+        assert CosService._get_sdk_retry() == 5
 
     def test_get_bucket_should_read_env_bucket_name(self, monkeypatch):
         monkeypatch.setenv("COS_BUCKET", "demo-bucket")

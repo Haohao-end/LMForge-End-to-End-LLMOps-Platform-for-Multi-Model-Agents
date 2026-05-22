@@ -11,6 +11,8 @@ type CopyHandlerOptions = {
   successMessage?: string
 }
 
+const ALLOWED_LINK_PROTOCOLS = new Set(['http:', 'https:'])
+
 const escapeHtml = (content: string) =>
   content
     .replace(/&/g, '&amp;')
@@ -26,6 +28,14 @@ export const useMarkdownRenderer = (options: MarkdownRendererOptions = {}) => {
     breaks: true,
     typographer: options.typographer ?? false,
   })
+  md.validateLink = (url: string) => {
+    try {
+      const parsed = new URL(url)
+      return ALLOWED_LINK_PROTOCOLS.has(parsed.protocol)
+    } catch {
+      return false
+    }
+  }
 
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx] as { info?: unknown; content?: unknown }

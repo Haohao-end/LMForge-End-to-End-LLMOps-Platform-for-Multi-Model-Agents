@@ -1,0 +1,17 @@
+source_key: zoom-out
+name: zoom-out
+label: zoom-out
+description: High-level architectural perspective that steps back from local implementation details and looks for system-level tradeoffs. Use when the user needs broader perspective or wants to avoid overfitting to one module.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - architecture
+  - perspective
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

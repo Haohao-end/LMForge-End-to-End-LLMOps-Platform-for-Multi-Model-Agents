@@ -4,6 +4,7 @@ from injector import inject
 from internal.schema.ai_schema import (
     CodeAssistantChatReq,
     GenerateSuggestedQuestionsReq,
+    McpSchemaAssistantChatReq,
     OpenAPISchemaAssistantChatReq,
     OptimizePromptReq,
 )
@@ -70,4 +71,15 @@ class AIHandler:
         # 2.调用服务处理聊天 - 流式返回
         return compact_generate_response(
             self.ai_service.openapi_schema_assistant_chat(req.question.data)
+        )
+
+    @login_required
+    def mcp_schema_assistant_chat(self):
+        """MCP Schema 助手聊天 - 流式输出"""
+        req = McpSchemaAssistantChatReq()
+        if not req.validate():
+            return validate_error_json(req.errors)
+
+        return compact_generate_response(
+            self.ai_service.mcp_schema_assistant_chat(req.question.data)
         )

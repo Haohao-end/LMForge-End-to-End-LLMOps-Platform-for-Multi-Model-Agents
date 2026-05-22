@@ -4,6 +4,8 @@ import OpeningAbilityItem from './abilities/OpeningAbilityItem.vue'
 import SuggestedAfterAnswerAbilityItem from './abilities/SuggestedAfterAnswerAbilityItem.vue'
 import ReviewConfigAbilityItem from './abilities/ReviewConfigAbilityItem.vue'
 import DatasetsAbilityItem from './abilities/DatasetsAbilityItem.vue'
+import McpBindingsAbilityItem from './abilities/McpBindingsAbilityItem.vue'
+import SkillsAbilityItem from './abilities/SkillsAbilityItem.vue'
 import ToolsAbilityItem from './abilities/ToolsAbilityItem.vue'
 import WorkflowsAbilityItem from './abilities/WorkflowsAbilityItem.vue'
 import SpeechToTextAbilityItem from './abilities/SpeechToTextAbilityItem.vue'
@@ -14,9 +16,11 @@ const props = defineProps({
   app_id: { type: String, default: '', required: true },
   draft_app_config: { type: Object, required: true },
 })
-const emits = defineEmits(['update:draft_app_config'])
+const emits = defineEmits(['update:draft_app_config', 'reload-draft-app-config'])
 const defaultActivateKeys = [
   'tools',
+  'mcp_bindings',
+  'skills',
   'workflows',
   'datasets',
   'long_term_memory',
@@ -47,6 +51,32 @@ const defaultActivateKeys = [
               tools: tools,
             })
         " :app_id="props.app_id" />
+        <!-- MCP 绑定组件 -->
+        <mcp-bindings-ability-item
+          :mcp_bindings="props.draft_app_config.mcp_bindings || []"
+          :mcp_tool_snapshots="props.draft_app_config.mcp_tool_snapshots || []"
+          @update:mcp_bindings="
+            (mcp_bindings) =>
+              emits('update:draft_app_config', {
+                ...props.draft_app_config,
+                mcp_bindings,
+              })
+          "
+          @reload-draft-app-config="emits('reload-draft-app-config')"
+          :app_id="props.app_id"
+        />
+        <!-- Skills 绑定 -->
+        <skills-ability-item
+          :skills="props.draft_app_config.skills || []"
+          @update:skills="
+            (skills) =>
+              emits('update:draft_app_config', {
+                ...props.draft_app_config,
+                skills,
+              })
+          "
+          :app_id="props.app_id"
+        />
         <!-- 工作流组件 -->
         <workflows-ability-item :workflows="props.draft_app_config.workflows" @update:workflows="
           (workflows) =>
@@ -65,7 +95,7 @@ const defaultActivateKeys = [
         " :datasets="props.draft_app_config.datasets" @update:datasets="
             (datasets) =>
               emits('update:draft_app_config', {
-                ...draft_app_config,
+                ...props.draft_app_config,
                 datasets,
               })
           " :app_id="props.app_id" />

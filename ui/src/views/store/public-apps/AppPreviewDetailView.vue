@@ -10,6 +10,8 @@ type DraftAppConfigForm = {
   dialog_round?: number
   model_config?: Record<string, unknown>
   preset_prompt?: string
+  mcp_bindings?: Array<Record<string, unknown>>
+  skills?: Array<Record<string, unknown>>
   long_term_memory?: { enable: boolean }
   suggested_after_answer?: { enable: boolean }
   opening_questions?: string[]

@@ -1,0 +1,17 @@
+source_key: to-issues
+name: to-issues
+label: 转成问题单
+description: 将当前上下文整理成可执行的问题单并发布到项目 issue tracker。Use when the user wants a plan turned into issues.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - issues
+  - planning
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

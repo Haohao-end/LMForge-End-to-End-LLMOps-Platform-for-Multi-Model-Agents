@@ -91,6 +91,8 @@ defineExpose({ scrollToBottom })
             :enable_text_to_speech="props.textToSpeechEnable"
             :agent_thoughts="item.agent_thoughts"
             :answer="item.answer"
+            :answer_parts="item.answer_parts || []"
+            :artifacts="item.artifacts || []"
             :app="props.app"
             :suggested_questions="item.suggested_questions || []"
             :loading="props.loading && item.id === props.messages[0]?.id"

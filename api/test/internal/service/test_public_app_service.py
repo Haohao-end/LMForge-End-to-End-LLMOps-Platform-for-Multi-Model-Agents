@@ -149,12 +149,14 @@ def _build_service(
     *,
     session=None,
     builtin_provider_manager=None,
+    language_model_service=None,
     public_agent_registry_service=None,
 ):
     session = session or _QueueSession()
     return PublicAppService(
         db=_DB(session),
         builtin_provider_manager=builtin_provider_manager or SimpleNamespace(get_provider=lambda _provider_id: None),
+        language_model_service=language_model_service,
         public_agent_registry_service=public_agent_registry_service,
     )
 
@@ -473,6 +475,20 @@ class TestPublicAppService:
             dialog_round=3,
             preset_prompt="prompt",
             tools=[],
+            mcp_bindings=[
+                {
+                    "name": "Weather MCP",
+                    "description": "weather",
+                    "transport": "streamable_http",
+                    "url": "https://mcp.example.com",
+                    "enabled": True,
+                    "headers": [],
+                    "tool_names": [],
+                    "timeout_seconds": 30,
+                    "args": [],
+                    "env": {},
+                }
+            ],
             workflows=[],
             retrieval_config={},
             long_term_memory={"enable": True},
@@ -512,6 +528,7 @@ class TestPublicAppService:
         assert copied.name.endswith("(副本)")
         assert copied.original_app_id == public_app.id
         assert copied.tags == public_app.tags
+        assert session.added[1].mcp_bindings == public_app.app_config.mcp_bindings
         assert public_app.view_count == 2
         assert public_app.fork_count == 3
         assert len(session.added) == 2
@@ -892,6 +909,20 @@ class TestPublicAppService:
                 dialog_round=4,
                 preset_prompt="prompt",
                 tools=[{"type": "builtin_tool"}],
+                mcp_bindings=[
+                    {
+                        "name": "Weather MCP",
+                        "description": "weather",
+                        "transport": "streamable_http",
+                        "url": "https://mcp.example.com",
+                        "enabled": True,
+                        "headers": [],
+                        "tool_names": [],
+                        "timeout_seconds": 30,
+                        "args": [],
+                        "env": {},
+                    }
+                ],
                 workflows=[{"id": "wf"}],
                 retrieval_config={},
                 long_term_memory={"enable": False},
@@ -928,7 +959,93 @@ class TestPublicAppService:
         assert detail["is_liked"] is True
         assert detail["is_favorited"] is False
         assert detail["draft_app_config"]["tools"] == [{"type": "enriched"}]
+        assert detail["draft_app_config"]["mcp_bindings"] == [
+            {
+                "name": "Weather MCP",
+                "description": "weather",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "enabled": True,
+                "headers": [],
+                "tool_names": [],
+                "timeout_seconds": 30,
+                "args": [],
+                "env": {},
+            }
+        ]
+        assert detail["draft_app_config"]["capabilities"] == {}
         assert app.view_count == 4
+
+    def test_get_public_app_detail_should_include_runtime_capabilities_when_service_available(
+        self, monkeypatch
+    ):
+        app = SimpleNamespace(
+            id=uuid4(),
+            account_id=uuid4(),
+            is_public=True,
+            status=AppStatus.PUBLISHED.value,
+            name="PublicApp",
+            icon="https://icon",
+            description="desc",
+            category=AppCategory.GENERAL.value,
+            tags=[AppCategory.GENERAL.value],
+            view_count=1,
+            like_count=0,
+            fork_count=0,
+            published_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2025, 12, 31, tzinfo=UTC),
+            app_config=SimpleNamespace(
+                model_config={"provider": "openai", "model": "gpt-4o-mini"},
+                dialog_round=4,
+                preset_prompt="prompt",
+                tools=[],
+                workflows=[],
+                retrieval_config={},
+                long_term_memory={"enable": False},
+                opening_statement="hello",
+                opening_questions=["q1"],
+                speech_to_text={"enable": False},
+                text_to_speech={"enable": False},
+                suggested_after_answer={"enable": True},
+                review_config={"enable": False},
+            ),
+        )
+        session = _QueueSession(
+            [
+                _Query(one_or_none_result=app),
+                _Query(one_or_none_result=None),
+                _Query(scalar_result=0),
+            ]
+        )
+        capture = {}
+        capabilities = {"image_input": {"enabled": False, "reason_code": "PUBLIC_A2A_ONLY_TEXT"}}
+        service = _build_service(
+            session=session,
+            language_model_service=SimpleNamespace(
+                describe_runtime_capabilities=lambda model_config, entrypoint, allow_image_input: capture.update(
+                    {
+                        "model_config": model_config,
+                        "entrypoint": entrypoint,
+                        "allow_image_input": allow_image_input,
+                    }
+                )
+                or capabilities
+            ),
+        )
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+
+        detail = service.get_public_app_detail(str(app.id), None)
+
+        assert detail["draft_app_config"]["capabilities"] == capabilities
+        assert capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "entrypoint": "public_a2a",
+            "allow_image_input": False,
+        }
 
     def test_get_public_app_detail_should_raise_when_id_invalid_or_not_public(self):
         service = _build_service(session=_QueueSession())

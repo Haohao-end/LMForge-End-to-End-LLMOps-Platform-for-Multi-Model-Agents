@@ -11,6 +11,8 @@ const createMessage = (): StreamMessage => ({
   id: '',
   conversation_id: '',
   answer: '',
+  answer_parts: [],
+  artifacts: [],
   latency: 0,
   total_token_count: 0,
   agent_thoughts: [],
@@ -56,6 +58,32 @@ describe('chat-stream', () => {
     expect(message.agent_thoughts).toHaveLength(1)
   })
 
+  it('prefers aggregate metrics for message-level latency and token count', () => {
+    const message = createMessage()
+
+    applyChatStreamEvent(
+      message,
+      {
+        event: QueueEvent.deepComplete,
+        data: {
+          id: 'deep-complete-1',
+          event: QueueEvent.deepComplete,
+          thought: '整理执行结果',
+          latency: 20,
+          total_token_count: 120,
+          aggregate_latency: 25,
+          aggregate_total_token_count: 150,
+        },
+      },
+      createState(),
+    )
+
+    expect(message.agent_thoughts).toHaveLength(1)
+    expect(message.agent_thoughts[0].latency).toBe(20)
+    expect(message.latency).toBe(25)
+    expect(message.total_token_count).toBe(150)
+  })
+
   it('concatenates thought chunks for same event id', () => {
     const message = createMessage()
     let state = createState()
@@ -84,6 +112,238 @@ describe('chat-stream', () => {
     expect(message.answer).toBe('Hello World')
     expect(message.agent_thoughts).toHaveLength(1)
     expect(message.agent_thoughts[0].thought).toBe('Hello World')
+  })
+
+  it('keeps deep thinking chunks separate from agent message chunks', () => {
+    const message = createMessage()
+    let state = createState()
+
+    const deepThinkingChunk: StreamEventResponse = {
+      event: QueueEvent.deepThinking,
+      data: {
+        id: 'deep-1',
+        event: QueueEvent.deepThinking,
+        thought: '先拆解任务',
+      },
+    }
+    const deepThinkingChunk2: StreamEventResponse = {
+      event: QueueEvent.deepThinking,
+      data: {
+        id: 'deep-1',
+        event: QueueEvent.deepThinking,
+        thought: '，再执行',
+      },
+    }
+
+    state = applyChatStreamEvent(message, deepThinkingChunk, state).state
+    const secondResult = applyChatStreamEvent(message, deepThinkingChunk2, state)
+
+    expect(secondResult.state.position).toBe(1)
+    expect(message.answer).toBe('')
+    expect(message.agent_thoughts).toHaveLength(1)
+    expect(message.agent_thoughts[0].event).toBe(QueueEvent.deepThinking)
+    expect(message.agent_thoughts[0].thought).toBe('先拆解任务，再执行')
+  })
+
+  it('upserts deep step events by id instead of appending duplicate rows', () => {
+    const message = createMessage()
+    let state = createState()
+
+    const firstStep: StreamEventResponse = {
+      event: QueueEvent.deepStep,
+      data: {
+        id: 'step-1',
+        event: QueueEvent.deepStep,
+        thought: '正在执行代码',
+        tool: 'execute',
+        tool_input: {
+          timeline: {
+            step_type: 'tool',
+            status: 'start',
+            title: '执行代码',
+            detail: 'python3 run.py',
+          },
+        },
+      },
+    }
+    const secondStep: StreamEventResponse = {
+      event: QueueEvent.deepStep,
+      data: {
+        id: 'step-1',
+        event: QueueEvent.deepStep,
+        thought: '执行完成',
+        observation: 'exit_code=0',
+        tool: 'execute',
+        tool_input: {
+          timeline: {
+            step_type: 'tool',
+            status: 'success',
+            title: '执行代码',
+            detail: '执行完成',
+          },
+        },
+        latency: 2.4,
+      },
+    }
+
+    state = applyChatStreamEvent(message, firstStep, state).state
+    const result = applyChatStreamEvent(message, secondStep, state)
+
+    expect(result.state.position).toBe(1)
+    expect(message.agent_thoughts).toHaveLength(1)
+    expect(message.agent_thoughts[0].thought).toBe('执行完成')
+    expect(message.agent_thoughts[0].observation).toBe('exit_code=0')
+    expect(message.agent_thoughts[0].latency).toBe(2.4)
+  })
+
+  it('records artifact created events as separate timeline items', () => {
+    const message = createMessage()
+
+    const result = applyChatStreamEvent(
+      message,
+      {
+        event: QueueEvent.deepArtifactCreated,
+        data: {
+          id: 'artifact-1',
+          event: QueueEvent.deepArtifactCreated,
+          thought: 'trip-plan.docx',
+          tool: 'artifact',
+          tool_input: {
+            artifact: {
+              name: 'trip-plan.docx',
+              url: 'https://example.com/trip-plan.docx',
+            },
+          },
+        },
+      },
+      createState(),
+    )
+
+    expect(result.didUpdate).toBe(true)
+    expect(message.agent_thoughts).toHaveLength(1)
+    expect(message.agent_thoughts[0].event).toBe(QueueEvent.deepArtifactCreated)
+    expect((message.agent_thoughts[0].tool_input as any).artifact.name).toBe('trip-plan.docx')
+    expect(message.artifacts).toEqual([
+      {
+        name: 'trip-plan.docx',
+        url: 'https://example.com/trip-plan.docx',
+      },
+    ])
+    expect(message.answer_parts).toEqual([
+      {
+        type: 'artifact',
+        name: 'trip-plan.docx',
+        url: 'https://example.com/trip-plan.docx',
+      },
+    ])
+  })
+
+  it('records image artifact created events as image answer parts', () => {
+    const message = createMessage()
+
+    applyChatStreamEvent(
+      message,
+      {
+        event: QueueEvent.deepArtifactCreated,
+        data: {
+          id: 'artifact-image-1',
+          event: QueueEvent.deepArtifactCreated,
+          thought: 'cover.png',
+          tool: 'artifact',
+          tool_input: {
+            artifact: {
+              name: 'cover.png',
+              url: 'https://example.com/cover.png',
+              extension: 'png',
+              mime_type: 'image/png',
+            },
+          },
+        },
+      },
+      createState(),
+    )
+
+    expect(message.artifacts).toEqual([
+      {
+        name: 'cover.png',
+        url: 'https://example.com/cover.png',
+        extension: 'png',
+        mime_type: 'image/png',
+      },
+    ])
+    expect(message.answer_parts).toEqual([
+      {
+        type: 'image',
+        url: 'https://example.com/cover.png',
+        name: 'cover.png',
+        mime_type: 'image/png',
+        extension: 'png',
+      },
+    ])
+  })
+
+  it('promotes inline image urls from agent action observations into gallery artifacts', () => {
+    const message = createMessage()
+
+    applyChatStreamEvent(
+      message,
+      {
+        event: QueueEvent.agentAction,
+        data: {
+          id: 'tool-action-1',
+          event: QueueEvent.agentAction,
+          thought: '正在生成图片',
+          observation: '✓ 成功生成图像\n图片 1:\n  URL: https://example.com/generated.png\n  提示: 图片已持久化保存，可直接访问和引用',
+          tool: 'qwen_image_text_to_image',
+          tool_input: {
+            prompt: '上海历史建筑',
+          },
+        },
+      },
+      createState(),
+    )
+
+    expect(message.artifacts).toEqual([
+      {
+        name: '生成图片',
+        url: 'https://example.com/generated.png',
+      },
+    ])
+    expect(message.answer_parts).toEqual([
+      {
+        type: 'image',
+        url: 'https://example.com/generated.png',
+        name: '生成图片',
+      },
+    ])
+  })
+
+  it('extracts image parts from streamed answer text when only a URL is returned', () => {
+    const message = createMessage()
+
+    applyChatStreamEvent(
+      message,
+      {
+        event: QueueEvent.agentMessage,
+        data: {
+          id: 'event-image',
+          event: QueueEvent.agentMessage,
+          thought: '图片 1:\n  URL: https://example.com/generated',
+        },
+      },
+      createState(),
+    )
+
+    expect(message.answer_parts).toEqual([
+      {
+        type: 'text',
+        text: '图片 1:\n  URL: https://example.com/generated',
+      },
+      {
+        type: 'image',
+        url: 'https://example.com/generated',
+      },
+    ])
   })
 
   it('overwrites answer on error event', () => {

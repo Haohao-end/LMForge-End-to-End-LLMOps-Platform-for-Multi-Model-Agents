@@ -1,0 +1,17 @@
+source_key: playwright
+name: playwright
+label: playwright
+description: Use when the task requires automating a real browser from the terminal
+  (navigation, form filling, snapshots, screenshots, data extraction, UI-flow debugging)
+  via `playwright-cli` or the bundled wrapper script.
+category: 内容处理
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []
