@@ -80,7 +80,8 @@ Click the diagram to view the full-resolution architecture image.
   <img src="ui/public/atlas-cloud-logo.png" alt="Atlas Cloud" width="520" />
 </p>
 
-- Atlas Cloud is now available as an OpenAI-compatible provider with `ATLASCLOUD_API_KEY` and `ATLASCLOUD_API_BASE`.
+- Atlas Cloud is now available as an OpenAI-compatible provider with `ATLAS_CLOUD_API_KEY` / `ATLAS_CLOUD_API_BASE`, while keeping `ATLASCLOUD_*` aliases for compatibility.
+- The default working model is `deepseek-ai/DeepSeek-V3-0324`, and you can override it with `ATLAS_CLOUD_MODEL`.
 - Official website: [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent)
 - Integration docs: [https://www.atlascloud.ai/docs](https://www.atlascloud.ai/docs)
 

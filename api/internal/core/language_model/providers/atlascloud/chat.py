@@ -21,18 +21,29 @@ class Chat(ChatOpenAI, BaseLanguageModel):
         resolved = dict(values)
 
         if not resolved.get("api_key") and not resolved.get("openai_api_key"):
-            key = os.getenv("ATLASCLOUD_API_KEY", "") or os.getenv("ATLAS_CLOUD_API_KEY", "")
+            key = (
+                os.getenv("ATLAS_CLOUD_API_KEY", "")
+                or os.getenv("ATLASCLOUD_API_KEY", "")
+            )
             if key:
                 resolved["api_key"] = key
 
         if not resolved.get("base_url") and not resolved.get("openai_api_base"):
             base = (
-                os.getenv("ATLASCLOUD_API_BASE", "")
-                or os.getenv("ATLAS_CLOUD_API_BASE", "")
+                os.getenv("ATLAS_CLOUD_API_BASE", "")
+                or os.getenv("ATLASCLOUD_API_BASE", "")
                 or "https://api.atlascloud.ai/v1"
             )
             if base:
                 resolved["base_url"] = base
+
+        # Align with the ai-hands-on Atlas preset so local env can swap models
+        # without changing the checked-in provider yaml.
+        env_model = os.getenv("ATLAS_CLOUD_MODEL", "") or os.getenv(
+            "ATLASCLOUD_MODEL", ""
+        )
+        if env_model:
+            resolved["model"] = env_model
 
         apply_default_model_timeout(resolved)
         return resolved

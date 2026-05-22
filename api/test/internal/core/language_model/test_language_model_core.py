@@ -383,10 +383,11 @@ def test_grok_env_resolver_should_apply_priority(monkeypatch):
 
 
 def test_atlascloud_env_resolver_should_apply_priority(monkeypatch):
-    monkeypatch.setenv("ATLASCLOUD_API_KEY", "atlas-key")
-    monkeypatch.delenv("ATLAS_CLOUD_API_KEY", raising=False)
+    monkeypatch.setenv("ATLAS_CLOUD_API_KEY", "atlas-key")
+    monkeypatch.delenv("ATLASCLOUD_API_KEY", raising=False)
     monkeypatch.delenv("ATLASCLOUD_API_BASE", raising=False)
     monkeypatch.delenv("ATLAS_CLOUD_API_BASE", raising=False)
+    monkeypatch.delenv("ATLAS_CLOUD_MODEL", raising=False)
 
     resolved = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
     assert resolved["api_key"] == "atlas-key"
@@ -398,12 +399,16 @@ def test_atlascloud_env_resolver_should_apply_priority(monkeypatch):
     assert explicit["api_key"] == "explicit"
     assert explicit["base_url"] == "https://custom.example/v1"
 
-    monkeypatch.delenv("ATLASCLOUD_API_KEY", raising=False)
-    monkeypatch.setenv("ATLAS_CLOUD_API_KEY", "fallback-key")
-    monkeypatch.setenv("ATLAS_CLOUD_API_BASE", "https://fallback.example/v1")
+    monkeypatch.delenv("ATLAS_CLOUD_API_KEY", raising=False)
+    monkeypatch.setenv("ATLASCLOUD_API_KEY", "fallback-key")
+    monkeypatch.setenv("ATLASCLOUD_API_BASE", "https://fallback.example/v1")
     fallback = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
     assert fallback["api_key"] == "fallback-key"
     assert fallback["base_url"] == "https://fallback.example/v1"
+
+    monkeypatch.setenv("ATLAS_CLOUD_MODEL", "deepseek-ai/DeepSeek-V3.1")
+    override = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
+    assert override["model"] == "deepseek-ai/DeepSeek-V3.1"
 
 
 def test_tongyi_and_wenxin_default_params_should_merge_extension_fields(monkeypatch):

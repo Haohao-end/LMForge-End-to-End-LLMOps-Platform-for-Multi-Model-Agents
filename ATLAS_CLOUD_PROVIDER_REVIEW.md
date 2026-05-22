@@ -21,9 +21,10 @@
 
 ## Provider Behavior
 
-- Reads `ATLASCLOUD_API_KEY` first, then falls back to `ATLAS_CLOUD_API_KEY`.
-- Reads `ATLASCLOUD_API_BASE` first, then falls back to `ATLAS_CLOUD_API_BASE`.
+- Reads `ATLAS_CLOUD_API_KEY` first, then falls back to `ATLASCLOUD_API_KEY`.
+- Reads `ATLAS_CLOUD_API_BASE` first, then falls back to `ATLASCLOUD_API_BASE`.
 - Uses `https://api.atlascloud.ai/v1` as the default OpenAI-compatible base URL.
+- Supports `ATLAS_CLOUD_MODEL` for local model override, aligned with the `ai-hands-on` Atlas preset.
 - Supports regular chat completion and streaming through the existing `ChatOpenAI` integration path.
 
 ## Validation Plan
