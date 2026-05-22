@@ -12,6 +12,7 @@ docs/
 !api/README.md
 !ui/README.md
 !docker/README.md
+!ATLAS_CLOUD_PROVIDER_REVIEW.md
 
 # Local Codex / browser artifacts
 .codex
@@ -21,6 +22,8 @@ docs/
 # 只保留项目根目录的 .env 文件
 .env
 !.env.example
+.venv/
+api/.venv/
 
 # 旧的 .env 文件（已废弃，如果存在也忽略）
 api/.env
@@ -86,6 +89,7 @@ docker/volumes/
 
 # Temporary files
 tmp/
+api/tmp/
 temp/
 *.tmp
 storage/

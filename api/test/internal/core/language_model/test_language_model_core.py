@@ -14,6 +14,7 @@ from internal.core.language_model.entities.provider_entity import (
     ProviderEntity,
 )
 from internal.core.language_model.language_model_manager import LanguageModelManager
+from internal.core.language_model.providers.atlascloud.chat import Chat as AtlasCloudChat
 from internal.core.language_model.providers.grok.chat import Chat as GrokChat
 from internal.core.language_model.providers.moonshot.chat import Chat as MoonshotChat
 from internal.core.language_model.providers.tongyi.chat import Chat as TongyiChat
@@ -379,6 +380,30 @@ def test_grok_env_resolver_should_apply_priority(monkeypatch):
     )
     grok_flip = GrokChat.resolve_grok_env({"model": "grok"})
     assert "base_url" not in grok_flip
+
+
+def test_atlascloud_env_resolver_should_apply_priority(monkeypatch):
+    monkeypatch.setenv("ATLASCLOUD_API_KEY", "atlas-key")
+    monkeypatch.delenv("ATLAS_CLOUD_API_KEY", raising=False)
+    monkeypatch.delenv("ATLASCLOUD_API_BASE", raising=False)
+    monkeypatch.delenv("ATLAS_CLOUD_API_BASE", raising=False)
+
+    resolved = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
+    assert resolved["api_key"] == "atlas-key"
+    assert resolved["base_url"] == "https://api.atlascloud.ai/v1"
+
+    explicit = AtlasCloudChat.resolve_atlascloud_env(
+        {"api_key": "explicit", "base_url": "https://custom.example/v1"}
+    )
+    assert explicit["api_key"] == "explicit"
+    assert explicit["base_url"] == "https://custom.example/v1"
+
+    monkeypatch.delenv("ATLASCLOUD_API_KEY", raising=False)
+    monkeypatch.setenv("ATLAS_CLOUD_API_KEY", "fallback-key")
+    monkeypatch.setenv("ATLAS_CLOUD_API_BASE", "https://fallback.example/v1")
+    fallback = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
+    assert fallback["api_key"] == "fallback-key"
+    assert fallback["base_url"] == "https://fallback.example/v1"
 
 
 def test_tongyi_and_wenxin_default_params_should_merge_extension_fields(monkeypatch):
