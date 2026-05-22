@@ -462,6 +462,41 @@ class TestAppConfigService:
         assert updates == []
         assert result["model_config"] == model_config
 
+    def test_get_draft_app_config_should_default_missing_mcp_bindings_to_empty_list(self, monkeypatch):
+        service = self._build_service()
+        draft_app_config = SimpleNamespace(
+            id=uuid4(),
+            model_config={"provider": "openai", "model": "gpt-4o-mini", "parameters": {}},
+            tools=[],
+            datasets=[],
+            workflows=[],
+            dialog_round=3,
+            preset_prompt="prompt",
+            retrieval_config={"strategy": "semantic"},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=[],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            updated_at=datetime(2024, 1, 1, 0, 0, 0),
+            created_at=datetime(2024, 1, 1, 0, 0, 0),
+        )
+        app = SimpleNamespace(draft_app_config=draft_app_config)
+        monkeypatch.setattr(service, "_process_and_validate_model_config", lambda config: config)
+        monkeypatch.setattr(service, "_process_and_validate_tools", lambda tools: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_datasets", lambda datasets: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_workflows", lambda workflows: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_mcp_bindings", lambda mcp_bindings: ([], []))
+        updates = []
+        monkeypatch.setattr(service, "update", lambda target, **kwargs: updates.append((target, kwargs)) or target)
+
+        result = service.get_draft_app_config(app)
+
+        assert result["mcp_bindings"] == []
+        assert updates == []
+
     def test_get_app_config_should_skip_updates_and_dataset_cleanup_when_valid(self, monkeypatch):
         dataset_id = str(uuid4())
         workflow_id = "wf-1"
@@ -521,6 +556,90 @@ class TestAppConfigService:
 
         assert updates == []
         assert result["model_config"] == model_config
+
+    def test_get_app_config_should_default_missing_mcp_bindings_to_empty_list(self, monkeypatch):
+        class _Session:
+            def query(self, _model):
+                return _QueryStub()
+
+        service = AppConfigService(
+            db=SimpleNamespace(session=_Session(), auto_commit=lambda: _null_context()),
+            api_provider_manager=SimpleNamespace(get_tool=lambda _entity: "api-tool-instance"),
+            language_model_manager=SimpleNamespace(get_provider=lambda _provider: None),
+            builtin_provider_manager=SimpleNamespace(get_tool=lambda _pid, _name: None),
+        )
+        app_config = SimpleNamespace(
+            id=uuid4(),
+            model_config={"provider": "openai", "model": "gpt-4o-mini", "parameters": {}},
+            tools=[],
+            app_dataset_joins=[],
+            workflows=[],
+            dialog_round=3,
+            preset_prompt="prompt",
+            retrieval_config={"strategy": "semantic"},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=[],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            updated_at=datetime(2024, 1, 1, 0, 0, 0),
+            created_at=datetime(2024, 1, 1, 0, 0, 0),
+        )
+        app = SimpleNamespace(app_config=app_config)
+        monkeypatch.setattr(service, "_process_and_validate_model_config", lambda config: config)
+        monkeypatch.setattr(service, "_process_and_validate_tools", lambda tools: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_datasets", lambda datasets: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_workflows", lambda workflows: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_mcp_bindings", lambda mcp_bindings: ([], []))
+        updates = []
+        monkeypatch.setattr(service, "update", lambda target, **kwargs: updates.append((target, kwargs)) or target)
+
+        result = service.get_app_config(app)
+
+        assert result["mcp_bindings"] == []
+        assert updates == []
+
+    def test_process_and_validate_mcp_bindings_should_normalize_and_deduplicate(self):
+        service = self._build_service()
+        payload = [
+            {
+                "name": " Weather ",
+                "description": " ModelScope weather ",
+                "transport": "streamable_http",
+                "url": " https://mcp.example.com ",
+                "enabled": True,
+                "headers": [{"key": " Authorization ", "value": " Bearer token "}],
+                "tool_names": [" weather ", ""],
+                "timeout_seconds": 15,
+                "args": [" --flag ", ""],
+                "env": {" API_KEY ": " secret "},
+            },
+            {
+                "name": "Weather",
+                "description": "duplicate",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "enabled": True,
+                "headers": [],
+                "tool_names": [],
+                "timeout_seconds": 15,
+                "args": [],
+                "env": {},
+            },
+        ]
+
+        mcp_bindings, validate_mcp_bindings = service._process_and_validate_mcp_bindings(payload)
+
+        assert len(validate_mcp_bindings) == 1
+        assert mcp_bindings == validate_mcp_bindings
+        assert validate_mcp_bindings[0]["name"] == "Weather"
+        assert validate_mcp_bindings[0]["url"] == "https://mcp.example.com"
+        assert validate_mcp_bindings[0]["headers"] == [{"key": "Authorization", "value": "Bearer token"}]
+        assert validate_mcp_bindings[0]["tool_names"] == ["weather"]
+        assert validate_mcp_bindings[0]["args"] == ["--flag"]
+        assert validate_mcp_bindings[0]["env"] == {"API_KEY": "secret"}
 
     def test_get_langchain_tools_by_tools_config_should_skip_missing_tools(self, monkeypatch):
         service = self._build_service(

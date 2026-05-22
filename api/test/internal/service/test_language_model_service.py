@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import pytest
 from flask import Flask
 
-from internal.exception import NotFoundException
+from internal.exception import NotFoundException, ValidateErrorException
+from internal.core.language_model.entities.model_entity import ModelFeature
 from internal.service.language_model_service import LanguageModelService
 
 
@@ -175,3 +176,93 @@ class TestLanguageModelService:
         assert llm.max_tokens == 8192
         assert llm.features == ["tool_call"]
         assert llm.metadata == {"ctx": 8192}
+
+    def test_describe_runtime_capabilities_should_report_native_image_input(self):
+        image_model_entity = SimpleNamespace(
+            model_type="chat",
+            attributes={"model": "gpt-4o-mini"},
+            features=[ModelFeature.TOOL_CALL.value, ModelFeature.IMAGE_INPUT.value],
+            metadata={},
+        )
+        provider = SimpleNamespace(
+            get_model_entity=lambda _name: image_model_entity,
+            get_model_class=lambda _type: (lambda **kwargs: SimpleNamespace(**kwargs)),
+        )
+        service = _build_service(manager=SimpleNamespace(get_provider=lambda _name: provider))
+
+        capabilities = service.describe_runtime_capabilities(
+            {"provider": "openai", "model": "gpt-4o-mini"},
+            entrypoint=LanguageModelService.ENTRYPOINT_WEB_APP,
+        )
+
+        assert capabilities["image_input"]["enabled"] is True
+        assert capabilities["image_input"]["via_fallback"] is False
+        assert capabilities["effective_model"]["model"] == "gpt-4o-mini"
+        assert capabilities["image_output"]["enabled"] is True
+        assert capabilities["artifact_output"]["enabled"] is True
+
+    def test_resolve_runtime_language_model_should_auto_upgrade_to_vision_fallback(self, monkeypatch):
+        model_entities = {
+            ("deepseek", "deepseek-chat"): SimpleNamespace(
+                model_type="chat",
+                attributes={"model": "deepseek-chat"},
+                features=[ModelFeature.TOOL_CALL.value],
+                metadata={},
+            ),
+            ("openai", "gpt-4o-mini"): SimpleNamespace(
+                model_type="chat",
+                attributes={"model": "gpt-4o-mini"},
+                features=[ModelFeature.TOOL_CALL.value, ModelFeature.IMAGE_INPUT.value],
+                metadata={},
+            ),
+        }
+
+        def _get_provider(provider_name: str):
+            return SimpleNamespace(
+                get_model_entity=lambda model_name: model_entities.get((provider_name, model_name)),
+                get_model_class=lambda _type: (lambda **kwargs: SimpleNamespace(**kwargs)),
+            )
+
+        service = _build_service(manager=SimpleNamespace(get_provider=_get_provider))
+        monkeypatch.setattr(
+            service,
+            "_get_config_value",
+            lambda key, default=None: {
+                "IMAGE_REQUEST_POLICY": "auto_upgrade",
+                "VISION_FALLBACK_PROVIDER": "openai",
+                "VISION_FALLBACK_MODEL": "gpt-4o-mini",
+            }.get(key, default),
+        )
+
+        resolution = service.resolve_runtime_language_model(
+            {"provider": "deepseek", "model": "deepseek-chat"},
+            image_urls=["https://example.com/cat.png"],
+            entrypoint=LanguageModelService.ENTRYPOINT_WEB_APP,
+        )
+
+        assert resolution.llm.model == "gpt-4o-mini"
+        assert resolution.resolution_action == "auto_upgrade"
+        assert resolution.capabilities["image_input"]["via_fallback"] is True
+
+    def test_resolve_runtime_language_model_should_raise_when_image_input_not_supported(self, monkeypatch):
+        text_model_entity = SimpleNamespace(
+            model_type="chat",
+            attributes={"model": "deepseek-chat"},
+            features=[ModelFeature.TOOL_CALL.value],
+            metadata={},
+        )
+        provider = SimpleNamespace(
+            get_model_entity=lambda _name: text_model_entity,
+            get_model_class=lambda _type: (lambda **kwargs: SimpleNamespace(**kwargs)),
+        )
+        service = _build_service(manager=SimpleNamespace(get_provider=lambda _name: provider))
+        monkeypatch.setattr(service, "_get_config_value", lambda _key, default=None: default)
+
+        with pytest.raises(ValidateErrorException) as exc:
+            service.resolve_runtime_language_model(
+                {"provider": "deepseek", "model": "deepseek-chat"},
+                image_urls=["https://example.com/cat.png"],
+                entrypoint=LanguageModelService.ENTRYPOINT_WEB_APP,
+            )
+
+        assert exc.value.data["image_input"]["reason_code"] == "IMAGE_INPUT_UNSUPPORTED"

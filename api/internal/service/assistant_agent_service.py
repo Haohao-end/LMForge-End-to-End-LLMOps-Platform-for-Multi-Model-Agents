@@ -4,10 +4,10 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Generator
+from typing import Any, Generator
 from uuid import UUID
 
-from flask import current_app
+from flask import current_app, has_app_context
 from injector import inject
 from redis import Redis
 from langchain_core.messages import (
@@ -21,9 +21,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc
 from sqlalchemy.orm import selectinload
 
-from internal.core.agent.agents import A2AFunctionCallAgent, AgentQueueManager
+from internal.core.agent.agents import (
+    A2ADeepThinkingAgent,
+    FunctionCallAgent,
+    AgentQueueManager,
+)
 from internal.core.agent.entities.agent_entity import AgentConfig
 from internal.core.agent.entities.queue_entity import QueueEvent
+from internal.core.agent.usage_utils import summarize_agent_thoughts
 from internal.entity.assistant_agent_entity import ASSISTANT_AGENT_DISPLAY_NAME
 from internal.core.language_model.entities.model_entity import ModelFeature
 from internal.core.language_model.providers.deepseek.chat import Chat as DeepSeekChat
@@ -42,8 +47,10 @@ from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 
 from .base_service import BaseService
+from .app_config_service import AppConfigService
 from .conversation_service import ConversationService
 from .faiss_service import FaissService
+from .language_model_service import LanguageModelService
 from .public_agent_a2a_service import PublicAgentA2AService
 from .public_agent_registry_service import PublicAgentRegistryService
 
@@ -69,6 +76,8 @@ class AssistantAgentService(BaseService):
     faiss_service: FaissService
     conversation_service: ConversationService
     redis_client: Redis
+    app_config_service: AppConfigService | None = None
+    language_model_service: LanguageModelService | None = None
     public_agent_a2a_service: PublicAgentA2AService | None = None
     public_agent_registry_service: PublicAgentRegistryService | None = None
 
@@ -106,6 +115,85 @@ class AssistantAgentService(BaseService):
 
         return conversation
 
+    def get_capabilities(self) -> dict[str, Any]:
+        """返回辅助 Agent 当前可用能力。"""
+        if self.language_model_service is None:
+            return {
+                "requested_model": {"provider": "deepseek", "model": "deepseek-chat"},
+                "effective_model": {"provider": "deepseek", "model": "deepseek-chat"},
+                "features": [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value],
+                "requested_features": [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value],
+                "image_input": {
+                    "enabled": False,
+                    "via_fallback": False,
+                    "policy": LanguageModelService.IMAGE_REQUEST_POLICY_STRICT,
+                    "requested_model_supports": False,
+                    "effective_model_supports": False,
+                    "fallback_model": None,
+                    "fallback_model_supports": False,
+                    "reason_code": "IMAGE_INPUT_UNSUPPORTED",
+                    "message": "当前辅助 Agent 不支持图片输入",
+                },
+                "image_output": {
+                    "enabled": True,
+                    "reason_code": "IMAGE_OUTPUT_SUPPORTED",
+                },
+                "artifact_output": {
+                    "enabled": True,
+                    "reason_code": "ARTIFACT_OUTPUT_SUPPORTED",
+                },
+            }
+        return self.language_model_service.describe_runtime_capabilities(
+            self.language_model_service.get_assistant_agent_model_config(),
+            entrypoint=LanguageModelService.ENTRYPOINT_ASSISTANT_AGENT,
+        )
+
+    @staticmethod
+    def _build_default_assistant_llm() -> DeepSeekChat:
+        """构建历史兼容的辅助 Agent 文本模型。"""
+        return DeepSeekChat(
+            model="deepseek-chat",
+            temperature=0.8,
+            features=[
+                ModelFeature.TOOL_CALL.value,
+                ModelFeature.AGENT_THOUGHT.value,
+            ],
+            metadata={},
+        )
+
+    def _build_assistant_runtime_tools(self, account_id: UUID) -> list[BaseTool]:
+        """构建首页助手运行时工具，包括公共 Agent、创建应用和全局 MCP 绑定。"""
+        search_public_agents_tool = (
+            self.public_agent_registry_service.convert_public_agent_search_to_tool()
+            if self.public_agent_registry_service
+            else self.faiss_service.convert_faiss_to_tool()
+        )
+        tools: list[BaseTool] = []
+        if self.public_agent_a2a_service:
+            tools.append(
+                self.public_agent_a2a_service.convert_public_agent_route_to_tool(account_id)
+            )
+        tools.extend(
+            [
+                search_public_agents_tool,
+                self.convert_create_app_to_tool(account_id),
+            ]
+        )
+
+        if self.app_config_service is not None:
+            assistant_mcp_bindings = (
+                current_app.config.get("ASSISTANT_MCP_BINDINGS", [])
+                if has_app_context()
+                else []
+            )
+            if not isinstance(assistant_mcp_bindings, list):
+                assistant_mcp_bindings = []
+            tools.extend(
+                self.app_config_service.get_langchain_tools_by_mcp_bindings(assistant_mcp_bindings)
+            )
+
+        return tools
+
     def chat(self, req: AssistantAgentChat, account: Account) -> Generator:
         """传递query与账号实现与辅助Agent进行会话"""
         # 1.获取辅助Agent对应的id
@@ -118,7 +206,19 @@ class AssistantAgentService(BaseService):
             sync_active=True,
         )
 
-        # 3.新建一条消息记录
+        # 3.在落库前解析运行时模型能力，避免带图请求被静默降级
+        if self.language_model_service is not None:
+            model_resolution = self.language_model_service.resolve_runtime_language_model(
+                self.language_model_service.get_assistant_agent_model_config(),
+                image_urls=req.image_urls.data,
+                entrypoint=LanguageModelService.ENTRYPOINT_ASSISTANT_AGENT,
+            )
+            llm = model_resolution.llm
+        else:
+            model_resolution = None
+            llm = self._build_default_assistant_llm()
+
+        # 4.新建一条消息记录
         message = self.create(
             Message,
             app_id=assistant_agent_id,
@@ -130,17 +230,6 @@ class AssistantAgentService(BaseService):
             status=MessageStatus.NORMAL.value,
         )
 
-        # 4.使用DeepSeek模型作为辅助Agent的LLM大脑
-        llm = DeepSeekChat(
-            model="deepseek-chat",
-            temperature=0.8,
-            features=[
-                ModelFeature.TOOL_CALL.value,
-                ModelFeature.AGENT_THOUGHT.value,
-            ],
-            metadata={},
-        )
-
         # 5.实例化TokenBufferMemory用于提取短期记忆
         token_buffer_memory = TokenBufferMemory(
             db=self.db,
@@ -149,34 +238,24 @@ class AssistantAgentService(BaseService):
         )
         history = token_buffer_memory.get_history_prompt_messages(message_limit=3)
 
-        # 6.将草稿配置中的tools转换成LangChain工具
-        search_public_agents_tool = (
-            self.public_agent_registry_service.convert_public_agent_search_to_tool()
-            if self.public_agent_registry_service
-            else self.faiss_service.convert_faiss_to_tool()
-        )
-        tools = []
-        if self.public_agent_a2a_service:
-            tools.append(
-                self.public_agent_a2a_service.convert_public_agent_route_to_tool(
-                    account.id
-                )
-            )
-        tools.extend(
-            [
-                search_public_agents_tool,
-                self.convert_create_app_to_tool(account.id),
-            ]
-        )
+        # 6.构建首页助手运行时工具
+        tools = self._build_assistant_runtime_tools(account.id)
 
-        # 7.构建辅助Agent专用智能体，避免工具调用前的过渡文案直接暴露给用户
-        agent = A2AFunctionCallAgent(
+        # 7.构建辅助Agent专用智能体。深度思考模式下复用 A2A 语义，普通模式直接使用通用 FunctionCallAgent。
+        agent_class = (
+            A2ADeepThinkingAgent
+            if bool(req.enable_deep_thinking.data)
+            else FunctionCallAgent
+        )
+        agent = agent_class(
             llm=llm,
             agent_config=AgentConfig(
                 user_id=account.id,
                 invoke_from=InvokeFrom.ASSISTANT_AGENT.value,
                 preset_prompt=ASSISTANT_AGENT_MARKDOWN_PRESET_PROMPT,
                 enable_long_term_memory=True,
+                enable_deep_thinking=bool(req.enable_deep_thinking.data),
+                runtime_flask_app=current_app._get_current_object(),
                 tools=tools,
             ),
         )
@@ -227,6 +306,7 @@ class AssistantAgentService(BaseService):
                 else:
                     # 13.处理其他类型事件的消息
                     agent_thoughts[event_id] = agent_thought
+            usage_summary = summarize_agent_thoughts(agent_thoughts.values())
             data = {
                 **agent_thought.model_dump(
                     include={
@@ -240,6 +320,9 @@ class AssistantAgentService(BaseService):
                         "total_token_count",
                     }
                 ),
+                "aggregate_total_token_count": usage_summary.total_token_count,
+                "aggregate_total_price": usage_summary.total_price,
+                "aggregate_latency": usage_summary.latency,
                 "id": event_id,
                 "conversation_id": str(conversation.id),
                 "message_id": str(message.id),

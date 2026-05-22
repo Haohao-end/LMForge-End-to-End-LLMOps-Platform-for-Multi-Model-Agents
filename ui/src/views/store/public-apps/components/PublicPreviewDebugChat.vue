@@ -67,6 +67,9 @@ const activeAccount = computed(() => ({
     '',
   avatar: String(accountStore.account?.avatar || '').trim(),
 }))
+const canImageInput = computed(() => {
+  return props.app?.draft_app_config?.capabilities?.image_input?.enabled === true
+})
 const { loading: audioToTextLoading } = useAudioToText()
 const timelineRef = ref<{ scrollToBottom?: () => void } | null>(null)
 
@@ -107,6 +110,8 @@ const createStreamMessage = (queryText: string): PublicStreamMessage => ({
   id: `tmp-${Date.now()}`,
   conversation_id: chatContextId.value,
   answer: '',
+  answer_parts: [],
+  artifacts: [],
   latency: 0,
   total_token_count: 0,
   agent_thoughts: [],
@@ -132,6 +137,8 @@ const loadPublicConversationMessages = async (conversationId: string) => {
     id: item.id,
     conversation_id: item.conversation_id,
     answer: item.answer || '',
+    answer_parts: item.answer_parts || [],
+    artifacts: item.artifacts || [],
     latency: Number(item.latency || 0),
     total_token_count: Number(item.total_token_count || 0),
     agent_thoughts: [],
@@ -168,6 +175,10 @@ const handleSubmit = async () => {
     Message.warning('用户提问不能为空')
     return
   }
+  if (image_urls.value.length > 0 && !canImageInput.value) {
+    Message.warning('当前公共应用预览链路暂不支持图片输入，请移除图片后重试')
+    return
+  }
 
   const currentMessage = createStreamMessage(currentQuery)
   messages.value.unshift(currentMessage)
@@ -178,25 +189,33 @@ const handleSubmit = async () => {
     task_id: '',
     conversation_id: chatContextId.value,
   }
+  const humanImageUrls = [...image_urls.value]
   query.value = ''
+  image_urls.value = []
   loading.value = true
   try {
-    await sendPublicAppA2aMessage(String(route.params?.app_id), currentQuery, chatContextId.value, (eventResponse) => {
-      const streamResult = applyChatStreamEvent(
-        currentMessage,
-        eventResponse as StreamEventResponse,
-        streamState,
-      )
-      streamState.position = streamResult.state.position
-      streamState.message_id = streamResult.state.message_id
-      streamState.task_id = streamResult.state.task_id
-      streamState.conversation_id = streamResult.state.conversation_id
-      if (streamState.conversation_id) {
-        chatContextId.value = streamState.conversation_id
-        saveContextId(streamState.conversation_id)
-      }
-      void timelineRef.value?.scrollToBottom?.()
-    })
+    await sendPublicAppA2aMessage(
+      String(route.params?.app_id),
+      currentQuery,
+      chatContextId.value,
+      humanImageUrls,
+      (eventResponse) => {
+        const streamResult = applyChatStreamEvent(
+          currentMessage,
+          eventResponse as StreamEventResponse,
+          streamState,
+        )
+        streamState.position = streamResult.state.position
+        streamState.message_id = streamResult.state.message_id
+        streamState.task_id = streamResult.state.task_id
+        streamState.conversation_id = streamResult.state.conversation_id
+        if (streamState.conversation_id) {
+          chatContextId.value = streamState.conversation_id
+          saveContextId(streamState.conversation_id)
+        }
+        void timelineRef.value?.scrollToBottom?.()
+      },
+    )
   } catch (error: unknown) {
     Message.error(error instanceof Error ? error.message : '发送消息失败')
   } finally {
@@ -286,6 +305,9 @@ watch(
             :file-input-ref-setter="setFileInputRef"
             :image-urls="image_urls"
             :show-image-previews="true"
+            :show-upload-button="true"
+            :upload-disabled="true"
+            upload-disabled-title="当前公共应用预览链路暂不支持图片输入"
             :show-clear-button="true"
             :clear-disabled="messages.length === 0 && !chatContextId"
             :clear-loading="false"

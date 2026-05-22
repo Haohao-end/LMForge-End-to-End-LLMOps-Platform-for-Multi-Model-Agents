@@ -262,6 +262,66 @@ class TestPublicAgentA2AService:
         assert result["metadata"]["app_id"] == str(app_id)
         assert result["metadata"]["status"] == "success"
 
+    def test_send_message_should_return_multimodal_parts_and_artifacts(self, monkeypatch):
+        app_id = uuid4()
+        service = _build_service()
+        monkeypatch.setattr(
+            service,
+            "_get_public_app",
+            lambda _app_id: SimpleNamespace(id=app_id),
+        )
+        monkeypatch.setattr(
+            service,
+            "_invoke_public_agent",
+            lambda _app, query, flask_app=None: SimpleNamespace(
+                answer=f"已处理: {query}",
+                status="success",
+                error="",
+                agent_thoughts=[
+                    SimpleNamespace(
+                        event="deep_artifact_created",
+                        thought="cover.png",
+                        observation="https://example.com/cover.png",
+                        tool_input={
+                            "artifact": {
+                                "name": "cover.png",
+                                "url": "https://example.com/cover.png",
+                                "mime_type": "image/png",
+                                "extension": "png",
+                            }
+                        },
+                    )
+                ],
+            ),
+        )
+
+        result = service.send_message(
+            app_id,
+            {
+                "contextId": "ctx-2",
+                "message": {"parts": [{"type": "text", "text": "生成封面"}]},
+            },
+        )
+
+        assert result["message"]["parts"] == [
+            {"type": "text", "text": "已处理: 生成封面"},
+            {
+                "type": "image",
+                "url": "https://example.com/cover.png",
+                "name": "cover.png",
+                "mime_type": "image/png",
+                "extension": "png",
+            },
+        ]
+        assert result["artifacts"] == [
+            {
+                "name": "cover.png",
+                "url": "https://example.com/cover.png",
+                "mime_type": "image/png",
+                "extension": "png",
+            }
+        ]
+
     def test_stream_message_should_delegate_to_streaming_pipeline(self, monkeypatch):
         app_id = uuid4()
         captured = {}
@@ -357,3 +417,31 @@ class TestPublicAgentA2AService:
                 service.send_message(uuid4(), {"message": {"parts": []}})
         finally:
             monkeypatch.undo()
+
+    def test_send_message_should_reject_image_parts_explicitly(self):
+        service = _build_service()
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(
+            service,
+            "_get_public_app",
+            lambda _app_id: SimpleNamespace(id=uuid4()),
+        )
+
+        try:
+            with pytest.raises(ValidateErrorException) as exc:
+                service.send_message(
+                    uuid4(),
+                    {
+                        "message": {
+                            "parts": [
+                                {"type": "text", "text": "请分析这张图"},
+                                {"type": "image", "url": "https://example.com/cat.png"},
+                            ]
+                        }
+                    },
+                )
+        finally:
+            monkeypatch.undo()
+
+        assert exc.value.data["capabilities"]["image_input"]["enabled"] is False
+        assert exc.value.data["capabilities"]["image_input"]["reason_code"] == "PUBLIC_A2A_IMAGE_INPUT_UNSUPPORTED"

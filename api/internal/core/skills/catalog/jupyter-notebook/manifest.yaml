@@ -1,0 +1,17 @@
+source_key: jupyter-notebook
+name: jupyter-notebook
+label: jupyter-notebook
+description: Use when the user asks to create, scaffold, or edit Jupyter notebooks
+  (`.ipynb`) for experiments, explorations, or tutorials; prefer the bundled templates
+  and run the helper script `new_notebook.py` to generate a clean starting notebook.
+category: 内容处理
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

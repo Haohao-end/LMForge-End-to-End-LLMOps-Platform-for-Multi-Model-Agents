@@ -15,9 +15,12 @@ from pydantic import BaseModel, Field
 from internal.entity.app_entity import AppStatus
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.exception import NotFoundException, ValidateErrorException
+from internal.lib.helper import build_input_parts, build_output_payload
 from internal.model import App, Conversation, Message, MessageAgentThought
 from internal.core.agent.entities.queue_entity import QueueEvent
+from internal.core.agent.usage_utils import summarize_agent_thoughts
 from sqlalchemy import desc
+from sqlalchemy.orm import selectinload
 from pkg.sqlalchemy import SQLAlchemy
 
 from .app_config_service import AppConfigService
@@ -479,7 +482,7 @@ class PublicAgentA2AService(BaseService):
             "version": "1.0",
             "protocolVersion": "1.0",
             "defaultInputModes": ["text/plain"],
-            "defaultOutputModes": ["text/plain"],
+            "defaultOutputModes": ["text/plain", "image/*", "application/octet-stream"],
             "capabilities": {
                 "streaming": False,
                 "pushNotifications": False,
@@ -500,7 +503,7 @@ class PublicAgentA2AService(BaseService):
                     "tags": app.tags or [],
                     "examples": app_config.get("opening_questions", [])[:3],
                     "inputModes": ["text/plain"],
-                    "outputModes": ["text/plain"],
+                    "outputModes": ["text/plain", "image/*", "application/octet-stream"],
                 }
             ],
             "a2aCardUrl": card_url,
@@ -516,6 +519,21 @@ class PublicAgentA2AService(BaseService):
         """以A2A消息格式调用指定公开Agent。"""
         app = self._get_public_app(app_id)
         request_payload = payload or {}
+        image_urls = self._extract_image_urls_from_payload(request_payload)
+        if image_urls:
+            raise ValidateErrorException(
+                "当前公共应用预览链路暂不支持图片输入，请移除图片后重试",
+                data={
+                    "capabilities": {
+                        "image_input": {
+                            "enabled": False,
+                            "reason_code": "PUBLIC_A2A_IMAGE_INPUT_UNSUPPORTED",
+                            "message": "当前公共应用预览链路暂不支持图片输入",
+                        }
+                    }
+                },
+                reason_code="PUBLIC_A2A_IMAGE_INPUT_UNSUPPORTED",
+            )
         query = self._extract_query_from_payload(request_payload)
         if not query:
             raise ValidateErrorException("A2A消息中缺少可用的文本内容")
@@ -526,18 +544,25 @@ class PublicAgentA2AService(BaseService):
             or str(app.id)
         )
         agent_result = self._invoke_public_agent(app, query, flask_app=flask_app)
+        output_payload = build_output_payload(agent_result.answer, getattr(agent_result, "agent_thoughts", []) or [])
 
         return {
             "contextId": context_id,
             "message": {
                 "role": "agent",
-                "parts": [{"type": "text", "text": agent_result.answer}],
+                "parts": output_payload["answer_parts"],
             },
-            "artifacts": [],
+            "artifacts": output_payload["artifacts"],
             "metadata": {
                 "app_id": str(app.id),
                 "status": agent_result.status,
                 "error": agent_result.error,
+                "capabilities": {
+                    "image_input": {
+                        "enabled": False,
+                        "reason_code": "PUBLIC_A2A_IMAGE_INPUT_UNSUPPORTED",
+                    }
+                },
             },
         }
 
@@ -550,6 +575,21 @@ class PublicAgentA2AService(BaseService):
         """以A2A消息格式流式调用指定公开Agent。"""
         app = self._get_public_app(app_id)
         request_payload = payload or {}
+        image_urls = self._extract_image_urls_from_payload(request_payload)
+        if image_urls:
+            raise ValidateErrorException(
+                "当前公共应用预览链路暂不支持图片输入，请移除图片后重试",
+                data={
+                    "capabilities": {
+                        "image_input": {
+                            "enabled": False,
+                            "reason_code": "PUBLIC_A2A_IMAGE_INPUT_UNSUPPORTED",
+                            "message": "当前公共应用预览链路暂不支持图片输入",
+                        }
+                    }
+                },
+                reason_code="PUBLIC_A2A_IMAGE_INPUT_UNSUPPORTED",
+            )
         query = self._extract_query_from_payload(request_payload)
         if not query:
             raise ValidateErrorException("A2A消息中缺少可用的文本内容")
@@ -577,7 +617,16 @@ class PublicAgentA2AService(BaseService):
     ) -> Generator[str, None, None]:
         """流式输出公开Agent事件。"""
         app_config = self.app_config_service.get_app_config(app)
-        llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
+        if hasattr(self.language_model_service, "resolve_runtime_language_model"):
+            model_resolution = self.language_model_service.resolve_runtime_language_model(
+                app_config.get("model_config", {}),
+                image_urls=[],
+                entrypoint=LanguageModelService.ENTRYPOINT_PUBLIC_A2A,
+                allow_image_input=False,
+            )
+            llm = model_resolution.llm
+        else:
+            llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
         owner_account = SimpleNamespace(id=app.account_id)
         tools = self.app_service._build_runtime_tools(
             app.id,
@@ -585,7 +634,13 @@ class PublicAgentA2AService(BaseService):
             app_config,
             flask_app=flask_app,
         )
-        agent = self.app_service._create_runtime_agent(llm, owner_account, app_config, tools)
+        agent = self.app_service._create_runtime_agent(
+            llm,
+            owner_account,
+            app_config,
+            tools,
+            flask_app=flask_app,
+        )
         conversation = self._resolve_public_conversation(app, context_id)
         message = self.create(
             Message,
@@ -631,11 +686,15 @@ class PublicAgentA2AService(BaseService):
                 else:
                     agent_thoughts[event_id] = agent_thought
 
+            usage_summary = summarize_agent_thoughts(agent_thoughts.values())
             data = {
                 **agent_thought.model_dump(include={
                     "event", "thought", "observation", "tool", "tool_input", "answer",
                     "total_token_count", "total_price", "latency",
                 }),
+                "aggregate_total_token_count": usage_summary.total_token_count,
+                "aggregate_total_price": usage_summary.total_price,
+                "aggregate_latency": usage_summary.latency,
                 "id": event_id,
                 "conversation_id": conversation_id,
                 "message_id": message_id,
@@ -667,7 +726,16 @@ class PublicAgentA2AService(BaseService):
     ):
         """以内存方式调用公开Agent，不落库。"""
         app_config = self.app_config_service.get_app_config(app)
-        llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
+        if hasattr(self.language_model_service, "resolve_runtime_language_model"):
+            model_resolution = self.language_model_service.resolve_runtime_language_model(
+                app_config.get("model_config", {}),
+                image_urls=[],
+                entrypoint=LanguageModelService.ENTRYPOINT_PUBLIC_A2A,
+                allow_image_input=False,
+            )
+            llm = model_resolution.llm
+        else:
+            llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
         owner_account = SimpleNamespace(id=app.account_id)
         tools = self.app_service._build_runtime_tools(
             app.id,
@@ -675,7 +743,13 @@ class PublicAgentA2AService(BaseService):
             app_config,
             flask_app=flask_app,
         )
-        agent = self.app_service._create_runtime_agent(llm, owner_account, app_config, tools)
+        agent = self.app_service._create_runtime_agent(
+            llm,
+            owner_account,
+            app_config,
+            tools,
+            flask_app=flask_app,
+        )
         return agent.invoke(
             {
                 "messages": [llm.convert_to_human_message(query, [])],
@@ -721,7 +795,7 @@ class PublicAgentA2AService(BaseService):
     ) -> None:
         """把公开广场消息写入现有历史表。"""
         position = 0
-        latency = 0
+        usage_summary = summarize_agent_thoughts(agent_thoughts)
         for agent_thought in agent_thoughts:
             if agent_thought.event in [
                 QueueEvent.LONG_TERM_MEMORY_RECALL.value,
@@ -729,9 +803,12 @@ class PublicAgentA2AService(BaseService):
                 QueueEvent.AGENT_MESSAGE.value,
                 QueueEvent.AGENT_ACTION.value,
                 QueueEvent.DATASET_RETRIEVAL.value,
+                QueueEvent.DEEP_THINKING.value,
+                QueueEvent.DEEP_STEP.value,
+                QueueEvent.DEEP_COMPLETE.value,
+                QueueEvent.DEEP_ARTIFACT_CREATED.value,
             ]:
                 position += 1
-                latency += agent_thought.latency
                 self.create(
                     MessageAgentThought,
                     app_id=app.id,
@@ -768,9 +845,9 @@ class PublicAgentA2AService(BaseService):
                     answer_token_count=agent_thought.answer_token_count,
                     answer_unit_price=agent_thought.answer_unit_price,
                     answer_price_unit=agent_thought.answer_price_unit,
-                    total_token_count=agent_thought.total_token_count,
-                    total_price=agent_thought.total_price,
-                    latency=latency,
+                    total_token_count=usage_summary.total_token_count,
+                    total_price=usage_summary.total_price,
+                    latency=usage_summary.latency,
                 )
             if agent_thought.event in [QueueEvent.TIMEOUT.value, QueueEvent.STOP.value, QueueEvent.ERROR.value]:
                 self.update(message, status=agent_thought.event, error=agent_thought.observation)
@@ -794,14 +871,16 @@ class PublicAgentA2AService(BaseService):
             Message.app_id == app.id,
             Message.status.in_([MessageStatus.NORMAL.value, MessageStatus.STOP.value]),
             Message.is_deleted == False,
-        ).order_by(desc(Message.created_at)).all()
+        ).options(selectinload(Message.agent_thoughts)).order_by(desc(Message.created_at)).all()
         return [
             {
                 "id": str(message.id),
                 "conversation_id": str(message.conversation_id),
                 "query": message.query,
                 "image_urls": message.image_urls or [],
+                "input_parts": build_input_parts(message.query, message.image_urls or []),
                 "answer": message.answer,
+                **build_output_payload(message.answer, getattr(message, "agent_thoughts", []) or []),
                 "total_token_count": message.total_token_count,
                 "latency": message.latency,
                 "suggested_questions": message.suggested_questions or [],
@@ -861,6 +940,51 @@ class PublicAgentA2AService(BaseService):
                 return text
 
         return ""
+
+    @classmethod
+    def _extract_image_urls_from_payload(cls, payload: dict[str, Any]) -> list[str]:
+        """从 A2A payload 中提取图片 URL。"""
+        direct_image_urls = payload.get("image_urls", [])
+        if isinstance(direct_image_urls, list):
+            normalized_direct_urls = [
+                str(item or "").strip()
+                for item in direct_image_urls
+                if str(item or "").strip()
+            ]
+            if normalized_direct_urls:
+                return normalized_direct_urls
+
+        message = payload.get("message", {})
+        if not isinstance(message, dict):
+            return []
+
+        parts = message.get("parts", [])
+        if not isinstance(parts, list):
+            return []
+
+        image_urls: list[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+
+            part_type = str(part.get("type", "")).strip()
+            if part_type not in {"image", "image_url"}:
+                continue
+
+            direct_url = str(part.get("url", "")).strip()
+            if direct_url:
+                image_urls.append(direct_url)
+                continue
+
+            nested_image_url = part.get("image_url", {})
+            if not isinstance(nested_image_url, dict):
+                continue
+
+            nested_url = str(nested_image_url.get("url", "")).strip()
+            if nested_url:
+                image_urls.append(nested_url)
+
+        return image_urls
 
     @classmethod
     def _extract_answer_text(cls, response: dict[str, Any]) -> str:

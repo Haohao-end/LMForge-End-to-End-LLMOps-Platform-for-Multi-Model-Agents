@@ -19,7 +19,7 @@ import { useAccountStore } from '@/stores/account'
 import { getErrorMessage } from '@/utils/error'
 import { Message } from '@arco-design/web-vue'
 import AudioRecorder from 'js-audio-recorder'
-import { nextTick, onMounted, onUnmounted, type PropType, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, type PropType, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import {
@@ -51,6 +51,13 @@ const props = defineProps({
   },
   opening_statement: { type: String, default: '', required: true },
   opening_questions: { type: Array as PropType<string[]>, default: () => [], required: true },
+  capabilities: {
+    type: Object as PropType<Record<string, any>>,
+    default: () => {
+      return {}
+    },
+    required: false,
+  },
   text_to_speech: {
     type: Object,
     default: () => {
@@ -102,6 +109,7 @@ const scrollHeight = ref(0)
 const shouldAutoScrollToBottom = ref(true)
 const isStreamingResponse = ref(false)
 const selectedConversationId = ref(String(route.query.conversation_id || '').trim())
+const enableDeepThinking = ref(false)
 const accountStore = useAccountStore()
 const {
   loading: deleteDebugConversationLoading, //
@@ -124,6 +132,9 @@ const { triggerFileInput, handleFileChange } = useChatImageUpload({
   uploadImage,
   onError: (message) => Message.error(message),
   onSuccess: (message) => Message.success(message),
+})
+const canImageInput = computed(() => {
+  return props.capabilities?.image_input?.enabled === true
 })
 
 const normalizeConversationId = (value: unknown) => String(value || '').trim()
@@ -320,6 +331,10 @@ const handleSubmit = async () => {
     Message.warning('上一次提问还未结束，请稍等')
     return
   }
+  if (image_urls.value.length > 0 && !canImageInput.value) {
+    Message.warning('当前模型不支持图片输入，请切换到视觉模型或移除图片后重试')
+    return
+  }
 
   // 5.3 满足条件，处理正式提问的前置工作，涵盖：清空建议问题、删除消息id、任务id
   suggested_questions.value = []
@@ -335,6 +350,8 @@ const handleSubmit = async () => {
     query: query.value,
     image_urls: image_urls.value,
     answer: '',
+    answer_parts: [],
+    artifacts: [],
     total_token_count: 0,
     latency: 0,
     agent_thoughts: [],
@@ -390,6 +407,7 @@ const handleSubmit = async () => {
           scheduleScrollToBottom()
         }
       },
+      enableDeepThinking.value,
     )
   } finally {
     isStreamingResponse.value = false
@@ -564,6 +582,8 @@ onUnmounted(() => {
                   :enable_text_to_speech="props.text_to_speech.enable"
                   :agent_thoughts="item.agent_thoughts"
                   :answer="item.answer"
+                  :answer_parts="item.answer_parts || []"
+                  :artifacts="item.artifacts || []"
                   :app="props.app"
                   :suggested_questions="
                     item.suggested_questions && item.suggested_questions.length > 0
@@ -631,10 +651,13 @@ onUnmounted(() => {
           <chat-composer
             v-model="query"
             size="compact"
+            v-model:deep-thinking-enabled="enableDeepThinking"
             :textarea-ref-setter="setQueryTextareaRef"
             :file-input-ref-setter="setFileInputRef"
             :image-urls="image_urls"
             :show-image-previews="true"
+            :show-upload-button="true"
+            :show-deep-thinking-toggle="true"
             :clear-disabled="deleteDebugConversationLoading || messages.length === 0"
             :clear-loading="deleteDebugConversationLoading"
             :upload-loading="uploadFileLoading"

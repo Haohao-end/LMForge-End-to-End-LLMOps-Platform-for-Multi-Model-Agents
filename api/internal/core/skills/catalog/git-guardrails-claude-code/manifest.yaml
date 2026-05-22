@@ -1,0 +1,17 @@
+source_key: git-guardrails-claude-code
+name: git-guardrails-claude-code
+label: git-guardrails
+description: Destructive git guardrails for risky history-rewriting and checkout operations. Use when the user may attempt resets, force pushes, or other destructive git actions.
+category: 安全
+tags:
+  - github
+  - curated
+  - prompt-only
+  - git
+  - safety
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

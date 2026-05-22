@@ -1,0 +1,17 @@
+source_key: diagnose
+name: diagnose
+label: 诊断
+description: 纪律化的故障诊断流程，适用于疑难 bug、回归和性能退化。Use when the user says something is broken, asks to debug, or reports a performance regression.
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - engineering
+  - diagnose
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

@@ -1,0 +1,45 @@
+source_key: code_workbench
+name: 代码工坊
+label: 代码工坊
+description: 面向代码分析、补丁生成和自动化脚本执行的技能包。
+category: 开发
+tags:
+  - 代码
+  - 自动化
+  - SCF
+  - skill-md
+icon: icon.svg
+enabled: true
+version: 1
+executor_type: scf
+capabilities:
+  code: true
+  network: false
+tools:
+  - name: analyze_request
+    label: 需求分析
+    description: 根据用户需求输出结构化分析和实施计划。
+    entrypoint: analyze_request
+    input_schema:
+      type: object
+      properties:
+        request:
+          type: string
+          description: 用户的需求描述
+      required:
+        - request
+  - name: generate_patch
+    label: 生成补丁
+    description: 根据上下文生成适合人工审核的代码修改方案。
+    entrypoint: generate_patch
+    input_schema:
+      type: object
+      properties:
+        request:
+          type: string
+          description: 需要修改的目标说明
+        context:
+          type: string
+          description: 相关上下文
+      required:
+        - request

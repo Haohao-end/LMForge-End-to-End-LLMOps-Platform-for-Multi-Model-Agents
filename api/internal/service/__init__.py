@@ -40,6 +40,8 @@ from .public_agent_a2a_service import PublicAgentA2AService
 from .public_agent_registry_service import PublicAgentRegistryService
 from .public_app_service import PublicAppService
 from .public_workflow_service import PublicWorkflowService
+from .mcp_service import McpService
+from .skill_service import SkillService
 
 
 __all__ = [
@@ -84,5 +86,7 @@ __all__ = [
     "PublicAgentRegistryService",
     "PublicAppService",
     "PublicWorkflowService",
-    "NotificationService"
+    "NotificationService",
+    "McpService",
+    "SkillService",
 ]

@@ -6,6 +6,7 @@ from uuid import uuid4
 import json
 
 import pytest
+from flask import Flask
 from langchain_core.messages import HumanMessage, SystemMessage
 from werkzeug.datastructures import FileStorage
 
@@ -234,6 +235,55 @@ class TestAssistantAgentService:
                 account=account, conversation_id=conversation_id
             )
 
+    def test_get_capabilities_should_return_default_text_only_caps_when_service_absent(
+        self,
+    ):
+        service = self._build_service()
+
+        capabilities = service.get_capabilities()
+
+        assert capabilities["requested_model"] == {
+            "provider": "deepseek",
+            "model": "deepseek-chat",
+        }
+        assert capabilities["image_input"]["enabled"] is False
+        assert capabilities["image_input"]["policy"] == "strict"
+        assert capabilities["image_output"]["enabled"] is True
+        assert capabilities["artifact_output"]["enabled"] is True
+
+    def test_get_capabilities_should_delegate_to_language_model_service(self):
+        capture = {}
+        expected = {
+            "features": ["tool_call", "image_input"],
+            "image_input": {"enabled": True},
+        }
+        service = AssistantAgentService(
+            db=SimpleNamespace(
+                session=SimpleNamespace(query=lambda *_args, **_kwargs: _QueryStub())
+            ),
+            faiss_service=SimpleNamespace(),
+            conversation_service=SimpleNamespace(),
+            redis_client=SimpleNamespace(),
+            language_model_service=SimpleNamespace(
+                get_assistant_agent_model_config=lambda: {
+                    "provider": "openai",
+                    "model": "gpt-4o-mini",
+                },
+                describe_runtime_capabilities=lambda model_config, entrypoint: capture.update(
+                    {"model_config": model_config, "entrypoint": entrypoint}
+                )
+                or expected,
+            ),
+        )
+
+        capabilities = service.get_capabilities()
+
+        assert capabilities is expected
+        assert capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "entrypoint": "assistant_agent",
+        }
+
     def test_generate_message_fingerprint_should_create_consistent_hash(self):
         service = AssistantAgentService(
             db=SimpleNamespace(),
@@ -452,6 +502,53 @@ class TestAssistantAgentService:
 
         assert calls == [("客服助手", "面向工单场景自动答疑", account_id)]
         assert "应用名称: 客服助手" in result
+
+    def test_build_assistant_runtime_tools_should_include_global_mcp_bindings(self, monkeypatch):
+        service = self._build_service()
+        account_id = uuid4()
+        expected_bindings = [
+            {
+                "name": "Global MCP",
+                "description": "全局 MCP",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "enabled": True,
+                "headers": [],
+                "tool_names": [],
+                "timeout_seconds": 30,
+                "args": [],
+                "env": {},
+            }
+        ]
+        captured = {}
+        service.public_agent_registry_service = SimpleNamespace(
+            convert_public_agent_search_to_tool=lambda: "search-tool"
+        )
+        service.public_agent_a2a_service = SimpleNamespace(
+            convert_public_agent_route_to_tool=lambda _account_id: f"route:{_account_id}"
+        )
+        service.app_config_service = SimpleNamespace(
+            get_langchain_tools_by_mcp_bindings=lambda bindings: captured.update({"bindings": bindings}) or ["mcp-tool"]
+        )
+        monkeypatch.setattr(
+            service,
+            "convert_create_app_to_tool",
+            lambda _account_id: f"create:{_account_id}",
+        )
+
+        flask_app = Flask(__name__)
+        flask_app.config["ASSISTANT_MCP_BINDINGS"] = expected_bindings
+
+        with flask_app.app_context():
+            tools = service._build_assistant_runtime_tools(account_id)
+
+        assert tools == [
+            f"route:{account_id}",
+            "search-tool",
+            f"create:{account_id}",
+            "mcp-tool",
+        ]
+        assert captured["bindings"] == expected_bindings
 
     def test_get_conversation_messages_with_page_should_delegate_query_and_paginate(
         self, monkeypatch
@@ -758,6 +855,7 @@ class TestAssistantAgentService:
             query=SimpleNamespace(data="帮我创建一个客服Agent"),
             image_urls=SimpleNamespace(data=["https://example.com/demo.png"]),
             conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=False),
         )
 
         save_payload = {}
@@ -843,7 +941,7 @@ class TestAssistantAgentService:
         ]
         agent_capture = {}
 
-        class _FakeA2AFunctionCallAgent:
+        class _FakeFunctionCallAgent:
             def __init__(self, llm, agent_config):
                 agent_capture["llm"] = llm
                 agent_capture["agent_config"] = agent_config
@@ -866,8 +964,8 @@ class TestAssistantAgentService:
             _FakeTokenBufferMemory,
         )
         monkeypatch.setattr(
-            "internal.service.assistant_agent_service.A2AFunctionCallAgent",
-            _FakeA2AFunctionCallAgent,
+            "internal.service.assistant_agent_service.FunctionCallAgent",
+            _FakeFunctionCallAgent,
         )
 
         with app.app_context():
@@ -906,6 +1004,196 @@ class TestAssistantAgentService:
         assert merged_message_thought.thought == "AB"
         assert merged_message_thought.answer == "AB"
 
+    def test_chat_should_use_runtime_language_model_resolution_when_available(
+        self, monkeypatch, app
+    ):
+        assistant_agent_id = uuid4()
+        app.config["ASSISTANT_AGENT_ID"] = assistant_agent_id
+        conversation = SimpleNamespace(id=uuid4(), summary="历史摘要")
+        account = SimpleNamespace(id=uuid4(), assistant_agent_conversation=conversation)
+        req = SimpleNamespace(
+            query=SimpleNamespace(data="请分析这张图"),
+            image_urls=SimpleNamespace(data=["https://example.com/demo.png"]),
+            conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=False),
+        )
+        llm = SimpleNamespace(
+            features=["tool_call"],
+            convert_to_human_message=lambda query, image_urls: {
+                "query": query,
+                "image_urls": image_urls,
+            },
+        )
+        capabilities = {"image_input": {"enabled": True, "via_fallback": True}}
+        resolution_capture = {}
+        save_payload = {}
+        service = AssistantAgentService(
+            db=SimpleNamespace(session=SimpleNamespace()),
+            faiss_service=SimpleNamespace(convert_faiss_to_tool=lambda: "faiss-tool"),
+            conversation_service=SimpleNamespace(
+                save_agent_thoughts=lambda **kwargs: save_payload.update(kwargs)
+            ),
+            redis_client=SimpleNamespace(),
+            language_model_service=SimpleNamespace(
+                get_assistant_agent_model_config=lambda: {
+                    "provider": "openai",
+                    "model": "gpt-4o-mini",
+                },
+                resolve_runtime_language_model=lambda model_config, image_urls, entrypoint: resolution_capture.update(
+                    {
+                        "model_config": model_config,
+                        "image_urls": image_urls,
+                        "entrypoint": entrypoint,
+                    }
+                )
+                or SimpleNamespace(llm=llm, capabilities=capabilities),
+            ),
+            public_agent_a2a_service=SimpleNamespace(
+                convert_public_agent_route_to_tool=lambda _account_id: "public-agent-route-tool"
+            ),
+        )
+
+        monkeypatch.setattr(
+            service,
+            "create",
+            lambda _model, **_kwargs: SimpleNamespace(id=uuid4()),
+        )
+        monkeypatch.setattr(
+            service,
+            "convert_create_app_to_tool",
+            lambda _account_id: "create-app-tool",
+        )
+
+        class _FakeTokenBufferMemory:
+            def __init__(self, **_kwargs):
+                pass
+
+            def get_history_prompt_messages(self, message_limit):
+                assert message_limit == 3
+                return []
+
+        class _FakeFunctionCallAgent:
+            def __init__(self, llm, agent_config):
+                assert llm is not None
+                assert agent_config.tools == [
+                    "public-agent-route-tool",
+                    "faiss-tool",
+                    "create-app-tool",
+                ]
+
+            def stream(self, state):
+                assert state["messages"][0]["image_urls"] == req.image_urls.data
+                return iter([])
+
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.AgentConfig",
+            lambda **kwargs: SimpleNamespace(**kwargs),
+        )
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.TokenBufferMemory",
+            _FakeTokenBufferMemory,
+        )
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.FunctionCallAgent",
+            _FakeFunctionCallAgent,
+        )
+
+        with app.app_context():
+            events = list(service.chat(req, account))
+
+        assert events == []
+        assert resolution_capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "image_urls": req.image_urls.data,
+            "entrypoint": "assistant_agent",
+        }
+        assert save_payload["agent_thoughts"] == []
+
+    def test_chat_should_use_a2a_deep_thinking_agent_when_enabled(
+        self, monkeypatch, app
+    ):
+        assistant_agent_id = uuid4()
+        app.config["ASSISTANT_AGENT_ID"] = assistant_agent_id
+        conversation = SimpleNamespace(id=uuid4(), summary="历史摘要")
+        account = SimpleNamespace(id=uuid4(), assistant_agent_conversation=conversation)
+        req = SimpleNamespace(
+            query=SimpleNamespace(data="帮我生成一个可下载的需求文档"),
+            image_urls=SimpleNamespace(data=[]),
+            conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=True),
+        )
+
+        service = AssistantAgentService(
+            db=SimpleNamespace(session=SimpleNamespace()),
+            faiss_service=SimpleNamespace(convert_faiss_to_tool=lambda: "faiss-tool"),
+            conversation_service=SimpleNamespace(save_agent_thoughts=lambda **_kwargs: None),
+            redis_client=SimpleNamespace(),
+            public_agent_a2a_service=SimpleNamespace(
+                convert_public_agent_route_to_tool=lambda _account_id: "public-agent-route-tool"
+            ),
+        )
+
+        monkeypatch.setattr(
+            service,
+            "create",
+            lambda _model, **_kwargs: SimpleNamespace(id=uuid4()),
+        )
+        monkeypatch.setattr(
+            service,
+            "convert_create_app_to_tool",
+            lambda _account_id: "create-app-tool",
+        )
+
+        class _FakeLLM:
+            def __init__(self, **_kwargs):
+                pass
+
+            def convert_to_human_message(self, query, image_urls):
+                return {"query": query, "image_urls": image_urls}
+
+        class _FakeTokenBufferMemory:
+            def __init__(self, **_kwargs):
+                pass
+
+            def get_history_prompt_messages(self, message_limit):
+                assert message_limit == 3
+                return []
+
+        agent_capture = {}
+
+        class _FakeA2ADeepThinkingAgent:
+            def __init__(self, llm, agent_config):
+                agent_capture["llm"] = llm
+                agent_capture["agent_config"] = agent_config
+
+            def stream(self, state):
+                agent_capture["state"] = state
+                return iter([])
+
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.AgentConfig",
+            lambda **kwargs: SimpleNamespace(**kwargs),
+        )
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.DeepSeekChat",
+            lambda **kwargs: _FakeLLM(**kwargs),
+        )
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.TokenBufferMemory",
+            _FakeTokenBufferMemory,
+        )
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.A2ADeepThinkingAgent",
+            _FakeA2ADeepThinkingAgent,
+        )
+
+        with app.app_context():
+            list(service.chat(req, account))
+
+        assert agent_capture["agent_config"].enable_deep_thinking is True
+        assert agent_capture["agent_config"].runtime_flask_app is not None
+        assert agent_capture["agent_config"].invoke_from == InvokeFrom.ASSISTANT_AGENT.value
+
     def test_chat_should_prefer_registry_search_tool_when_available(
         self, monkeypatch, app
     ):
@@ -917,6 +1205,7 @@ class TestAssistantAgentService:
             query=SimpleNamespace(data="请使用护肤智能体回答我油痘肌该怎么护肤"),
             image_urls=SimpleNamespace(data=[]),
             conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=False),
         )
 
         service = AssistantAgentService(
@@ -962,7 +1251,7 @@ class TestAssistantAgentService:
 
         agent_capture = {}
 
-        class _FakeA2AFunctionCallAgent:
+        class _FakeFunctionCallAgent:
             def __init__(self, llm, agent_config):
                 agent_capture["llm"] = llm
                 agent_capture["agent_config"] = agent_config
@@ -984,8 +1273,8 @@ class TestAssistantAgentService:
             _FakeTokenBufferMemory,
         )
         monkeypatch.setattr(
-            "internal.service.assistant_agent_service.A2AFunctionCallAgent",
-            _FakeA2AFunctionCallAgent,
+            "internal.service.assistant_agent_service.FunctionCallAgent",
+            _FakeFunctionCallAgent,
         )
 
         with app.app_context():

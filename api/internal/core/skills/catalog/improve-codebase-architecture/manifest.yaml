@@ -1,0 +1,17 @@
+source_key: improve-codebase-architecture
+name: improve-codebase-architecture
+label: 架构深挖
+description: 从领域语言和 ADR 出发寻找可深挖的模块、边界和重构机会。Use when the user wants to improve architecture, refactor tightly-coupled modules, or make the codebase more testable.
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - architecture
+  - refactor
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

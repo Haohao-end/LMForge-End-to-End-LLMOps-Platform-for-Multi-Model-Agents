@@ -32,4 +32,11 @@ class OpenAPISchemaAssistantChatReq(FlaskForm):
     ])
 
 
+class McpSchemaAssistantChatReq(FlaskForm):
+    """MCP Schema 助手聊天请求结构体"""
+    question = StringField("question", validators=[
+        DataRequired("需求描述不能为空"),
+        Length(max=2000, message="需求描述长度不能超过2000个字符")
+    ])
+
 

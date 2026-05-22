@@ -40,9 +40,16 @@ class GaodePOISearchTool(BaseTool):
                 "extensions": "all"
             }
 
-            response = requests.get(api_url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            with requests.Session() as session:
+                session.trust_env = False
+                response = session.get(
+                    api_url,
+                    params=params,
+                    timeout=10,
+                    proxies={"http": None, "https": None},
+                )
+                response.raise_for_status()
+                data = response.json()
 
             if data.get("status") == "1" and data.get("pois"):
                 pois = data["pois"][:5]  # 只返回前5个结果

@@ -27,6 +27,8 @@ type CompareMessage = {
   query: string
   image_urls: string[]
   answer: string
+  answer_parts: Array<Record<string, unknown>>
+  artifacts: Array<Record<string, unknown>>
   total_token_count: number
   latency: number
   agent_thoughts: ChatThought[]
@@ -87,6 +89,8 @@ const createCompareMessage = (value: string): CompareMessage => {
     query: value,
     image_urls: [],
     answer: '',
+    answer_parts: [],
+    artifacts: [],
     total_token_count: 0,
     latency: 0,
     agent_thoughts: [],
@@ -401,6 +405,8 @@ onMounted(async () => {
                     :enable_text_to_speech="false"
                     :message_id="message.id"
                     :answer="message.answer"
+                    :answer_parts="message.answer_parts || []"
+                    :artifacts="message.artifacts || []"
                     :loading="lane.loading && message === lane.messages[lane.messages.length - 1]"
                     :latency="message.latency"
                     :total_token_count="message.total_token_count"

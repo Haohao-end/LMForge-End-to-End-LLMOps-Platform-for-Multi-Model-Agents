@@ -50,6 +50,12 @@ DEFAULT_CONFIG = {
 
     # 辅助Agent智能体应用id
     "ASSISTANT_AGENT_ID": "6774fcef-b594-8008-b30c-a05b8190afe6",
+    # 首页助手可用的 MCP 绑定（JSON 字符串或列表，默认空）
+    "ASSISTANT_MCP_BINDINGS": [],
+    # 多模态请求策略
+    "IMAGE_REQUEST_POLICY": "strict",
+    "VISION_FALLBACK_PROVIDER": "",
+    "VISION_FALLBACK_MODEL": "",
 
     # Flask-Mail 邮件服务默认配置
     "MAIL_SERVER": "smtp.gmail.com",

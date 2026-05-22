@@ -1,0 +1,17 @@
+source_key: notion-knowledge-capture
+name: notion-knowledge-capture
+label: notion-knowledge-capture
+description: Capture conversations and decisions into structured Notion pages; use
+  when turning chats/notes into wiki entries, how-tos, decisions, or FAQs with proper
+  linking.
+category: 协作
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

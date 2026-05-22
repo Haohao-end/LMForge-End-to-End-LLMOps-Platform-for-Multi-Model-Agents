@@ -1,0 +1,17 @@
+source_key: notion-research-documentation
+name: notion-research-documentation
+label: notion-research-documentation
+description: Research across Notion and synthesize into structured documentation;
+  use when gathering info from multiple Notion sources to produce briefs, comparisons,
+  or reports with citations.
+category: 协作
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

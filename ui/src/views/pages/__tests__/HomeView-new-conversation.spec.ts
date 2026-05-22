@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   handleAssistantAgentChat: vi.fn(),
   handleStopAssistantAgentChat: vi.fn(),
   handleDeleteAssistantAgentConversation: vi.fn(),
+  loadAssistantAgentCapabilities: vi.fn(),
   loadAssistantAgentMessages: vi.fn(),
   loadAssistantAgentConversations: vi.fn(),
   handleAudioToText: vi.fn(),
@@ -116,6 +117,13 @@ vi.mock('@/hooks/use-assistant-agent', async () => {
       loading: ref(false),
       handleAssistantAgentChat: mocks.handleAssistantAgentChat,
     }),
+    useGetAssistantAgentCapabilities: () => ({
+      loading: ref(false),
+      capabilities: ref({
+        image_input: { enabled: false },
+      }),
+      loadAssistantAgentCapabilities: mocks.loadAssistantAgentCapabilities,
+    }),
     useGenerateAssistantAgentIntroduction: () => ({
       loading: ref(false),
       handleGenerateAssistantAgentIntroduction: mocks.handleGenerateAssistantAgentIntroduction,
@@ -191,6 +199,7 @@ describe('HomeView sidebar new conversation request', () => {
       is_default: false,
     })
     mocks.loadCurrentUser.mockResolvedValue(undefined)
+    mocks.loadAssistantAgentCapabilities.mockResolvedValue(undefined)
     mocks.loadAssistantAgentMessages.mockResolvedValue(undefined)
     mocks.handleDeleteAssistantAgentConversation.mockResolvedValue(undefined)
   })

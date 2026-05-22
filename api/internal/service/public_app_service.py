@@ -33,6 +33,7 @@ from internal.schema.public_app_schema import GetPublicAppsWithPageReq
 from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .base_service import BaseService
+from .language_model_service import LanguageModelService
 from .public_agent_registry_service import PublicAgentRegistryService
 
 
@@ -42,6 +43,7 @@ class PublicAppService(BaseService):
     """公共应用服务"""
     db: SQLAlchemy
     builtin_provider_manager: BuiltinProviderManager
+    language_model_service: LanguageModelService | None = None
     public_agent_registry_service: PublicAgentRegistryService | None = None
 
     @classmethod
@@ -546,6 +548,7 @@ class PublicAppService(BaseService):
             "dialog_round": app_config.dialog_round,
             "preset_prompt": app_config.preset_prompt,
             "tools": app_config.tools,
+            "mcp_bindings": getattr(app_config, "mcp_bindings", []),
             "workflows": app_config.workflows,
             "retrieval_config": app_config.retrieval_config,
             "long_term_memory": app_config.long_term_memory,
@@ -758,9 +761,19 @@ class PublicAppService(BaseService):
         if app_config:
             app_detail["draft_app_config"] = {
                 "model_config": app_config.model_config,
+                "capabilities": (
+                    self.language_model_service.describe_runtime_capabilities(
+                        app_config.model_config,
+                        entrypoint=LanguageModelService.ENTRYPOINT_PUBLIC_A2A,
+                        allow_image_input=False,
+                    )
+                    if self.language_model_service is not None
+                    else {}
+                ),
                 "dialog_round": app_config.dialog_round,
                 "preset_prompt": app_config.preset_prompt,
                 "tools": self._enrich_tools(app_config.tools),  # 填充完整的 tool 信息
+                "mcp_bindings": getattr(app_config, "mcp_bindings", []),
                 "workflows": self._enrich_workflows(app_config.workflows),
                 "datasets": [],  # 公共应用不暴露知识库详情
                 "retrieval_config": app_config.retrieval_config,

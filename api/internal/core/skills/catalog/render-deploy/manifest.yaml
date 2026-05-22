@@ -1,0 +1,17 @@
+source_key: render-deploy
+name: render-deploy
+label: render-deploy
+description: Deploy applications to Render by analyzing codebases, generating render.yaml
+  Blueprints, and providing Dashboard deeplinks. Use when the user wants to deploy,
+  host, publish, or set up their application on Render's cloud platform.
+category: 部署
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

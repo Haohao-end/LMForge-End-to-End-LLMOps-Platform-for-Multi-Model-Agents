@@ -1,0 +1,17 @@
+source_key: find-skills
+name: find-skills
+label: 找技能
+description: 帮助用户发现并筛选可安装的技能，尤其是当现有能力不够用时。Use when the user asks "how do I do X", "find a skill for X", or wants to extend capabilities.
+category: 研究
+tags:
+  - github
+  - curated
+  - prompt-only
+  - discovery
+  - skills
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

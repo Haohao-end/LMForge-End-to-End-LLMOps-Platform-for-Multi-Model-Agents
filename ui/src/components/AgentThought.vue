@@ -67,11 +67,11 @@ const containerClass = computed(() => {
 })
 
 const toggleTitle = computed(() => {
-  return visible.value ? '隐藏运行流程' : '显示运行流程'
+  return visible.value ? '隐藏技术细节' : '查看技术细节'
 })
 
 const toggleLabel = computed(() => {
-  return visible.value ? '隐藏运行流程' : '显示运行流程'
+  return visible.value ? '隐藏技术细节' : '查看技术细节'
 })
 
 const headerClass = computed(() => {
@@ -92,6 +92,7 @@ const getThoughtTitle = (event: string) => {
   if (event === QueueEvent.datasetRetrieval) return '搜索知识库'
   if (event === QueueEvent.agentAction) return '调用工具'
   if (event === QueueEvent.agentMessage) return '智能体消息'
+  if (event === QueueEvent.deepThinking) return '深度思考'
   return '运行步骤'
 }
 
@@ -101,6 +102,7 @@ const getThoughtTitleTooltip = (event: string) => {
   if (event === QueueEvent.datasetRetrieval) return '搜索知识库'
   if (event === QueueEvent.agentAction) return '调用工具'
   if (event === QueueEvent.agentMessage) return '智能体消息'
+  if (event === QueueEvent.deepThinking) return '深度思考规划过程'
   return '运行步骤'
 }
 
@@ -258,6 +260,20 @@ onBeforeUnmount(() => {
           <icon-storage v-else-if="agent_thought.event === QueueEvent.datasetRetrieval" />
           <icon-tool v-else-if="agent_thought.event === QueueEvent.agentAction" />
           <icon-message v-else-if="agent_thought.event === QueueEvent.agentMessage" />
+          <!-- 深度思考：脑图标（用 SVG 内联） -->
+          <svg
+            v-else-if="agent_thought.event === QueueEvent.deepThinking"
+            class="h-[14px] w-[14px] text-violet-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.66Z" />
+            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.66Z" />
+          </svg>
         </template>
         <template #header>
           <div

@@ -14,6 +14,7 @@ const unauthDescription = computed(() => {
   if (route.path.startsWith('/space/apps')) return '请你登录查看你的Agent！'
   if (route.path.startsWith('/space/tools')) return '请你登录查看你的插件！'
   if (route.path.startsWith('/space/workflows')) return '请你登录查看你的工作流！'
+  if (route.path.startsWith('/space/mcp')) return '请你登录查看你的MCP！'
   if (route.path.startsWith('/space/datasets')) return '请你登录查看你的知识库！'
   if (route.path.startsWith('/space/likes')) return '请你登录查看你的点赞内容！'
   if (route.path.startsWith('/space/favorites')) return '请你登录查看你的收藏内容！'
@@ -33,7 +34,7 @@ const openLoginModal = () => {
   )
 }
 
-const handleCreate = (type: 'app' | 'tool' | 'workflow' | 'dataset') => {
+const handleCreate = (type: 'app' | 'tool' | 'workflow' | 'dataset' | 'mcp') => {
   if (isLoggedIn.value) {
     createType.value = type
     return
@@ -135,6 +136,14 @@ watch(
           创建工作流
         </a-button>
         <a-button
+          v-if="route.path.startsWith('/space/mcp')"
+          type="primary"
+          class="rounded-lg"
+          @click="handleCreate('mcp')"
+        >
+          创建 MCP
+        </a-button>
+        <a-button
           v-if="route.path.startsWith('/space/datasets')"
           type="primary"
           class="rounded-lg"
@@ -167,6 +176,13 @@ watch(
             active-class="bg-gray-100"
           >
             工作流
+          </router-link>
+          <router-link
+            to="/space/mcp"
+            class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
+            active-class="bg-gray-100"
+          >
+            MCP
           </router-link>
           <router-link
             to="/space/datasets"

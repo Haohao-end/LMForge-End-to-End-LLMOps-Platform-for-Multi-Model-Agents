@@ -1,0 +1,16 @@
+source_key: develop-web-game
+name: develop-web-game
+label: Web Game 开发
+description: 用于构建和迭代 HTML/JS 网页游戏的开发与测试循环，强调小步修改、截图验证和状态检查。
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - playwright
+icon: icon.svg
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

@@ -55,6 +55,7 @@ type ScrollerLike = {
 }
 const newConversation = ref<ConversationSummary | null>(null)
 const selectedConversation = ref('')
+const enableDeepThinking = ref(false)
 const image_urls = ref<string[]>([])
 const WEB_APP_QUERY_DRAFT_STORAGE_KEY_PREFIX = 'draft:web-apps:query'
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -104,6 +105,9 @@ const { loading: stopWebAppChatLoading, handleStopWebAppChat } = useStopWebAppCh
 const { suggested_questions, handleGenerateSuggestedQuestions } = useGenerateSuggestedQuestions()
 const can_image_input = computed(() => {
   if (web_app.value) {
+    if (web_app.value?.app_config?.capabilities?.image_input?.enabled === true) {
+      return true
+    }
     return web_app.value?.app_config?.features?.includes('image_input')
   }
   return false
@@ -369,6 +373,10 @@ const handleSubmit = async () => {
     Message.warning('上一次提问还未结束，请稍等')
     return
   }
+  if (image_urls.value.length > 0 && !can_image_input.value) {
+    Message.warning('当前 WebApp 不支持图片输入，请移除图片后重试')
+    return
+  }
 
   // 11.3 满足条件，处理正式提问的前置工作，涵盖：清空建议问题、删除消息id、任务id
   suggested_questions.value = []
@@ -384,6 +392,8 @@ const handleSubmit = async () => {
     query: query.value,
     image_urls: image_urls.value,
     answer: '',
+    answer_parts: [],
+    artifacts: [],
     total_token_count: 0,
     latency: 0,
     agent_thoughts: [],
@@ -411,6 +421,7 @@ const handleSubmit = async () => {
       selectedConversation.value === 'new_conversation' ? '' : selectedConversation.value,
     query: humanQuery,
     image_urls: humanImageUrls,
+    enable_deep_thinking: enableDeepThinking.value,
   }
   let chatSucceeded = false
   try {
@@ -785,6 +796,8 @@ onUnmounted(() => {
                   :enable_text_to_speech="web_app?.app_config?.text_to_speech?.enable"
                   :agent_thoughts="item.agent_thoughts"
                   :answer="item.answer"
+                  :answer_parts="item.answer_parts || []"
+                  :artifacts="item.artifacts || []"
                   :app="{ name: web_app.name, icon: web_app.icon }"
                   :suggested_questions="
                     item.suggested_questions && item.suggested_questions.length > 0
@@ -851,12 +864,14 @@ onUnmounted(() => {
         <div class="px-4 sm:px-6">
           <chat-composer
             v-model="query"
+            v-model:deep-thinking-enabled="enableDeepThinking"
             :textarea-ref-setter="setQueryTextareaRef"
             :file-input-ref-setter="setFileInputRef"
             :image-urls="image_urls"
-            :show-image-previews="can_image_input"
-            :show-upload-button="can_image_input"
+            :show-image-previews="true"
+            :show-upload-button="true"
             :show-voice-button="can_speech_to_text"
+            :show-deep-thinking-toggle="true"
             :upload-loading="uploadFileLoading"
             :submit-loading="webAppChatLoading"
             :audio-to-text-loading="audioToTextLoading"

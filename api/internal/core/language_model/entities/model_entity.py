@@ -1,9 +1,12 @@
+from urllib.parse import urlparse
 from abc import ABC
 from enum import Enum
 from typing import Any, Optional
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from langchain_core.language_models import BaseLanguageModel as LCBaseLanguageModel
+
+from internal.exception import FailException
 
 
 class DefaultModelParameterName(str, Enum):
@@ -97,6 +100,21 @@ class BaseLanguageModel(LCBaseLanguageModel, ABC):
         #   链接: https://python.langchain.com/docs/how_to/multimodal_inputs/
         return HumanMessage(content=[
             {"type": "text", "text": query},
-            *[{"type": "image_url", "image_url": {"url": image_url}} for image_url in image_urls],
+            *[
+                {"type": "image_url", "image_url": {"url": _normalize_image_url_for_llm(image_url)}}
+                for image_url in image_urls
+            ],
         ])
 
+
+def _normalize_image_url_for_llm(image_url: str) -> str:
+    """规范化图片 URL；本地兜底路径已禁用。"""
+    normalized_url = str(image_url or "").strip()
+    if not normalized_url or normalized_url.startswith("data:"):
+        return normalized_url
+
+    parsed = urlparse(normalized_url)
+    if parsed.path.startswith("/upload-files/local/"):
+        raise FailException("本地图片存储已禁用，请重新上传图片后重试")
+
+    return normalized_url

@@ -199,6 +199,12 @@ class _DummyAgent(BaseAgent):
         return SimpleNamespace(invoke=_invoke)
 
 
+def test_agent_config_should_default_iteration_limit_to_ten():
+    config = AgentConfig(user_id=uuid4())
+
+    assert config.max_iteration_count == 10
+
+
 def test_base_agent_stream_should_prepare_state_and_delegate_to_queue(monkeypatch):
     class _FakeQueueManager:
         def __init__(self, user_id, invoke_from):

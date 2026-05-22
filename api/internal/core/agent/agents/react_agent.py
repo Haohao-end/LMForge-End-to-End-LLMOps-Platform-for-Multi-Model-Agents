@@ -14,6 +14,7 @@ from internal.core.agent.entities.agent_entity import (
     REACT_AGENT_SYSTEM_PROMPT_TEMPLATE, MAX_ITERATION_RESPONSE,
 )
 from internal.core.agent.entities.queue_entity import QueueEvent, AgentThought
+from internal.core.agent.usage_utils import normalize_usage_text
 from internal.core.language_model.entities.model_entity import ModelFeature
 from internal.exception import FailException
 from .function_call_agent import FunctionCallAgent
@@ -165,8 +166,8 @@ class ReACTAgent(FunctionCallAgent):
                         ))
         # 12.计算LLM的输入+输出的token总数
         encoding = tiktoken.get_encoding("cl100k_base")
-        input_token_count = len(encoding.encode(str(state["messages"])))
-        output_token_count = len(encoding.encode(str(gathered)))
+        input_token_count = len(encoding.encode(normalize_usage_text(state["messages"])))
+        output_token_count = len(encoding.encode(normalize_usage_text(gathered)))
 
         # 13.获取输入/输出价格和单位
         input_price, output_price, unit = self.llm.get_pricing()

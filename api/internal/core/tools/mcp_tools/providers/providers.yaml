@@ -1,0 +1,306 @@
+- name: mind-map-mcp
+  label: 思维导图 MCP
+  description: 免费直连的思维导图 MCP，适合知识整理、脑图生成与结构化梳理。
+  icon: ""
+  background: "#DBEAFE"
+  category: productivity
+  transport: streamable_http
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/a478ea710ab240/mcp
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@WEIAIb/mind-map-mcp"
+  source_url: https://www.modelscope.cn/mcp/servers/@WEIAIb/mind-map-mcp
+  created_at: 1779120154
+  is_public: true
+- name: mcp-server-chart
+  label: 可视化图表 MCP
+  description: 免费直连的可视化图表 MCP，适合图表、路书和思维导图生成。
+  icon: ""
+  background: "#EDE9FE"
+  category: data_analysis
+  transport: streamable_http
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/0f8d8bde112847/mcp
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@antvis/mcp-server-chart"
+  source_url: https://www.modelscope.cn/mcp/servers/@antvis/mcp-server-chart
+  created_at: 1779120062
+  is_public: true
+- name: time
+  label: 时间服务 MCP
+  description: 免费直连的时间服务 MCP，适合获取当前时间与时区相关信息。
+  icon: ""
+  background: "#FEF3C7"
+  category: general
+  transport: streamable_http
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/256ba648faf146/mcp
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@modelcontextprotocol/time"
+  source_url: https://www.modelscope.cn/mcp/servers/@modelcontextprotocol/time
+  created_at: 1779120093
+  is_public: true
+- name: bing-cn-mcp-server
+  label: 必应搜索中文 MCP
+  description: 免费直连的中文搜索 MCP，适合网页搜索和信息检索。
+  icon: ""
+  background: "#DCFCE7"
+  category: general
+  transport: streamable_http
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/77c109fcdabb45/mcp
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@slcatwujian/bing-cn-mcp-server"
+  source_url: https://www.modelscope.cn/mcp/servers/@slcatwujian/bing-cn-mcp-server
+  created_at: 1779119904
+  is_public: true
+- name: 12306-mcp
+  label: 12306 车票查询 MCP
+  description: 免费直连的 12306 车票查询 MCP，适合铁路出行与余票查询。
+  icon: ""
+  background: "#FEE2E2"
+  category: productivity
+  transport: streamable_http
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/540c010e843a4e/mcp
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@Joooook/12306-mcp"
+  source_url: https://www.modelscope.cn/mcp/servers/@Joooook/12306-mcp
+  created_at: 1779119926
+  is_public: true
+- name: fetch
+  label: Fetch 网页抓取 MCP
+  description: 免费直连的网页抓取 MCP，适合获取网页内容与结构化抓取。
+  icon: ""
+  background: "#E0E7FF"
+  category: general
+  transport: streamable_http
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/5db48a8cef5240/mcp
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@modelcontextprotocol/fetch"
+  source_url: https://www.modelscope.cn/mcp/servers/@modelcontextprotocol/fetch
+  created_at: 1779119859
+  is_public: true
+- name: ModelScope-Image-Generation-MCP
+  label: 文生图 MCP
+  description: 免费可用的文生图 MCP，适合图像生成与 AIGC 创作。
+  icon: ""
+  background: "#FEE2E2"
+  category: content_creation
+  transport: sse
+  command: ""
+  url: ""
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@modelscope/ModelScope-Image-Generation-MCP"
+  source_url: https://www.modelscope.cn/mcp/servers/@modelscope/ModelScope-Image-Generation-MCP
+  created_at: 1744900000
+  is_public: true
+- name: MiniMax-MCP
+  label: MiniMax MCP
+  description: 免费可用的 MiniMax MCP，适合视频生成与多媒体内容创作。
+  icon: ""
+  background: "#E9D5FF"
+  category: content_creation
+  transport: sse
+  command: ""
+  url: ""
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@MiniMax-AI/MiniMax-MCP"
+  source_url: https://www.modelscope.cn/mcp/servers/@MiniMax-AI/MiniMax-MCP
+  created_at: 1744900001
+  is_public: true
+- name: xhs_mcp_server
+  label: 小红书发布 MCP
+  description: 免费可用的小红书发布 MCP，适合图文和视频发布自动化。
+  icon: ""
+  background: "#FDE68A"
+  category: content_creation
+  transport: stdio
+  command: uvx
+  url: ""
+  headers: []
+  tool_names: []
+  args:
+    - xhs_mcp_server@latest
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@XGenerationLab/xhs_mcp_server"
+  source_url: https://www.modelscope.cn/mcp/servers/@XGenerationLab/xhs_mcp_server
+  created_at: 1743687600
+  is_public: true
+- name: allvoicelab_mcp
+  label: 趣丸千音 MCP
+  description: 免费可用的趣丸千音（All Voice Lab）MCP，提供文本转语音、变声和字幕处理等能力。
+  icon: ""
+  background: "#FCE7F3"
+  category: media
+  transport: stdio
+  command: uvx
+  url: ""
+  headers: []
+  tool_names: []
+  args:
+    - allvoicelab-mcp
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@allvoicelab/AllVoiceLab"
+  source_url: https://www.modelscope.cn/mcp/servers/@allvoicelab/AllVoiceLab
+  created_at: 1744900003
+  is_public: true
+- name: mind-mcp-v1-2
+  label: 思维导图 MCP v1.2
+  description: 免费直连的思维导图 MCP，适合根据文本生成思维导图。
+  icon: ""
+  background: "#DBEAFE"
+  category: productivity
+  transport: sse
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/29e029495b1a4d/sse
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@modelscope/yspdsh/mind-mcp-v1.2"
+  source_url: https://www.modelscope.cn/mcp/servers/yspdsh/mind-mcp-v1.2
+  created_at: 1744900004
+  is_public: true
+- name: mcp-deepwiki
+  label: GitHub DeepWiki MCP
+  description: 免费直连的 GitHub DeepWiki MCP，适合检索 deepwiki.com 的知识。
+  icon: ""
+  background: "#E0E7FF"
+  category: coding
+  transport: sse
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/d9c4171cb9aa47/sse
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@regenrek/mcp-deepwiki"
+  source_url: https://www.modelscope.cn/mcp/servers/@regenrek/mcp-deepwiki
+  created_at: 1744900005
+  is_public: true
+- name: fdp_basic
+  label: 网络基础数据查询 MCP
+  description: 免费直连的网络基础数据查询 MCP，适合被动 DNS、whois 和证书查询。
+  icon: ""
+  background: "#DCFCE7"
+  category: observability
+  transport: sse
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/3fa07f59a25846/sse
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@dongkitchen/fdp_basic"
+  source_url: https://www.modelscope.cn/mcp/servers/dongkitchen/fdp_basic
+  created_at: 1744900006
+  is_public: true
+- name: jsonDiffMcp
+  label: JSON 对比 MCP
+  description: 免费直连的 JSON 对比 MCP，适合比较两份 JSON 的差异。
+  icon: ""
+  background: "#F3E8FF"
+  category: coding
+  transport: sse
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/fdcb92dc675745/sse
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@yohanLiu/jsonDiffMcp"
+  source_url: https://www.modelscope.cn/mcp/servers/yohanLiu/jsonDiffMcp
+  created_at: 1744900007
+  is_public: true
+- name: claude-mcp-think-tool
+  label: 智思工具 MCP
+  description: 免费直连的思考工具 MCP，适合复杂任务中的结构化推理。
+  icon: ""
+  background: "#FCE7F3"
+  category: general
+  transport: sse
+  command: ""
+  url: https://mcp.api-inference.modelscope.net/32c74272d66345/sse
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@cgize/claude-mcp-think-tool"
+  source_url: https://www.modelscope.cn/mcp/servers/@cgize/claude-mcp-think-tool
+  created_at: 1744900008
+  is_public: true
+- name: edgeone-pages-mcp-server
+  label: EdgeOne Pages MCP
+  description: 腾讯云免费可用的网页部署 MCP，适合部署 HTML 或完整项目并生成公开访问链接。
+  icon: ""
+  background: "#DBEAFE"
+  category: productivity
+  transport: streamable_http
+  command: ""
+  url: https://mcp-on-edge.edgeone.site/mcp-server
+  headers: []
+  tool_names: []
+  args: []
+  env: {}
+  timeout_seconds: 30
+  source_type: catalog
+  source_key: "@tencentcloud/edgeone-pages-mcp-server"
+  source_url: https://cloud.tencent.com/developer/mcp/server/10011
+  created_at: 1779177600
+  is_public: true

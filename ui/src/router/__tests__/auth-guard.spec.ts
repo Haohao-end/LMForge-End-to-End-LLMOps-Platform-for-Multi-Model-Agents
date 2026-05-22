@@ -11,6 +11,15 @@ describe('getAuthGuardRedirect', () => {
     ).toBeNull()
   })
 
+  it('allows anonymous users to access skills marketplace route', () => {
+    expect(
+      getAuthGuardRedirect({
+        routeName: 'store-skills-list',
+        isLoggedIn: false,
+      }),
+    ).toBeNull()
+  })
+
   it('allows anonymous users to access login-prompt workspace routes', () => {
     expect(
       getAuthGuardRedirect({

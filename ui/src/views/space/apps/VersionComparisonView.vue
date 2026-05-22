@@ -70,6 +70,7 @@ const comparisonSections = computed(() => [
   createSection('dialog_round', '上下文轮数', (version) => version?.config.dialog_round),
   createSection('preset_prompt', '人设与回复逻辑', (version) => version?.config.preset_prompt),
   createSection('tools', '扩展插件', (version) => version?.config.tools),
+  createSection('mcp_bindings', 'MCP', (version) => version?.config.mcp_bindings),
   createSection('workflows', '工作流', (version) => version?.config.workflows),
   createSection('datasets', '知识库', (version) => version?.config.datasets),
   createSection('retrieval_config', '检索配置', (version) => version?.config.retrieval_config),
@@ -124,7 +125,7 @@ const getVersionTagLabel = (version: Record<string, any> | null) => {
 
 const getVersionCollectionCount = (
   version: Record<string, any> | null,
-  key: 'tools' | 'workflows' | 'datasets',
+  key: 'tools' | 'mcp_bindings' | 'workflows' | 'datasets',
 ) => {
   const value = version?.config?.[key]
   return Array.isArray(value) ? value.length : 0
@@ -210,7 +211,8 @@ onMounted(async () => {
                   <div>更新时间：{{ formatTimestampLong(leftVersion.updated_at) }}</div>
                   <div class="text-gray-500">
                     扩展插件 {{ getVersionCollectionCount(leftVersion, 'tools') }} 个 · 工作流
-                    {{ getVersionCollectionCount(leftVersion, 'workflows') }} 个 · 知识库
+                    {{ getVersionCollectionCount(leftVersion, 'workflows') }} 个 · MCP
+                    {{ getVersionCollectionCount(leftVersion, 'mcp_bindings') || 0 }} 个 · 知识库
                     {{ getVersionCollectionCount(leftVersion, 'datasets') }} 个
                   </div>
                 </div>
@@ -233,7 +235,8 @@ onMounted(async () => {
                   <div>更新时间：{{ formatTimestampLong(rightVersion.updated_at) }}</div>
                   <div class="text-gray-500">
                     扩展插件 {{ getVersionCollectionCount(rightVersion, 'tools') }} 个 · 工作流
-                    {{ getVersionCollectionCount(rightVersion, 'workflows') }} 个 · 知识库
+                    {{ getVersionCollectionCount(rightVersion, 'workflows') }} 个 · MCP
+                    {{ getVersionCollectionCount(rightVersion, 'mcp_bindings') || 0 }} 个 · 知识库
                     {{ getVersionCollectionCount(rightVersion, 'datasets') }} 个
                   </div>
                 </div>

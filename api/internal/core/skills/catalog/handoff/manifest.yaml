@@ -1,0 +1,17 @@
+source_key: handoff
+name: handoff
+label: handoff
+description: Compress the current conversation into a handoff document for the next session. Use when the work needs to be continued by another agent.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - handoff
+  - productivity
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

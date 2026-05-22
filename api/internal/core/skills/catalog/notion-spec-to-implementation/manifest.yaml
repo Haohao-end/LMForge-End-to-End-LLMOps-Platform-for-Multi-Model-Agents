@@ -1,0 +1,17 @@
+source_key: notion-spec-to-implementation
+name: notion-spec-to-implementation
+label: notion-spec-to-implementation
+description: Turn Notion specs into implementation plans, tasks, and progress tracking;
+  use when implementing PRDs/feature specs and creating Notion plans + tasks from
+  them.
+category: 协作
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

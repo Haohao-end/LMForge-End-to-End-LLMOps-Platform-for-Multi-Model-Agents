@@ -1,0 +1,17 @@
+source_key: gh-address-comments
+name: gh-address-comments
+label: gh-address-comments
+description: Help address review/issue comments on the open GitHub PR for the current
+  branch using gh CLI; verify gh auth first and prompt the user to authenticate if
+  not logged in.
+category: GitHub
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

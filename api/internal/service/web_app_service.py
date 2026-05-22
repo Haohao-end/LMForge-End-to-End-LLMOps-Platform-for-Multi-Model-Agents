@@ -12,17 +12,18 @@ from internal.model import App, Account, Conversation, Message
 from internal.exception import NotFoundException, ForbiddenException
 from dataclasses import dataclass
 from internal.schema.web_app_schema import WebAppChatReq
-from internal.core.agent.agents import FunctionCallAgent, ReACTAgent, AgentQueueManager
-from internal.core.agent.entities.agent_entity import AgentConfig
 from internal.core.agent.entities.queue_entity import QueueEvent
+from internal.core.agent.usage_utils import summarize_agent_thoughts
 from internal.core.language_model.entities.model_entity import ModelFeature
 from internal.core.memory import TokenBufferMemory
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
 from .app_config_service import AppConfigService
+from .app_service import AppService
 from .conversation_service import ConversationService
 from .language_model_service import LanguageModelService
 from .retrieval_service import RetrievalService
+from internal.core.agent.agents import AgentQueueManager
 
 
 @inject
@@ -55,7 +56,19 @@ class WebAppService(BaseService):
 
         # 2.根据App基础信息构建LLM
         app_config = self.app_config_service.get_app_config(app)
-        llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
+        if hasattr(self.language_model_service, "describe_runtime_capabilities"):
+            capabilities = self.language_model_service.describe_runtime_capabilities(
+                app_config.get("model_config", {}),
+                entrypoint=LanguageModelService.ENTRYPOINT_WEB_APP,
+            )
+        else:
+            llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
+            capabilities = {
+                "features": list(getattr(llm, "features", []) or []),
+                "image_input": {
+                    "enabled": ModelFeature.IMAGE_INPUT.value in list(getattr(llm, "features", []) or []),
+                },
+            }
 
         # 3.提取信息并返回
         return {
@@ -67,7 +80,8 @@ class WebAppService(BaseService):
                 "opening_statement": app_config.get("opening_statement"),
                 "opening_questions": app_config.get("opening_questions"),
                 "suggested_after_answer": app_config.get("suggested_after_answer"),
-                "features": llm.features,
+                "features": capabilities.get("features", []),
+                "capabilities": capabilities,
                 "text_to_speech": app_config.get("text_to_speech"),
                 "speech_to_text": app_config.get("speech_to_text"),
             }
@@ -101,7 +115,19 @@ class WebAppService(BaseService):
         # 4.获取校验后的运行时配置
         app_config = self.app_config_service.get_app_config(app)
 
-        # 5.新建一条消息记录
+        # 5.在落库前解析运行时模型能力，避免带图请求被静默降级
+        if hasattr(self.language_model_service, "resolve_runtime_language_model"):
+            model_resolution = self.language_model_service.resolve_runtime_language_model(
+                app_config.get("model_config", {}),
+                image_urls=req.image_urls.data,
+                entrypoint=LanguageModelService.ENTRYPOINT_WEB_APP,
+            )
+            llm = model_resolution.llm
+            app_config["capabilities"] = model_resolution.capabilities
+        else:
+            llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
+
+        # 6.新建一条消息记录
         message = self.create(
             Message,
             app_id=app.id,
@@ -113,9 +139,6 @@ class WebAppService(BaseService):
             status=MessageStatus.NORMAL,
         )
 
-        # 6.从语言模型管理器中加载大语言模型
-        llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
-
         # 7.实例化TokenBufferMemory用于提取短期记忆
         token_buffer_memory = TokenBufferMemory(
             db=self.db,
@@ -126,40 +149,25 @@ class WebAppService(BaseService):
             message_limit=app_config["dialog_round"],
         )
 
-        # 8.将草稿配置中的tools转换成LangChain工具
-        tools = self.app_config_service.get_langchain_tools_by_tools_config(app_config["tools"])
+        # 8.根据应用配置构建运行时工具
+        tools = AppService._build_runtime_tools_for_config(
+            app_config_service=self.app_config_service,
+            retrieval_service=self.retrieval_service,
+            account=account,
+            draft_app_config=app_config,
+            flask_app=current_app._get_current_object(),
+        )
 
-        # 9.检测是否关联了知识库
-        if app_config["datasets"]:
-            # 10.构建LangChain知识库检索工具
-            dataset_retrieval = self.retrieval_service.create_langchain_tool_from_search(
-                flask_app=current_app._get_current_object(),
-                dataset_ids=[dataset["id"] for dataset in app_config["datasets"]],
-                account_id=account.id,
-                retrieval_source=RetrievalSource.APP.value,
-                **app_config["retrieval_config"],
-            )
-            tools.append(dataset_retrieval)
-
-        # 11.检测是否关联工作流，如果关联了工作流则将工作流构建成工具添加到tools中
-        if app_config["workflows"]:
-            workflow_tools = self.app_config_service.get_langchain_tools_by_workflow_ids(
-                [workflow["id"] for workflow in app_config["workflows"]]
-            )
-            tools.extend(workflow_tools)
-
-        # 12.根据LLM是否支持tool_call决定使用不同的Agent
-        agent_class = FunctionCallAgent if ModelFeature.TOOL_CALL.value in llm.features else ReACTAgent
-        agent = agent_class(
+        # 9.复用运行时Agent工厂，确保已发布WebApp与调试态应用共用深度思考链路
+        runtime_flask_app = current_app._get_current_object()
+        agent = AppService._create_runtime_agent(
             llm=llm,
-            agent_config=AgentConfig(
-                user_id=account.id,
-                invoke_from=InvokeFrom.WEB_APP.value,
-                preset_prompt=app_config["preset_prompt"],
-                enable_long_term_memory=app_config["long_term_memory"]["enable"],
-                tools=tools,
-                review_config=app_config["review_config"],
-            ),
+            account=account,
+            draft_app_config=app_config,
+            tools=tools,
+            enable_deep_thinking=bool(req.enable_deep_thinking.data),
+            flask_app=runtime_flask_app,
+            invoke_from=InvokeFrom.WEB_APP.value,
         )
 
         # 13.定义字典存储推理过程，并调用智能体获取消息
@@ -201,11 +209,15 @@ class WebAppService(BaseService):
                 else:
                     # 19.处理其他类型事件的消息
                     agent_thoughts[event_id] = agent_thought
+            usage_summary = summarize_agent_thoughts(agent_thoughts.values())
             data = {
                 **agent_thought.model_dump(include={
                     "event", "thought", "observation", "tool", "tool_input", "answer",
                     "total_token_count", "total_price", "latency",
                 }),
+                "aggregate_total_token_count": usage_summary.total_token_count,
+                "aggregate_total_price": usage_summary.total_price,
+                "aggregate_latency": usage_summary.latency,
                 "id": event_id,
                 "conversation_id": str(conversation.id),
                 "message_id": str(message.id),

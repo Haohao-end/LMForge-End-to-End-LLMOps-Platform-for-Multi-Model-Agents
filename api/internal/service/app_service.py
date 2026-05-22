@@ -13,9 +13,10 @@ from internal.entity.audio_entity import ALLOWED_AUDIO_VOICES
 from redis import Redis
 from sqlalchemy import func, desc
 from sqlalchemy.orm import joinedload, selectinload
-from internal.core.agent.agents import FunctionCallAgent, AgentQueueManager, ReACTAgent
+from internal.core.agent.agents import FunctionCallAgent, AgentQueueManager, ReACTAgent, DeepThinkingAgent
 from internal.core.agent.entities.agent_entity import AgentConfig
 from internal.core.agent.entities.queue_entity import QueueEvent
+from internal.core.agent.usage_utils import summarize_agent_thoughts
 from internal.core.language_model import LanguageModelManager
 from internal.core.memory import TokenBufferMemory
 from internal.core.tools.api_tools.providers import ApiProviderManager
@@ -44,7 +45,7 @@ from internal.schema.app_schema import (
     GetPublishHistoriesWithPageReq,
     GetDebugConversationMessagesWithPageReq,
 )
-from internal.task.app_task import sync_public_app_registry
+from internal.task.app_task import prewarm_mcp_tool_snapshots, sync_public_app_registry
 from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .app_config_service import AppConfigService
@@ -55,6 +56,7 @@ from .language_model_service import LanguageModelService
 from .public_agent_registry_service import PublicAgentRegistryService
 from .retrieval_service import RetrievalService
 from .icon_generator_service import IconGeneratorService
+from .skill_service import SkillService
 from ..core.language_model.entities.model_entity import ModelParameterType, ModelFeature
 from ..core.language_model.providers.deepseek.chat import Chat
 from ..entity.workflow_entity import WorkflowStatus
@@ -91,11 +93,12 @@ class AppService(BaseService):
         },
         {
             "type": "builtin_tool",
-            "provider_id": "dalle",
-            "tool_id": "dalle3",
+            "provider_id": "qwen",
+            "tool_id": "qwen_image_text_to_image",
             "params": {
-                "size": "1024X1024",
-                "style": "vivid",
+                "image_size": "1328x1328",
+                "num_inference_steps": 50,
+                "cfg": 4.0,
             },
         },
     ]
@@ -118,6 +121,29 @@ class AppService(BaseService):
         except Exception:
             logging.exception("公共Agent索引同步任务入队失败: app_id=%s", app_id)
 
+    @classmethod
+    def _enqueue_mcp_tool_snapshot_prewarm(cls, app_id: UUID, config_type: str) -> None:
+        """后台预热 MCP 工具快照，失败时仅记录日志，不阻塞主流程。"""
+        try:
+            normalized_app_id = str(app_id)
+            normalized_config_type = str(config_type)
+            apply_async = getattr(prewarm_mcp_tool_snapshots, "apply_async", None)
+            if callable(apply_async):
+                apply_async(
+                    args=(normalized_app_id, normalized_config_type),
+                    ignore_result=True,
+                    retry=False,
+                )
+                return
+
+            prewarm_mcp_tool_snapshots.delay(normalized_app_id, normalized_config_type)
+        except Exception:
+            logging.exception(
+                "MCP 工具快照预热任务入队失败: app_id=%s, config_type=%s",
+                app_id,
+                config_type,
+            )
+
     def _sync_public_app_registry_after_unpublish(self, app_id: UUID) -> None:
         """取消发布后优先执行本地索引移除，失败时再退回异步任务同步。"""
         if not self.public_agent_registry_service:
@@ -132,6 +158,36 @@ class AppService(BaseService):
                 logging.exception("公共Agent索引移除失败，改为异步同步: app_id=%s", app_id)
 
         self._enqueue_public_app_registry_sync(app_id)
+
+    def refresh_mcp_tool_snapshots(self, app_id: UUID, config_type: str) -> list[dict[str, Any]]:
+        """根据应用配置类型刷新 MCP 工具快照，供后台任务调用。"""
+        app = self.get(App, app_id)
+        if not app:
+            raise NotFoundException("该应用不存在，请核实后重试")
+
+        normalized_config_type = str(config_type).strip().lower()
+        if normalized_config_type == AppConfigType.DRAFT.value:
+            target_config = app.draft_app_config
+        elif normalized_config_type == AppConfigType.PUBLISHED.value:
+            target_config = app.app_config
+        else:
+            raise FailException("MCP快照刷新配置类型错误")
+
+        if not target_config:
+            return []
+
+        refreshed_snapshots = self.app_config_service.refresh_mcp_tool_snapshots(
+            getattr(target_config, "mcp_bindings", []),
+            getattr(target_config, "mcp_tool_snapshots", []),
+        )
+        if getattr(target_config, "mcp_tool_snapshots", []) != refreshed_snapshots:
+            self.update(
+                target_config,
+                updated_at=datetime.now(UTC),
+                mcp_tool_snapshots=refreshed_snapshots,
+            )
+
+        return refreshed_snapshots
 
     @classmethod
     def _normalize_opening_questions(cls, questions: list[Any]) -> list[str]:
@@ -165,6 +221,13 @@ class AppService(BaseService):
             normalized_questions.append(fallback_question)
 
         return normalized_questions
+
+    def _get_skill_service(self) -> SkillService:
+        """获取技能服务，兼容测试里传入的简化 app_config_service。"""
+        skill_service = getattr(self.app_config_service, "skill_service", None)
+        if skill_service is not None:
+            return skill_service
+        return SkillService(self.db)
 
     def auto_create_app(self, name: str, description: str, account_id: UUID) -> App:
         """根据传递的应用名称、描述、账号id利用AI创建一个Agent智能体"""
@@ -405,7 +468,13 @@ class AppService(BaseService):
     def get_draft_app_config(self, app_id: UUID, account: Account) -> dict[str, Any]:
         """根据传递的应用id，获取指定的应用草稿配置信息"""
         app = self.get_app(app_id, account)
-        return self.app_config_service.get_draft_app_config(app)
+        draft_app_config = self.app_config_service.get_draft_app_config(app)
+        if hasattr(self.language_model_service, "describe_runtime_capabilities"):
+            draft_app_config["capabilities"] = self.language_model_service.describe_runtime_capabilities(
+                draft_app_config.get("model_config", {}),
+                entrypoint=LanguageModelService.ENTRYPOINT_DEBUGGER,
+            )
+        return draft_app_config
 
     def update_draft_app_config(
             self,
@@ -428,6 +497,19 @@ class AppService(BaseService):
             updated_at=datetime.now(UTC),
             **draft_app_config,
         )
+
+        prepared_mcp_tool_snapshots = self.app_config_service.prepare_mcp_tool_snapshots(
+            getattr(draft_app_config_record, "mcp_bindings", []),
+            getattr(draft_app_config_record, "mcp_tool_snapshots", []),
+        )
+        if getattr(draft_app_config_record, "mcp_tool_snapshots", []) != prepared_mcp_tool_snapshots:
+            self.update(
+                draft_app_config_record,
+                updated_at=datetime.now(UTC),
+                mcp_tool_snapshots=prepared_mcp_tool_snapshots,
+            )
+
+        self._enqueue_mcp_tool_snapshot_prewarm(app.id, AppConfigType.DRAFT.value)
 
         return draft_app_config_record
 
@@ -459,6 +541,9 @@ class AppService(BaseService):
                 }
                 for tool in draft_app_config["tools"]
             ],
+            mcp_bindings=draft_app_config.get("mcp_bindings", []),
+            mcp_tool_snapshots=draft_app_config.get("mcp_tool_snapshots", []),
+            skills=[{"skill_id": skill["skill_id"]} for skill in draft_app_config.get("skills", [])],
             workflows=[workflow["id"] for workflow in draft_app_config["workflows"]],
             retrieval_config=draft_app_config["retrieval_config"],
             long_term_memory=draft_app_config["long_term_memory"],
@@ -516,6 +601,8 @@ class AppService(BaseService):
             config_type=AppConfigType.PUBLISHED.value,
             **draft_app_config_copy,
         )
+
+        self._enqueue_mcp_tool_snapshot_prewarm(app.id, AppConfigType.PUBLISHED.value)
 
         if self.public_agent_registry_service:
             self._enqueue_public_app_registry_sync(app.id)
@@ -636,6 +723,19 @@ class AppService(BaseService):
             **draft_app_config_dict,
         )
 
+        prepared_mcp_tool_snapshots = self.app_config_service.prepare_mcp_tool_snapshots(
+            getattr(draft_app_config_record, "mcp_bindings", []),
+            getattr(draft_app_config_record, "mcp_tool_snapshots", []),
+        )
+        if getattr(draft_app_config_record, "mcp_tool_snapshots", []) != prepared_mcp_tool_snapshots:
+            self.update(
+                draft_app_config_record,
+                updated_at=datetime.now(UTC),
+                mcp_tool_snapshots=prepared_mcp_tool_snapshots,
+            )
+
+        self._enqueue_mcp_tool_snapshot_prewarm(app.id, AppConfigType.DRAFT.value)
+
         return draft_app_config_record
 
     def get_debug_conversation_summary(self, app_id: UUID, account: Account) -> str:
@@ -714,26 +814,196 @@ class AppService(BaseService):
         flask_app: Flask | None = None,
     ) -> list[Any]:
         """根据应用草稿配置构建运行时工具列表"""
-        tools = self.app_config_service.get_langchain_tools_by_tools_config(draft_app_config["tools"])
+        return self._build_runtime_tools_for_config(
+            app_config_service=self.app_config_service,
+            retrieval_service=self.retrieval_service,
+            skill_service=self._get_skill_service(),
+            account=account,
+            app_id=app_id,
+            draft_app_config=draft_app_config,
+            flask_app=flask_app,
+        )
 
-        if draft_app_config["datasets"]:
+    @staticmethod
+    def _build_skill_prompt_appendix(skill_bindings: list[dict[str, Any]] | None) -> str:
+        """把已绑定 Skill 的正文拼成一段额外提示词。"""
+        if not isinstance(skill_bindings, list) or not skill_bindings:
+            return ""
+
+        sections: list[str] = []
+        for binding in skill_bindings:
+            if not isinstance(binding, dict):
+                continue
+
+            title = str(binding.get("label") or binding.get("name") or binding.get("source_key") or "Skill").strip()
+            readme = str(binding.get("readme") or binding.get("description") or "").strip()
+            if not readme:
+                continue
+
+            sections.append(f"### {title}\n{readme}")
+
+        if not sections:
+            return ""
+
+        return "## 已绑定 Skills\n\n" + "\n\n---\n\n".join(sections)
+
+    @staticmethod
+    def _build_mcp_prompt_appendix(mcp_bindings: list[dict[str, Any]] | None) -> str:
+        """把已绑定 MCP 的基础信息拼成一段额外提示词。"""
+        if not isinstance(mcp_bindings, list) or not mcp_bindings:
+            return ""
+
+        sections: list[str] = []
+        for binding in mcp_bindings:
+            if not isinstance(binding, dict) or not binding.get("enabled", True):
+                continue
+
+            title = str(binding.get("label") or binding.get("name") or binding.get("source_key") or "MCP").strip()
+            description = str(binding.get("description") or "").strip()
+            if not description:
+                continue
+
+            bullet = f"- {title}：{description}"
+            source_key = str(binding.get("source_key") or "").strip()
+            if source_key:
+                bullet += f"（来源：{source_key}）"
+            sections.append(bullet)
+
+        if not sections:
+            return ""
+
+        appendix = [
+            "## 已绑定 MCP",
+            "",
+            "如果用户的问题明显需要实时数据、外部服务或某个已绑定 MCP 的专长，请优先调用对应 MCP，不要用无关工具代替，也不要仅凭常识编造实时结果。",
+            "",
+            *sections,
+        ]
+        return "\n".join(appendix)
+
+    @staticmethod
+    def _build_mcp_snapshot_prompt_appendix(mcp_tool_snapshots: list[dict[str, Any]] | None) -> str:
+        """把 MCP 快照状态拼成一段额外提示词。"""
+        if not isinstance(mcp_tool_snapshots, list) or not mcp_tool_snapshots:
+            return ""
+
+        sections: list[str] = []
+        for snapshot in mcp_tool_snapshots:
+            if not isinstance(snapshot, dict):
+                continue
+
+            binding = snapshot.get("binding") if isinstance(snapshot.get("binding"), dict) else {}
+            title = str(
+                binding.get("label")
+                or binding.get("name")
+                or binding.get("source_key")
+                or snapshot.get("binding_identity")
+                or "MCP"
+            ).strip()
+            status = str(snapshot.get("status") or "").strip().lower() or "unknown"
+            tool_count = int(snapshot.get("tool_count") or len(snapshot.get("tool_definitions") or []) or 0)
+            last_error = str(snapshot.get("last_error") or "").strip()
+            retryable = bool(snapshot.get("retryable", False))
+            bullet = f"- {title}：状态 {status}"
+            if tool_count:
+                bullet += f"，工具数 {tool_count}"
+            if retryable:
+                bullet += "，可重试"
+            if last_error and status in {"failed", "stale"}:
+                bullet += f"，最近错误：{last_error}"
+            sections.append(bullet)
+
+        if not sections:
+            return ""
+
+        appendix = [
+            "## MCP 快照状态",
+            "",
+            "只有状态为 ready 或 stale 且对应工具已进入运行时列表时，才优先按完整工具名调用；warming、failed、unsupported、empty 状态下不要假设该 MCP 可直接可用。",
+            "",
+            *sections,
+        ]
+        return "\n".join(appendix)
+
+    @staticmethod
+    def _build_runtime_mcp_tools_prompt_appendix(tools: list[Any] | None) -> str:
+        """把运行时已经展开出来的 MCP 工具名拼成一段额外提示词。"""
+        if not isinstance(tools, list) or not tools:
+            return ""
+
+        sections: list[str] = []
+        for tool in tools:
+            tool_name = str(getattr(tool, "name", "") or "").strip()
+            if not tool_name.startswith("mcp__"):
+                continue
+            tool_description = str(getattr(tool, "description", "") or "").strip()
+            if not tool_description:
+                continue
+            sections.append(f"- {tool_name}：{tool_description}")
+
+        if not sections:
+            return ""
+
+        appendix = [
+            "## 运行时可用的 MCP 工具",
+            "",
+            "调用 MCP 时请使用下面列出的**完整工具名**，不要自己猜工具名或缩写。",
+            "",
+            *sections,
+        ]
+        return "\n".join(appendix)
+
+    @staticmethod
+    def _build_runtime_tools_for_config(
+        *,
+        app_config_service: AppConfigService,
+        retrieval_service: RetrievalService,
+        skill_service: SkillService | None = None,
+        account: Account,
+        app_id: UUID | None = None,
+        draft_app_config: dict[str, Any],
+        flask_app: Flask | None = None,
+    ) -> list[Any]:
+        """根据应用配置构建运行时工具列表，供多入口复用。"""
+        tools = app_config_service.get_langchain_tools_by_tools_config(draft_app_config.get("tools", []))
+        get_mcp_tools = getattr(app_config_service, "get_langchain_tools_by_mcp_bindings", None)
+        if callable(get_mcp_tools):
+            tools.extend(
+                get_mcp_tools(
+                    draft_app_config.get("mcp_bindings", []),
+                    draft_app_config.get("mcp_tool_snapshots", []),
+                )
+            )
+
+        if skill_service is not None and app_id is not None:
+            tools.extend(
+                skill_service.get_langchain_tools_by_skill_bindings(
+                    draft_app_config.get("skills", []),
+                    runtime_context={
+                        "app_id": str(app_id),
+                        "account_id": str(account.id),
+                    },
+                )
+            )
+
+        if draft_app_config.get("datasets"):
             runtime_flask_app = flask_app
             if runtime_flask_app is None and has_app_context():
                 runtime_flask_app = current_app._get_current_object()
             if runtime_flask_app is None:
                 raise FailException("构建知识库检索工具失败: 缺少 Flask application context")
-            dataset_retrieval = self.retrieval_service.create_langchain_tool_from_search(
+            dataset_retrieval = retrieval_service.create_langchain_tool_from_search(
                 flask_app=runtime_flask_app,
-                dataset_ids=[dataset["id"] for dataset in draft_app_config["datasets"]],
+                dataset_ids=[dataset["id"] for dataset in draft_app_config.get("datasets", [])],
                 account_id=account.id,
                 retrieval_source=RetrievalSource.APP.value,
-                **draft_app_config["retrieval_config"],
+                **draft_app_config.get("retrieval_config", {}),
             )
             tools.append(dataset_retrieval)
 
-        if draft_app_config["workflows"]:
-            workflow_tools = self.app_config_service.get_langchain_tools_by_workflow_ids(
-                [workflow["id"] for workflow in draft_app_config["workflows"]]
+        if draft_app_config.get("workflows"):
+            workflow_tools = app_config_service.get_langchain_tools_by_workflow_ids(
+                [workflow["id"] for workflow in draft_app_config.get("workflows", [])]
             )
             tools.extend(workflow_tools)
 
@@ -746,16 +1016,47 @@ class AppService(BaseService):
         account: Account,
         draft_app_config: dict[str, Any],
         tools: list[Any],
-    ) -> FunctionCallAgent | ReACTAgent:
-        """根据运行时配置创建Agent实例"""
-        agent_class = FunctionCallAgent if ModelFeature.TOOL_CALL.value in llm.features else ReACTAgent
+        enable_deep_thinking: bool = False,
+        flask_app: Flask | None = None,
+        invoke_from: InvokeFrom = InvokeFrom.DEBUGGER.value,
+    ) -> FunctionCallAgent | ReACTAgent | DeepThinkingAgent:
+        """根据运行时配置创建Agent实例
+
+        enable_deep_thinking=True 时选择 DeepThinkingAgent，
+        否则按模型能力选择 FunctionCallAgent 或 ReACTAgent。
+        """
+        if enable_deep_thinking:
+            agent_class = DeepThinkingAgent
+        else:
+            agent_class = FunctionCallAgent if ModelFeature.TOOL_CALL.value in llm.features else ReACTAgent
+
+        skill_prompt_appendix = cls._build_skill_prompt_appendix(draft_app_config.get("skills", []))
+        mcp_prompt_appendix = cls._build_mcp_prompt_appendix(draft_app_config.get("mcp_bindings", []))
+        mcp_snapshot_prompt_appendix = cls._build_mcp_snapshot_prompt_appendix(
+            draft_app_config.get("mcp_tool_snapshots", [])
+        )
+        runtime_mcp_tools_prompt_appendix = cls._build_runtime_mcp_tools_prompt_appendix(tools)
+        preset_prompt = draft_app_config["preset_prompt"]
+        prompt_parts = [preset_prompt.strip()]
+        if skill_prompt_appendix:
+            prompt_parts.append(skill_prompt_appendix.strip())
+        if mcp_prompt_appendix:
+            prompt_parts.append(mcp_prompt_appendix.strip())
+        if mcp_snapshot_prompt_appendix:
+            prompt_parts.append(mcp_snapshot_prompt_appendix.strip())
+        if runtime_mcp_tools_prompt_appendix:
+            prompt_parts.append(runtime_mcp_tools_prompt_appendix.strip())
+        preset_prompt = "\n\n".join(part for part in prompt_parts if part)
+
         return agent_class(
             llm=llm,
             agent_config=AgentConfig(
                 user_id=account.id,
-                invoke_from=InvokeFrom.DEBUGGER.value,
-                preset_prompt=draft_app_config["preset_prompt"],
+                invoke_from=invoke_from,
+                preset_prompt=preset_prompt,
                 enable_long_term_memory=draft_app_config["long_term_memory"]["enable"],
+                enable_deep_thinking=enable_deep_thinking,
+                runtime_flask_app=flask_app,
                 tools=tools,
                 review_config=draft_app_config["review_config"],
             ),
@@ -860,10 +1161,19 @@ class AppService(BaseService):
         conversation_id: str = "",
         message_id: str = "",
         agent_thoughts: dict[str, Any] | None = None,
+        enable_deep_thinking: bool = False,
+        flask_app: Flask | None = None,
     ) -> Generator[str, None, None]:
         """统一流式执行应用Agent并输出事件"""
-        tools = self._build_runtime_tools(app_id, account, draft_app_config)
-        agent = self._create_runtime_agent(llm, account, draft_app_config, tools)
+        tools = self._build_runtime_tools(app_id, account, draft_app_config, flask_app=flask_app)
+        agent = self._create_runtime_agent(
+            llm,
+            account,
+            draft_app_config,
+            tools,
+            enable_deep_thinking,
+            flask_app=flask_app,
+        )
         agent_thoughts = agent_thoughts if agent_thoughts is not None else {}
 
         for agent_thought in agent.stream({
@@ -895,11 +1205,15 @@ class AppService(BaseService):
                 else:
                     agent_thoughts[event_id] = agent_thought
 
+            usage_summary = summarize_agent_thoughts(agent_thoughts.values())
             data = {
                 **agent_thought.model_dump(include={
                     "event", "thought", "observation", "tool", "tool_input", "answer",
                     "total_token_count", "total_price", "latency",
                 }),
+                "aggregate_total_token_count": usage_summary.total_token_count,
+                "aggregate_total_price": usage_summary.total_price,
+                "aggregate_latency": usage_summary.latency,
                 "id": event_id,
                 "conversation_id": conversation_id,
                 "message_id": message_id,
@@ -925,7 +1239,20 @@ class AppService(BaseService):
             sync_active=True,
         )
 
-        # 4.新建一条消息记录
+        # 4.在落库前解析运行时模型能力，避免带图请求被静默降级
+        if hasattr(self.language_model_service, "resolve_runtime_language_model"):
+            model_resolution = self.language_model_service.resolve_runtime_language_model(
+                draft_app_config.get("model_config", {}),
+                image_urls=req.image_urls.data,
+                entrypoint=LanguageModelService.ENTRYPOINT_DEBUGGER,
+            )
+            llm = model_resolution.llm
+            draft_app_config["capabilities"] = model_resolution.capabilities
+        else:
+            model_resolution = None
+            llm = self.language_model_service.load_language_model(draft_app_config.get("model_config", {}))
+
+        # 5.新建一条消息记录
         message = self.create(
             Message,
             app_id=app_id,
@@ -936,9 +1263,6 @@ class AppService(BaseService):
             image_urls=req.image_urls.data,
             status=MessageStatus.NORMAL.value,
         )
-
-        # 5.从语言模型管理器中加载大语言模型
-        llm = self.language_model_service.load_language_model(draft_app_config.get("model_config", {}))
 
         # 6.实例化TokenBufferMemory用于提取短期记忆
         token_buffer_memory = TokenBufferMemory(
@@ -951,6 +1275,7 @@ class AppService(BaseService):
         )
 
         agent_thoughts = {}
+        runtime_flask_app = current_app._get_current_object() if has_app_context() else None
         yield from self._stream_agent_events(
             app_id=app_id,
             account=account,
@@ -963,6 +1288,8 @@ class AppService(BaseService):
             conversation_id=str(debug_conversation.id),
             message_id=str(message.id),
             agent_thoughts=agent_thoughts,
+            enable_deep_thinking=bool(req.enable_deep_thinking.data),
+            flask_app=runtime_flask_app,
         )
 
         # 17.将消息以及推理过程添加到数据库
@@ -1009,6 +1336,7 @@ class AppService(BaseService):
             long_term_memory=long_term_memory,
             conversation_id=req.lane_id.data.strip() if req.lane_id.data else str(uuid4()),
             message_id=str(uuid4()),
+            flask_app=current_app._get_current_object() if has_app_context() else None,
         )
 
     def stop_debug_chat(self, app_id: UUID, task_id: UUID, account: Account) -> None:
@@ -1154,7 +1482,7 @@ class AppService(BaseService):
         # 1.校验上传的草稿配置中对应的字段，至少拥有一个可以更新的配置
         acceptable_fields = [
             "model_config", "dialog_round", "preset_prompt",
-            "tools", "workflows", "datasets", "retrieval_config",
+            "tools", "mcp_bindings", "mcp_tool_snapshots", "skills", "workflows", "datasets", "retrieval_config",
             "long_term_memory", "opening_statement", "opening_questions",
             "speech_to_text", "text_to_speech", "suggested_after_answer", "review_config",
         ]
@@ -1335,7 +1663,143 @@ class AppService(BaseService):
             workflow_sets = set([str(workflow_record.id) for workflow_record in workflow_records])
             draft_app_config["workflows"] = [workflow_id for workflow_id in workflows if workflow_id in workflow_sets]
 
-        # 8.校验datasets知识库列表
+        # 8.校验MCP绑定配置
+        if "mcp_bindings" in draft_app_config:
+            mcp_bindings = draft_app_config["mcp_bindings"]
+
+            if not isinstance(mcp_bindings, list):
+                raise ValidateErrorException("MCP绑定列表参数格式错误")
+            if len(mcp_bindings) > 5:
+                raise ValidateErrorException("Agent绑定的MCP数量不能超过5个")
+
+            validate_mcp_bindings = []
+            seen_binding_targets: set[str] = set()
+            for binding in mcp_bindings:
+                if not binding or not isinstance(binding, dict):
+                    raise ValidateErrorException("MCP绑定参数出错")
+
+                allowed_keys = {
+                    "name", "description", "transport", "url", "enabled",
+                    "headers", "tool_names", "timeout_seconds", "command",
+                    "args", "env", "provider_key", "source_type",
+                    "source_key", "source_url", "label", "icon", "category",
+                }
+                if set(binding.keys()) - allowed_keys:
+                    raise ValidateErrorException("MCP绑定参数出错")
+
+                name = str(binding.get("name", "")).strip()
+                description = str(binding.get("description", "")).strip()
+                transport = str(binding.get("transport", "streamable_http")).strip().lower() or "streamable_http"
+                url = str(binding.get("url", "")).strip()
+                command = str(binding.get("command", "")).strip()
+                enabled = binding.get("enabled", True)
+                headers = binding.get("headers", [])
+                tool_names = binding.get("tool_names", [])
+                timeout_seconds = binding.get("timeout_seconds", 30)
+                args = binding.get("args", [])
+                env = binding.get("env", {})
+                provider_key = str(binding.get("provider_key", "")).strip()
+                source_type = str(binding.get("source_type", "")).strip()
+                source_key = str(binding.get("source_key", "")).strip()
+                source_url = str(binding.get("source_url", "")).strip()
+                label = str(binding.get("label", "")).strip()
+                icon = str(binding.get("icon", "")).strip()
+                category = str(binding.get("category", "")).strip()
+
+                if not name or not isinstance(name, str):
+                    raise ValidateErrorException("MCP绑定名称不能为空")
+                if not isinstance(enabled, bool):
+                    raise ValidateErrorException("MCP绑定启用状态格式错误")
+
+                if transport in {"http", "sse", "streamable_http", "streamable-http"}:
+                    if not url:
+                        raise ValidateErrorException("MCP绑定URL不能为空")
+                elif transport == "stdio":
+                    if not command:
+                        raise ValidateErrorException("MCP绑定命令不能为空")
+                else:
+                    raise ValidateErrorException("MCP transport格式错误")
+
+                if not isinstance(headers, list):
+                    raise ValidateErrorException("MCP headers格式错误")
+                if not isinstance(tool_names, list):
+                    raise ValidateErrorException("MCP tool_names格式错误")
+                if not isinstance(args, list):
+                    raise ValidateErrorException("MCP args格式错误")
+                if not isinstance(env, dict):
+                    raise ValidateErrorException("MCP env格式错误")
+                if timeout_seconds is not None and (
+                    not isinstance(timeout_seconds, int)
+                    or isinstance(timeout_seconds, bool)
+                    or timeout_seconds <= 0
+                ):
+                    raise ValidateErrorException("MCP timeout_seconds格式错误")
+
+                normalized_headers = []
+                for header in headers:
+                    if not isinstance(header, dict):
+                        raise ValidateErrorException("MCP headers格式错误")
+                    if not str(header.get("key", "")).strip():
+                        raise ValidateErrorException("MCP headers格式错误")
+                    normalized_headers.append({
+                        "key": str(header.get("key", "")).strip(),
+                        "value": str(header.get("value", "")).strip(),
+                    })
+
+                normalized_tool_names = []
+                for tool_name in tool_names:
+                    normalized_tool_name = str(tool_name).strip()
+                    if not normalized_tool_name:
+                        continue
+                    normalized_tool_names.append(normalized_tool_name)
+
+                normalized_args = [str(arg).strip() for arg in args if str(arg).strip()]
+                normalized_env = {
+                    str(key).strip(): str(value).strip()
+                    for key, value in env.items()
+                    if str(key).strip()
+                }
+
+                binding_identity = provider_key or f"{transport}:{url or command}:{name}"
+                if binding_identity in seen_binding_targets:
+                    raise ValidateErrorException("MCP绑定存在重复")
+                seen_binding_targets.add(binding_identity)
+
+                validate_mcp_bindings.append({
+                    "name": name,
+                    "description": description,
+                    "transport": transport,
+                    "url": url,
+                    "command": command,
+                    "enabled": enabled,
+                    "headers": normalized_headers,
+                    "tool_names": normalized_tool_names,
+                    "timeout_seconds": timeout_seconds or 30,
+                    "args": normalized_args,
+                    "env": normalized_env,
+                    "provider_key": provider_key,
+                    "source_type": source_type,
+                    "source_key": source_key,
+                    "source_url": source_url,
+                    "label": label,
+                    "icon": icon,
+                    "category": category,
+                })
+
+            draft_app_config["mcp_bindings"] = validate_mcp_bindings
+
+        # 9.校验skills技能列表
+        if "skills" in draft_app_config:
+            skills = draft_app_config["skills"]
+
+            if not isinstance(skills, list):
+                raise ValidateErrorException("绑定技能列表参数格式错误")
+
+            skill_service = self._get_skill_service()
+            _, validate_skills = skill_service.process_and_validate_skill_bindings(skills)
+            draft_app_config["skills"] = validate_skills
+
+        # 10.校验datasets知识库列表
         if "datasets" in draft_app_config:
             datasets = draft_app_config["datasets"]
 
@@ -1362,7 +1826,7 @@ class AppService(BaseService):
             dataset_sets = set([str(dataset_record.id) for dataset_record in dataset_records])
             draft_app_config["datasets"] = [dataset_id for dataset_id in datasets if dataset_id in dataset_sets]
 
-        # 9.校验retrieval_config检索配置
+        # 11.校验retrieval_config检索配置
         if "retrieval_config" in draft_app_config:
             retrieval_config = draft_app_config["retrieval_config"]
 
@@ -1382,7 +1846,7 @@ class AppService(BaseService):
             if not isinstance(retrieval_config["score"], float) or not (0 <= retrieval_config["score"] <= 1):
                 raise ValidateErrorException("最小匹配范围为0-1")
 
-        # 10.校验long_term_memory长期记忆配置
+        # 12.校验long_term_memory长期记忆配置
         if "long_term_memory" in draft_app_config:
             long_term_memory = draft_app_config["long_term_memory"]
 
@@ -1396,7 +1860,7 @@ class AppService(BaseService):
             ):
                 raise ValidateErrorException("长期记忆设置格式错误")
 
-        # 11.校验opening_statement对话开场白
+        # 13.校验opening_statement对话开场白
         if "opening_statement" in draft_app_config:
             opening_statement = draft_app_config["opening_statement"]
 
@@ -1404,7 +1868,7 @@ class AppService(BaseService):
             if not isinstance(opening_statement, str) or len(opening_statement) > 2000:
                 raise ValidateErrorException("对话开场白的长度范围是0-2000")
 
-        # 12.校验opening_questions开场建议问题列表
+        # 14.校验opening_questions开场建议问题列表
         if "opening_questions" in draft_app_config:
             opening_questions = draft_app_config["opening_questions"]
 
@@ -1416,7 +1880,7 @@ class AppService(BaseService):
                 if not isinstance(opening_question, str):
                     raise ValidateErrorException("开场建议问题必须是字符串")
 
-        # 13.校验speech_to_text语音转文本
+        # 15.校验speech_to_text语音转文本
         if "speech_to_text" in draft_app_config:
             speech_to_text = draft_app_config["speech_to_text"]
 
@@ -1430,7 +1894,7 @@ class AppService(BaseService):
             ):
                 raise ValidateErrorException("语音转文本设置格式错误")
 
-        # 14.校验text_to_speech文本转语音设置
+        # 16.校验text_to_speech文本转语音设置
         if "text_to_speech" in draft_app_config:
             text_to_speech = draft_app_config["text_to_speech"]
 
@@ -1446,7 +1910,7 @@ class AppService(BaseService):
             ):
                 raise ValidateErrorException("文本转语音设置格式错误")
 
-        # 15.校验回答后生成建议问题
+        # 17.校验回答后生成建议问题
         if "suggested_after_answer" in draft_app_config:
             suggested_after_answer = draft_app_config["suggested_after_answer"]
 
@@ -1460,7 +1924,7 @@ class AppService(BaseService):
             ):
                 raise ValidateErrorException("回答后建议问题设置格式错误")
 
-        # 16.校验review_config审核配置
+        # 17.校验review_config审核配置
         if "review_config" in draft_app_config:
             review_config = draft_app_config["review_config"]
 
