@@ -120,12 +120,16 @@ export function sendPublicAppA2aMessage(
   appId: string,
   message: string,
   contextId: string = '',
+  imageUrls: string[] = [],
   onData?: Parameters<typeof ssePost>[2],
 ) {
   const req = {
     message: {
       role: 'user',
-      parts: [{ type: 'text', text: message }],
+      parts: [
+        { type: 'text', text: message },
+        ...imageUrls.map((url) => ({ type: 'image', url })),
+      ],
     },
     contextId,
   }
@@ -136,7 +140,7 @@ export function sendPublicAppA2aMessage(
     contextId: string
     message: {
       role: string
-      parts: Array<{ type: string; text: string }>
+      parts: Array<Record<string, unknown>>
     }
     artifacts: unknown[]
     metadata: Record<string, unknown>
@@ -149,7 +153,10 @@ export function getPublicAppA2aConversationMessages(appId: string, conversationI
     conversation_id: string
     query: string
     image_urls: string[]
+    input_parts: Array<Record<string, unknown>>
     answer: string
+    answer_parts: Array<Record<string, unknown>>
+    artifacts: Array<Record<string, unknown>>
     total_token_count: number
     latency: number
     suggested_questions: string[]

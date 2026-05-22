@@ -2,7 +2,9 @@ import os
 import requests
 from langchain_core.tools import Tool
 from pydantic import BaseModel, Field
+from internal.exception import FailException
 from internal.lib.helper import add_attribute
+from .image_persistence import persist_remote_image
 
 
 class QwenImageEdit2509ArgsSchema(BaseModel):
@@ -17,7 +19,7 @@ def _edit_image(prompt: str, image: str, image2: str = "", image3: str = "", **k
     """使用千问Qwen-Image-Edit-2509编辑图像"""
     api_key = os.getenv("SILICONFLOW_API_KEY")
     if not api_key:
-        return "错误：未配置SILICONFLOW_API_KEY环境变量。请在.env文件中添加：SILICONFLOW_API_KEY=your_api_key"
+        raise FailException("未配置SILICONFLOW_API_KEY环境变量")
 
     url = "https://api.siliconflow.cn/v1/images/generations"
 
@@ -66,51 +68,51 @@ def _edit_image(prompt: str, image: str, image2: str = "", image3: str = "", **k
         response.raise_for_status()
 
         data = response.json()
+        if "images" not in data or len(data["images"]) == 0:
+            raise FailException("图像编辑失败：未返回图像数据")
 
-        if "images" in data and len(data["images"]) > 0:
-            result_lines = [
-                f"✓ 成功编辑图像",
-                f"模型: Qwen/Qwen-Image-Edit-2509",
-                f"输入图片数: {image_count}",
-                f"推理步数: {num_inference_steps}",
-                f"CFG系数: {cfg}",
-                ""
-            ]
+        result_lines = [
+            f"✓ 成功编辑图像",
+            f"模型: Qwen/Qwen-Image-Edit-2509",
+            f"输入图片数: {image_count}",
+            f"推理步数: {num_inference_steps}",
+            f"CFG系数: {cfg}",
+            ""
+        ]
 
-            # 添加图片信息
-            for idx, img in enumerate(data["images"], 1):
-                img_url = img.get("url", "")
-                result_lines.append(f"输出图片 {idx}:")
-                result_lines.append(f"  URL: {img_url}")
-                result_lines.append(f"  提示: 图片URL有效期为1小时，请及时下载保存")
-                result_lines.append("")
+        # 添加图片信息
+        for idx, img in enumerate(data["images"], 1):
+            img_url = persist_remote_image(img.get("url", ""), source="qwen-image-edit-2509")
+            result_lines.append(f"输出图片 {idx}:")
+            result_lines.append(f"  URL: {img_url}")
+            result_lines.append("  提示: 图片已持久化保存，可直接访问和引用")
+            result_lines.append("")
 
-            # 添加时间信息
-            if "timings" in data:
-                timings = data["timings"]
-                result_lines.append(f"生成耗时: {timings.get('inference', 'N/A')}秒")
+        # 添加时间信息
+        if "timings" in data:
+            timings = data["timings"]
+            result_lines.append(f"生成耗时: {timings.get('inference', 'N/A')}秒")
 
-            # 添加种子信息
-            if "seed" in data:
-                result_lines.append(f"随机种子: {data['seed']}")
+        # 添加种子信息
+        if "seed" in data:
+            result_lines.append(f"随机种子: {data['seed']}")
 
-            return "\n".join(result_lines)
-        else:
-            return "图像编辑失败：未返回图像数据"
-
-    except requests.exceptions.Timeout:
-        return "图像编辑超时：请求时间过长，请稍后重试"
+        return "\n".join(result_lines)
+    except requests.exceptions.Timeout as e:
+        raise FailException("图像编辑超时：请求时间过长，请稍后重试") from e
     except requests.exceptions.HTTPError as e:
         error_msg = f"HTTP错误 {e.response.status_code}"
         try:
             error_data = e.response.json()
             error_detail = error_data.get("error", {}).get("message", str(e))
             error_msg += f": {error_detail}"
-        except:
+        except Exception:
             error_msg += f": {str(e)}"
-        return f"图像编辑失败：{error_msg}"
+        raise FailException(f"图像编辑失败：{error_msg}") from e
+    except FailException:
+        raise
     except Exception as e:
-        return f"编辑图像时出错：{str(e)}"
+        raise FailException(f"编辑图像时出错：{str(e)}") from e
 
 
 @add_attribute("args_schema", QwenImageEdit2509ArgsSchema)

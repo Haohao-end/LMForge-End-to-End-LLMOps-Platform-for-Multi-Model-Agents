@@ -1,0 +1,17 @@
+source_key: scaffold-exercises
+name: scaffold-exercises
+label: scaffold-exercises
+description: Create exercise directory structures with explainer, problem, and solution variants that pass linting. Use when the user wants to scaffold course or workshop exercises.
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - education
+  - scaffolding
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

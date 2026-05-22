@@ -3,6 +3,7 @@ import {
   type BasePaginatorResponse,
   type BaseResponse,
 } from '@/models/base' // 获取应用信息响应结构
+import type { SkillBinding, SkillBindingRequest } from '@/models/skill'
 
 // 应用版本类型
 export type AppVersion = {
@@ -16,6 +17,43 @@ export type AppVersion = {
   summary: string
   created_at: number
   updated_at: number
+}
+
+export type McpBinding = {
+  name: string
+  description: string
+  transport: string
+  url: string
+  command: string
+  enabled: boolean
+  headers: { key: string; value: string }[]
+  tool_names: string[]
+  timeout_seconds: number
+  args: string[]
+  env: Record<string, string>
+  provider_key?: string
+  source_type?: string
+  source_key?: string
+  source_url?: string
+  label?: string
+  icon?: string
+  category?: string
+}
+
+export type McpToolSnapshot = {
+  binding_identity: string
+  binding_hash: string
+  binding: McpBinding
+  status: string
+  tool_definitions: Record<string, any>[]
+  tool_names: string[]
+  tool_count: number
+  schema_hash: string
+  last_attempt_at: number
+  last_success_at: number | null
+  last_error: string
+  retry_count: number
+  retryable: boolean
 }
 
 // 获取应用信息响应结构
@@ -65,6 +103,25 @@ export type GetAppsWithPageResponse = BasePaginatorResponse<{
 export type GetDraftAppConfigResponse = BaseResponse<{
   id: string
   model_config: { provider: string; model: string; parameters: Record<string, any> }
+  capabilities?: {
+    requested_model: { provider: string; model: string }
+    effective_model: { provider: string; model: string }
+    features: string[]
+    requested_features: string[]
+    image_input: {
+      enabled: boolean
+      via_fallback: boolean
+      policy: string
+      requested_model_supports: boolean
+      effective_model_supports: boolean
+      fallback_model: { provider: string; model: string } | null
+      fallback_model_supports: boolean
+      reason_code: string
+      message: string
+    }
+    image_output: { enabled: boolean; reason_code: string }
+    artifact_output: { enabled: boolean; reason_code: string }
+  }
   dialog_round: number
   preset_prompt: string
   tools: {
@@ -78,6 +135,9 @@ export type GetDraftAppConfigResponse = BaseResponse<{
       params: Record<string, any>
     }
   }[]
+  mcp_bindings: McpBinding[]
+  mcp_tool_snapshots: McpToolSnapshot[]
+  skills: SkillBinding[]
   workflows: { id: string; name: string; icon: string; description: string }[]
   datasets: { id: string; name: string; icon: string; description: string }[]
   retrieval_config: { retrieval_strategy: string; k: number; score: number }
@@ -103,6 +163,8 @@ export type UpdateDraftAppConfigRequest = {
   dialog_round?: number
   preset_prompt?: string
   tools?: { type: string; provider_id: string; tool_id: string; params: Record<string, any> }[]
+  mcp_bindings?: McpBinding[]
+  skills?: SkillBindingRequest[]
   workflows?: string[]
   datasets?: string[]
   retrieval_config?: { retrieval_strategy: string; k: number; score: number }
@@ -138,7 +200,11 @@ export type GetDebugConversationMessagesWithPageResponse = BasePaginatorResponse
   id: string
   conversation_id: string
   query: string
+  image_urls: string[]
+  input_parts: Array<Record<string, any>>
   answer: string
+  answer_parts: Array<Record<string, any>>
+  artifacts: Array<Record<string, any>>
   total_token_count: number
   latency: number
   agent_thoughts: {

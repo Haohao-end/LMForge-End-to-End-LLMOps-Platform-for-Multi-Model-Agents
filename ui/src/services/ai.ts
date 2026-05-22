@@ -29,3 +29,11 @@ export const openapiSchemaAssistantChat = (
 ) => {
   return ssePost(`/ai/openapi-schema-chat`, { body: { question } }, onData)
 }
+
+// MCP Schema 助手流式对话接口
+export const mcpSchemaAssistantChat = (
+  question: string,
+  onData: (event_response: Record<string, any>) => void,
+) => {
+  return ssePost(`/ai/mcp-schema-chat`, { body: { question } }, onData)
+}

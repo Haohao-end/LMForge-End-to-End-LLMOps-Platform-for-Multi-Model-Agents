@@ -1,0 +1,17 @@
+source_key: grill-with-docs
+name: grill-with-docs
+label: 文档质询
+description: 用项目的领域语言和 ADR 严格审视方案，逐个分支追问直到形成共识。Use when the user wants to stress-test a plan against the existing domain model and docs.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - planning
+  - docs
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

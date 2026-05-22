@@ -345,6 +345,7 @@ export const useGetDraftAppConfig = () => {
       draftAppConfigForm.value = {
         dialog_round: data.dialog_round,
         model_config: data.model_config,
+        capabilities: data.capabilities || {},
         preset_prompt: data.preset_prompt,
         long_term_memory: data.long_term_memory,
         opening_statement: data.opening_statement,
@@ -354,6 +355,9 @@ export const useGetDraftAppConfig = () => {
         datasets: data.datasets,
         retrieval_config: data.retrieval_config,
         tools: data.tools,
+        mcp_bindings: data.mcp_bindings || [],
+        mcp_tool_snapshots: data.mcp_tool_snapshots || [],
+        skills: data.skills,
         workflows: data.workflows,
         speech_to_text: data.speech_to_text,
         text_to_speech: data.text_to_speech,
@@ -521,10 +525,11 @@ export const useDebugChat = () => {
     image_urls: string[] = [],
     conversation_id: string = '',
     onData: (event_response: Record<string, any>) => void,
+    enable_deep_thinking: boolean = false,
   ) => {
     try {
       loading.value = true
-      await debugChat(app_id, query, image_urls, conversation_id, onData)
+      await debugChat(app_id, query, image_urls, conversation_id, onData, enable_deep_thinking)
     } finally {
       loading.value = false
     }

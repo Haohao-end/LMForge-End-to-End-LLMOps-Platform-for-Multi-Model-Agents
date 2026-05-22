@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useGetDraftAppConfig } from '@/hooks/use-app'
-import { onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AgentAppAbility from './components/AgentAppAbility.vue'
 import ModelConfig from './components/ModelConfig.vue'
@@ -20,11 +20,33 @@ const props = defineProps({
   },
 })
 const { draftAppConfigForm, loadDraftAppConfig } = useGetDraftAppConfig()
+const isDraftAppConfigRefreshing = ref(false)
+
+const refreshDraftAppConfig = async () => {
+  const appId = String(route.params?.app_id ?? '')
+  if (!appId) return
+
+  try {
+    isDraftAppConfigRefreshing.value = true
+    await loadDraftAppConfig(appId)
+  } finally {
+    isDraftAppConfigRefreshing.value = false
+  }
+}
 
 // 2.页面DOM加载完毕时执行函数
 onMounted(async () => {
-  await loadDraftAppConfig(String(route.params?.app_id))
+  await refreshDraftAppConfig()
 })
+
+watch(
+  () => [draftAppConfigForm.value.model_config?.provider, draftAppConfigForm.value.model_config?.model],
+  async (newValue, oldValue) => {
+    if (isDraftAppConfigRefreshing.value) return
+    if (newValue[0] === oldValue?.[0] && newValue[1] === oldValue?.[1]) return
+    await refreshDraftAppConfig()
+  },
+)
 </script>
 
 <template>
@@ -47,7 +69,11 @@ onMounted(async () => {
               :app_id="String(route.params?.app_id)" />
           </div>
           <!-- 右侧应用能力 -->
-          <agent-app-ability v-model:draft_app_config="draftAppConfigForm" :app_id="String(route.params?.app_id)" />
+          <agent-app-ability
+            v-model:draft_app_config="draftAppConfigForm"
+            :app_id="String(route.params?.app_id)"
+            @reload-draft-app-config="refreshDraftAppConfig"
+          />
         </div>
       </div>
       <!-- 右侧调试与会话 -->
@@ -61,6 +87,7 @@ onMounted(async () => {
           :suggested_after_answer="draftAppConfigForm.suggested_after_answer"
           :opening_questions="draftAppConfigForm.opening_questions"
           :opening_statement="draftAppConfigForm.opening_statement" 
+          :capabilities="draftAppConfigForm.capabilities"
           :text_to_speech="draftAppConfigForm.text_to_speech"
           :app="props.app" 
           :app_id="props.app?.id" />

@@ -1,0 +1,17 @@
+source_key: netlify-deploy
+name: netlify-deploy
+label: netlify-deploy
+description: Deploy web projects to Netlify using the Netlify CLI (`npx netlify`).
+  Use when the user asks to deploy, host, publish, or link a site/repo on Netlify,
+  including preview and production deploys.
+category: 部署
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

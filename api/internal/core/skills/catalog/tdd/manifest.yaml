@@ -1,0 +1,17 @@
+source_key: tdd
+name: tdd
+label: TDD
+description: 以红绿重构为核心的测试驱动开发流程，强调从失败测试开始推进最小变更。Use when the user wants test-driven development or needs a disciplined implementation loop.
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - testing
+  - engineering
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

@@ -2,9 +2,9 @@ import uuid
 from flask_wtf import FlaskForm
 from urllib.parse import urlparse
 from marshmallow import Schema, fields, pre_dump
-from wtforms import StringField, IntegerField
+from wtforms import StringField, IntegerField, BooleanField
 from wtforms.validators import DataRequired, Optional, NumberRange, ValidationError
-from internal.lib.helper import datetime_to_timestamp
+from internal.lib.helper import datetime_to_timestamp, build_input_parts, build_output_payload
 from internal.model import Conversation, Message
 from pkg.paginator import PaginatorReq
 from .schema import ListField
@@ -12,6 +12,7 @@ from .schema import ListField
 
 class AssistantAgentChat(FlaskForm):
     """辅助Agent会话请求结构体"""
+    enable_deep_thinking = BooleanField("enable_deep_thinking", default=False)
     image_urls = ListField("image_urls", default=[])
     conversation_id = StringField("conversation_id", default="", validators=[Optional()])
     query = StringField("query", validators=[
@@ -79,7 +80,10 @@ class GetAssistantAgentMessagesWithPageResp(Schema):
     conversation_id = fields.UUID(dump_default="")
     query = fields.String(dump_default="")
     image_urls = fields.List(fields.String, dump_default=[])
+    input_parts = fields.List(fields.Dict, dump_default=[])
     answer = fields.String(dump_default="")
+    answer_parts = fields.List(fields.Dict, dump_default=[])
+    artifacts = fields.List(fields.Dict, dump_default=[])
     total_token_count = fields.Integer(dump_default=0)
     latency = fields.Float(dump_default=0)
     agent_thoughts = fields.List(fields.Dict, dump_default=[])
@@ -108,13 +112,17 @@ class GetAssistantAgentMessagesWithPageResp(Schema):
             except Exception as e:
                 logging.warning(f"Failed to load agent_thoughts for message {data.id}: {e}")
                 agent_thoughts_list = []
+            output_payload = build_output_payload(data.answer, agent_thoughts_list)
 
             return {
                 "id": data.id,
                 "conversation_id": data.conversation_id,
                 "query": data.query,
                 "image_urls": data.image_urls,
+                "input_parts": build_input_parts(data.query, data.image_urls),
                 "answer": data.answer,
+                "answer_parts": output_payload["answer_parts"],
+                "artifacts": output_payload["artifacts"],
                 "total_token_count": data.total_token_count,
                 "latency": data.latency,
                 "agent_thoughts": agent_thoughts_list,

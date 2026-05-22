@@ -1,0 +1,17 @@
+source_key: qa-only
+name: qa-only
+label: qa-only
+description: Report-only QA testing that finds issues, captures evidence, and writes a structured report without fixing anything. Use when the user wants exploratory or browser-based QA.
+category: 内容处理
+tags:
+  - github
+  - curated
+  - prompt-only
+  - qa
+  - testing
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

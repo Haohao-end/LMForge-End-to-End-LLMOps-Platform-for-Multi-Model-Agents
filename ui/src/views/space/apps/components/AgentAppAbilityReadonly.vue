@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { apiPrefix } from '@/config'
+import { resolveMcpBindingStatus } from './abilities/mcp-status'
 
 // 只读版本的应用能力组件
 const props = defineProps({
@@ -9,6 +10,8 @@ const props = defineProps({
 
 const defaultActivateKeys = [
   'tools',
+  'mcp_bindings',
+  'skills',
   'workflows',
   'datasets',
   'long_term_memory',
@@ -21,6 +24,9 @@ const defaultActivateKeys = [
 
 // 计算各项能力的状态
 const toolsCount = computed(() => props.draft_app_config?.tools?.length || 0)
+const mcpBindingsCount = computed(() => props.draft_app_config?.mcp_bindings?.length || 0)
+const mcpToolSnapshots = computed(() => props.draft_app_config?.mcp_tool_snapshots || [])
+const skillsCount = computed(() => props.draft_app_config?.skills?.length || 0)
 const workflowsCount = computed(() => props.draft_app_config?.workflows?.length || 0)
 const datasetsCount = computed(() => props.draft_app_config?.datasets?.length || 0)
 const longTermMemoryEnabled = computed(() => props.draft_app_config?.long_term_memory?.enable || false)
@@ -30,6 +36,10 @@ const suggestedAfterAnswerEnabled = computed(() => props.draft_app_config?.sugge
 const speechToTextEnabled = computed(() => props.draft_app_config?.speech_to_text?.enable || false)
 const textToSpeechEnabled = computed(() => props.draft_app_config?.text_to_speech?.enable || false)
 const reviewConfigEnabled = computed(() => props.draft_app_config?.review_config?.enable || false)
+
+const getMcpBindingStatus = (binding: Record<string, any>) => {
+  return resolveMcpBindingStatus(binding, mcpToolSnapshots.value)
+}
 
 // 统一处理图标地址，兼容绝对地址、相对地址以及 /api 路径
 const normalizeIconUrl = (icon: string = '') => {
@@ -94,6 +104,72 @@ const normalizeIconUrl = (icon: string = '') => {
             </div>
           </div>
           <div v-else class="text-gray-400 text-sm">未配置扩展插件</div>
+        </a-collapse-item>
+
+        <!-- MCP -->
+        <a-collapse-item key="mcp_bindings" header="MCP" class="app-ability-item">
+          <div v-if="mcpBindingsCount > 0" class="space-y-2">
+            <div
+              v-for="(binding, index) in (props.draft_app_config.mcp_bindings || [])"
+              :key="index"
+              class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+            >
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-700 truncate">
+                  {{ binding.name || '未命名 MCP 绑定' }}
+                </div>
+                <div class="text-xs text-gray-500 truncate">
+                  {{ binding.description || '无描述' }}
+                </div>
+                <div class="text-xs text-gray-400 truncate">
+                  {{ binding.transport || 'streamable_http' }} · {{ binding.url || binding.command || '未配置地址' }}
+                </div>
+              </div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <a-tag :color="getMcpBindingStatus(binding).color" size="small">
+                  {{ getMcpBindingStatus(binding).label }}
+                </a-tag>
+                <a-tooltip
+                  v-if="getMcpBindingStatus(binding).show_help && getMcpBindingStatus(binding).tooltip"
+                  :content="getMcpBindingStatus(binding).tooltip"
+                  position="top"
+                >
+                  <icon-question-circle class="text-gray-400 text-sm" />
+                </a-tooltip>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-gray-400 text-sm">未配置 MCP</div>
+        </a-collapse-item>
+
+        <!-- Skills -->
+        <a-collapse-item key="skills" header="Skills" class="app-ability-item">
+          <div v-if="skillsCount > 0" class="space-y-2">
+            <div
+              v-for="(skill, index) in props.draft_app_config.skills"
+              :key="index"
+              class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+            >
+              <a-avatar :size="32" shape="square" class="rounded-lg flex-shrink-0">
+                <img v-if="skill.icon" :src="normalizeIconUrl(skill.icon)" />
+                <icon-storage v-else />
+              </a-avatar>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-gray-700 truncate">
+                  {{ skill.label || skill.name || '未命名技能' }}
+                </div>
+                <div class="text-xs text-gray-500 truncate">
+                  {{ skill.source_key || skill.name }}
+                  <template v-if="skill.tool_count > 0"> · {{ skill.tool_count }} 个工具</template>
+                  <template v-if="skill.executor_type"> · {{ skill.executor_type }}</template>
+                </div>
+                <div class="text-xs text-gray-400 truncate">
+                  {{ skill.readme || skill.description || '无描述' }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-gray-400 text-sm">未配置 Skills</div>
         </a-collapse-item>
 
         <!-- 工作流 -->

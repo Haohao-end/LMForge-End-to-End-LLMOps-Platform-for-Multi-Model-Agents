@@ -1,0 +1,17 @@
+source_key: triage
+name: triage
+label: triage
+description: Issue triage state machine for incoming work items. Use when the user wants to sort, label, and route issues through needs-triage, needs-info, ready-for-agent, ready-for-human, or wontfix.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - issues
+  - triage
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

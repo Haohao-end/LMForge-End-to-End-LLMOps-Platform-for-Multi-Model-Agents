@@ -1,0 +1,17 @@
+source_key: migrate-to-codex
+name: migrate-to-codex
+label: migrate-to-codex
+description: Migrate supported instruction files, skills, agents, and MCP config into Codex project and global files. Use when the user wants to convert a repository's agent setup to Codex.
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - codex
+  - migration
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

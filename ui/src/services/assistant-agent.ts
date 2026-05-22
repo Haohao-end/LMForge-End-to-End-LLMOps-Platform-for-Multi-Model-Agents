@@ -1,6 +1,7 @@
 import { get, post, ssePost } from '@/utils/request'
 import type { BaseResponse } from '@/models/base'
 import type {
+  GetAssistantAgentCapabilitiesResponse,
   GetAssistantAgentConversationsResponse,
   GetAssistantAgentMessagesWithPageRequest,
   GetAssistantAgentMessagesWithPageResponse,
@@ -12,8 +13,13 @@ export const assistantAgentChat = (
   image_urls: string[] = [],
   conversation_id: string = '',
   onData: (event_response: Record<string, any>) => void,
+  enable_deep_thinking: boolean = false,
 ) => {
-  return ssePost(`/assistant-agent/chat`, { body: { query, image_urls, conversation_id } }, onData)
+  return ssePost(
+    `/assistant-agent/chat`,
+    { body: { query, image_urls, conversation_id, enable_deep_thinking } },
+    onData,
+  )
 }
 
 // 生成辅助Agent首页个性化介绍
@@ -22,6 +28,11 @@ export const assistantAgentGenerateIntroduction = (
   signal?: AbortSignal,
 ) => {
   return ssePost(`/assistant-agent/introduction`, { body: {}, signal }, onData)
+}
+
+// 获取辅助 Agent 当前能力
+export const getAssistantAgentCapabilities = () => {
+  return get<GetAssistantAgentCapabilitiesResponse>(`/assistant-agent/capabilities`)
 }
 
 // 停止与辅助Agent进行对话

@@ -1,0 +1,16 @@
+source_key: frontend-design
+name: frontend-design
+label: 前端设计
+description: 用于需要高完成度、高审美和明确视觉风格的前端界面设计与实现任务。
+category: 设计
+tags:
+  - github
+  - experimental
+  - prompt-only
+  - frontend
+  - design
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

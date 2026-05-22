@@ -167,14 +167,25 @@ const chatComposerStub = defineComponent({
   name: 'ChatComposer',
   props: {
     modelValue: { type: String, default: '' },
+    deepThinkingEnabled: { type: Boolean, default: false },
+    showUploadButton: { type: Boolean, default: false },
+    showImagePreviews: { type: Boolean, default: false },
+    uploadDisabled: { type: Boolean, default: false },
   },
-  emits: ['update:modelValue', 'input', 'submit'],
+  emits: ['update:modelValue', 'update:deepThinkingEnabled', 'input', 'submit'],
   template: `
     <div>
       <textarea
         :value="modelValue"
         @input="$emit('update:modelValue', $event.target.value); $emit('input', $event)"
       />
+      <button
+        type="button"
+        aria-label="切换深度思考"
+        @click="$emit('update:deepThinkingEnabled', !deepThinkingEnabled)"
+      >
+        深度思考
+      </button>
       <button type="button" aria-label="发送消息" @click="$emit('submit')">发送消息</button>
     </div>
   `,
@@ -234,6 +245,11 @@ describe('web-app chat submit failure', () => {
 
     await flushPromises()
 
+    const composer = wrapper.getComponent(chatComposerStub)
+    expect(composer.props('showUploadButton')).toBe(true)
+    expect(composer.props('showImagePreviews')).toBe(true)
+    expect(composer.props('uploadDisabled')).toBe(false)
+
     const textarea = wrapper.find('textarea')
     expect(textarea.exists()).toBe(true)
     await textarea.setValue('你好')
@@ -249,6 +265,7 @@ describe('web-app chat submit failure', () => {
         query: '你好',
         conversation_id: '',
         image_urls: [],
+        enable_deep_thinking: false,
       }),
       expect.any(Function),
     )
@@ -256,5 +273,58 @@ describe('web-app chat submit failure', () => {
     expect(mocks.state.query?.value).toBe('你好')
     expect(mocks.adjustQueryTextareaHeight).toHaveBeenCalled()
     expect(mocks.state.unpinnedConversations?.value).toEqual([])
+  })
+
+  it('passes enable_deep_thinking when toggle is enabled', async () => {
+    mocks.handleWebAppChat.mockResolvedValue(undefined)
+
+    const wrapper = shallowMount(WebAppsIndexView, {
+      global: {
+        stubs: {
+          AiMessage: true,
+          HumanMessage: true,
+          ChatConversationSkeleton: true,
+          UpdateNameModal: true,
+          DynamicScroller: true,
+          DynamicScrollerItem: true,
+          'a-button': buttonStub,
+          'chat-composer': chatComposerStub,
+          'a-avatar': true,
+          'a-empty': true,
+          'a-dropdown': true,
+          'a-doption': true,
+          'a-skeleton': true,
+          'a-skeleton-line': true,
+          'a-tooltip': true,
+          'icon-edit': true,
+          'icon-message': true,
+          'icon-more': true,
+          'icon-plus': true,
+          'icon-voice': true,
+          'icon-pause': true,
+          'icon-send': true,
+          'icon-loading': true,
+          'icon-close': true,
+          'icon-empty': true,
+          'icon-poweroff': true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    await wrapper.find('textarea').setValue('生成附件')
+    await wrapper.find('button[aria-label="切换深度思考"]').trigger('click')
+    await wrapper.find('button[aria-label="发送消息"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.handleWebAppChat).toHaveBeenCalledWith(
+      'token-1',
+      expect.objectContaining({
+        query: '生成附件',
+        enable_deep_thinking: true,
+      }),
+      expect.any(Function),
+    )
   })
 })

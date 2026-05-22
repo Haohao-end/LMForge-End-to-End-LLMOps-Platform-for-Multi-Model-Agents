@@ -149,6 +149,10 @@ export const QueueEvent = {
   agentMessage: 'agent_message',
   agentAction: 'agent_action',
   datasetRetrieval: 'dataset_retrieval',
+  deepThinking: 'deep_thinking',       // 深度思考规划事件
+  deepStep: 'deep_step',
+  deepComplete: 'deep_complete',
+  deepArtifactCreated: 'deep_artifact_created',
   agentEnd: 'agent_end',
   stop: 'stop',
   error: 'error',

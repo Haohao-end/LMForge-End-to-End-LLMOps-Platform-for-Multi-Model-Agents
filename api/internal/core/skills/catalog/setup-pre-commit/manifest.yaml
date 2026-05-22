@@ -1,0 +1,17 @@
+source_key: setup-pre-commit
+name: setup-pre-commit
+label: setup-pre-commit
+description: Set up repository pre-commit hooks and related local quality gates. Use when the user wants Husky, lint-staged, or pre-commit automation configured.
+category: 开发
+tags:
+  - github
+  - curated
+  - prompt-only
+  - quality
+  - hooks
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

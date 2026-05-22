@@ -27,6 +27,8 @@ from .platform_handler import PlatformHandler
 from .wechat_handler import WechatHandler
 from .public_app_handler import PublicAppHandler
 from .public_workflow_handler import PublicWorkflowHandler
+from .mcp_handler import McpHandler
+from .skill_handler import SkillHandler
 
 
 __all__ = [
@@ -56,6 +58,8 @@ __all__ = [
     "WechatHandler",
     "PublicAppHandler",
     "PublicWorkflowHandler",
+    "McpHandler",
+    "SkillHandler",
     "HomeHandler",
     "LikeHandler",
     "NotificationHandler",

@@ -9,6 +9,8 @@ from .upload_file import UploadFile
 from .workflow import Workflow, WorkflowResult, WorkflowLike, WorkflowFavorite
 from .platform import WechatConfig, WechatEndUser, WechatMessage
 from .tag import Tag, AppTag, WorkflowTag
+from .mcp import McpProvider
+from .skill import SkillPackage, SkillPackageVersion
 
 __all__ = [
     "App", "AppDatasetJoin", "AppConfig", "AppConfigVersion", "AppLike", "AppFavorite",
@@ -21,4 +23,6 @@ __all__ = [
     "Workflow", "WorkflowResult", "WorkflowLike", "WorkflowFavorite",
     "WechatConfig", "WechatEndUser", "WechatMessage",
     "Tag", "AppTag", "WorkflowTag",
+    "McpProvider",
+    "SkillPackage", "SkillPackageVersion",
 ]

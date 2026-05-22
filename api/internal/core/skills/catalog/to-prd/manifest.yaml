@@ -1,0 +1,17 @@
+source_key: to-prd
+name: to-prd
+label: 转成 PRD
+description: 将当前对话和代码库理解整理成 PRD，并发布到项目 issue tracker。Use when the user wants a PRD from current context.
+category: 协作
+tags:
+  - github
+  - curated
+  - prompt-only
+  - prd
+  - planning
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

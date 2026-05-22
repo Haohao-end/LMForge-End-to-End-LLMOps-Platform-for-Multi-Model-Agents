@@ -3,6 +3,7 @@ import {
   assistantAgentChat,
   assistantAgentGenerateIntroduction,
   deleteAssistantAgentConversation,
+  getAssistantAgentCapabilities,
   getAssistantAgentConversations,
   getAssistantAgentMessagesWithPage,
   stopAssistantAgentChat,
@@ -22,10 +23,17 @@ export const useAssistantAgentChat = () => {
     image_urls: string[] = [],
     conversation_id: string = '',
     onData: (event_response: Record<string, any>) => void,
+    enable_deep_thinking: boolean = false,
   ) => {
     try {
       loading.value = true
-      await assistantAgentChat(query, image_urls, conversation_id, onData)
+      await assistantAgentChat(
+        query,
+        image_urls,
+        conversation_id,
+        onData,
+        enable_deep_thinking,
+      )
     } finally {
       loading.value = false
     }
@@ -52,6 +60,23 @@ export const useGenerateAssistantAgentIntroduction = () => {
   }
 
   return { loading, handleGenerateAssistantAgentIntroduction }
+}
+
+export const useGetAssistantAgentCapabilities = () => {
+  const loading = ref(false)
+  const capabilities = ref<Record<string, any>>({})
+
+  const loadAssistantAgentCapabilities = async () => {
+    try {
+      loading.value = true
+      const resp = await getAssistantAgentCapabilities()
+      capabilities.value = resp.data?.capabilities || {}
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return { loading, capabilities, loadAssistantAgentCapabilities }
 }
 
 export const useStopAssistantAgentChat = () => {

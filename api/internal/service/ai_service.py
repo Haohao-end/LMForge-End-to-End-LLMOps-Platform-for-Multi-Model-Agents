@@ -9,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from internal.core.language_model.providers.deepseek.chat import Chat
 from internal.entity.ai_entity import (
     OPTIMIZE_PROMPT_TEMPLATE,
+    MCP_SCHEMA_ASSISTANT_PROMPT,
     OPENAPI_SCHEMA_ASSISTANT_PROMPT,
     PYTHON_CODE_ASSISTANT_PROMPT,
 )
@@ -150,5 +151,31 @@ class AIService(BaseService):
                 continue
 
             # 5.组装 SSE 响应数据
+            data = {"content": chunk}
+            yield f"event: message\ndata: {json.dumps(data)}\n\n"
+
+    @classmethod
+    def mcp_schema_assistant_chat(cls, question: str) -> Generator[str, None, None]:
+        """MCP Schema 助手聊天 - 流式输出"""
+        system_prompt = MCP_SCHEMA_ASSISTANT_PROMPT.replace("{", "{{").replace("}", "}}")
+
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{question}")
+        ])
+
+        llm = Chat(
+            model="deepseek-chat",
+            temperature=0.2,
+            features=[ModelFeature.TOOL_CALL.value],
+            metadata={},
+        )
+
+        chain = prompt_template | llm | StrOutputParser()
+
+        for chunk in chain.stream({"question": question}):
+            if not chunk:
+                continue
+
             data = {"content": chunk}
             yield f"event: message\ndata: {json.dumps(data)}\n\n"

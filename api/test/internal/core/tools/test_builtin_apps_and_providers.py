@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from internal.exception import FailException
 from internal.core.tools.builtin_tools.providers.dalle.dalle3 import Dalle3ArgsSchema, dalle3
 from internal.core.tools.builtin_tools.providers.duckduckgo.duckduckgo_search import DDGInput, duckduckgo_search
 from internal.core.tools.builtin_tools.providers.gaode.gaode_weather import GaodeWeatherTool, gaode_weather
@@ -11,6 +12,7 @@ from internal.core.tools.builtin_tools.providers.google.google_serper import (
     GoogleSerperArgsSchema,
     google_serper,
 )
+from internal.core.tools.builtin_tools.providers.qwen.qwen_image_text_to_image import _generate_image
 from internal.core.tools.builtin_tools.providers.time.current_time import CurrentTimeTool, current_time
 from internal.core.tools.builtin_tools.providers.wikipedia.wikipedia_search import wikipedia_search
 
@@ -55,10 +57,12 @@ def test_gaode_weather_tool_should_cover_success_failure_and_exception(monkeypat
     success = tool._run(city="广州")
     assert json.loads(success)["info"] == "OK"
     assert len(success_session.calls) == 2
+    assert success_session.calls[0]["timeout"] == 10
+    assert success_session.calls[1]["timeout"] == 10
 
     failure_session = _FakeSession([_FakeResponse({"info": "FAIL"})])
     monkeypatch.setattr(gaode_module.requests, "session", lambda: failure_session)
-    assert tool._run(city="深圳") == "获取深圳天气预报信息失败"
+    assert tool._run(city="深圳") == "获取深圳天气预报信息失败：行政区查询失败"
 
     # 覆盖 city 成功但 weather 接口返回非 OK 的分支。
     weather_fail_session = _FakeSession(
@@ -68,11 +72,29 @@ def test_gaode_weather_tool_should_cover_success_failure_and_exception(monkeypat
         ]
     )
     monkeypatch.setattr(gaode_module.requests, "session", lambda: weather_fail_session)
-    assert tool._run(city="深圳") == "获取深圳天气预报信息失败"
+    assert tool._run(city="深圳") == "获取深圳天气预报信息失败：天气接口返回异常"
 
     exception_session = _FakeSession([_FakeResponse({}, should_raise=True)])
     monkeypatch.setattr(gaode_module.requests, "session", lambda: exception_session)
-    assert tool._run(city="北京") == "获取北京天气预报信息失败"
+    assert tool._run(city="北京") == "获取北京天气预报信息失败：RuntimeError"
+
+
+def test_gaode_weather_tool_should_cover_timeout_and_missing_city(monkeypatch):
+    gaode_module = importlib.import_module("internal.core.tools.builtin_tools.providers.gaode.gaode_weather")
+    tool = GaodeWeatherTool()
+
+    assert tool._run(city="") == "获取天气预报信息失败：缺少城市参数"
+
+    class _TimeoutSession:
+        def request(self, **kwargs):
+            raise gaode_module.requests.Timeout("timeout")
+
+        def close(self):
+            return None
+
+    monkeypatch.setenv("GAODE_API_KEY", "token")
+    monkeypatch.setattr(gaode_module.requests, "session", lambda: _TimeoutSession())
+    assert tool._run(city="上海") == "获取上海天气预报信息失败：请求超时"
 
 
 def test_current_time_tool_and_factory_should_work():
@@ -141,3 +163,62 @@ def test_builtin_tool_factories_should_construct_wrapped_tools(monkeypatch):
 
 def test_gaode_weather_factory_should_return_tool_instance():
     assert isinstance(gaode_weather(), GaodeWeatherTool)
+
+
+def test_qwen_image_tool_should_persist_generated_image_url(monkeypatch):
+    qwen_module = importlib.import_module("internal.core.tools.builtin_tools.providers.qwen.qwen_image_text_to_image")
+    captured = {}
+
+    class _PostResponse:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {
+                "images": [{"url": "https://temporary.example.com/output.png?token=1"}],
+                "timings": {"inference": 12},
+                "seed": 7,
+            }
+
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "token")
+    monkeypatch.setattr(qwen_module.requests, "post", lambda *args, **kwargs: _PostResponse())
+    monkeypatch.setattr(
+        qwen_module,
+        "persist_remote_image",
+        lambda image_url, source: captured.update({"url": image_url, "source": source}) or "https://cos.example.com/generated.png",
+    )
+
+    result = _generate_image("上海初夏旅行穿搭")
+
+    assert captured["url"].startswith("https://temporary.example.com/output.png")
+    assert captured["source"] == "qwen-image"
+    assert "https://cos.example.com/generated.png" in result
+    assert "图片已持久化保存" in result
+
+
+def test_qwen_image_tool_should_raise_when_persistence_failed(monkeypatch):
+    qwen_module = importlib.import_module("internal.core.tools.builtin_tools.providers.qwen.qwen_image_text_to_image")
+
+    class _PostResponse:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {
+                "images": [{"url": "https://temporary.example.com/output.png?token=1"}],
+            }
+
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "token")
+    monkeypatch.setattr(qwen_module.requests, "post", lambda *args, **kwargs: _PostResponse())
+    monkeypatch.setattr(
+        qwen_module,
+        "persist_remote_image",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("cos down")),
+    )
+
+    with pytest.raises(FailException, match="生成图像时出错|图像生成失败"):
+        _generate_image("上海初夏旅行穿搭")

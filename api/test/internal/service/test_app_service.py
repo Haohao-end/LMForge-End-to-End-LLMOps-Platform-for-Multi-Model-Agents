@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import json
 import random
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -199,6 +200,8 @@ class TestAppService:
         assert app_record.icon == "https://cos.example.com/icons/demo.png"
         assert draft_config.preset_prompt == "你是一个专业助手"
         assert draft_config.tools == AppService.AUTO_CREATE_DEFAULT_TOOLS
+        assert draft_config.tools[2]["provider_id"] == "qwen"
+        assert draft_config.tools[2]["tool_id"] == "qwen_image_text_to_image"
         assert draft_config.opening_statement == "负责回答问题"
         assert draft_config.opening_questions == ["你好", "问题2", "问题3"]
         assert draft_config.speech_to_text["enable"] is True
@@ -659,6 +662,205 @@ class TestAppService:
 
         assert result["app_id"] == app.id
 
+    def test_get_draft_app_config_should_attach_runtime_capabilities(self, monkeypatch):
+        service = _build_service()
+        app = SimpleNamespace(id=uuid4())
+        draft_config = {
+            "app_id": app.id,
+            "preset_prompt": "prompt",
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+        }
+        capabilities = {"image_input": {"enabled": True}}
+        monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
+        service.app_config_service = SimpleNamespace(
+            get_draft_app_config=lambda target_app: draft_config
+        )
+        service.language_model_service = SimpleNamespace(
+            describe_runtime_capabilities=lambda model_config, entrypoint: capabilities
+            if model_config == draft_config["model_config"] and entrypoint == "debugger"
+            else None
+        )
+
+        result = service.get_draft_app_config(app.id, SimpleNamespace(id=uuid4()))
+
+        assert result["capabilities"] == capabilities
+
+    def test_build_runtime_tools_for_config_should_merge_mcp_bindings(self):
+        service = _build_service()
+        service.app_config_service = SimpleNamespace(
+            get_langchain_tools_by_tools_config=lambda tools: ["tool-a"] if tools == [{"type": "builtin_tool"}] else [],
+            get_langchain_tools_by_mcp_bindings=lambda mcp_bindings, mcp_tool_snapshots=None: (
+                ["mcp-a"] if mcp_bindings == [{"name": "mcp"}] and mcp_tool_snapshots == [] else []
+            ),
+            get_langchain_tools_by_workflow_ids=lambda workflow_ids: ["wf-a"] if workflow_ids == ["wf-1"] else [],
+        )
+        service.retrieval_service = SimpleNamespace()
+
+        tools = AppService._build_runtime_tools_for_config(
+            app_config_service=service.app_config_service,
+            retrieval_service=service.retrieval_service,
+            account=SimpleNamespace(id=uuid4()),
+            draft_app_config={
+                "tools": [{"type": "builtin_tool"}],
+                "mcp_bindings": [{"name": "mcp"}],
+                "workflows": [{"id": "wf-1"}],
+                "datasets": [],
+            },
+        )
+
+        assert tools == ["tool-a", "mcp-a", "wf-a"]
+
+    def test_create_runtime_agent_should_select_deep_thinking_agent_and_forward_runtime_context(
+        self, monkeypatch
+    ):
+        account = SimpleNamespace(id=uuid4())
+        llm = SimpleNamespace(features=[])
+        draft_app_config = {
+            "preset_prompt": "prompt",
+            "long_term_memory": {"enable": True},
+            "review_config": {"enable": False},
+            "skills": [
+                {
+                    "label": "网页研究",
+                    "readme": "# Web Research\nUse browser tools for research.",
+                    "executor_type": "scf",
+                }
+            ],
+        }
+        capture = {}
+
+        class _FakeDeepThinkingAgent:
+            def __init__(self, llm, agent_config):
+                capture["llm"] = llm
+                capture["agent_config"] = agent_config
+
+        monkeypatch.setattr(
+            "internal.service.app_service.AgentConfig",
+            lambda **kwargs: SimpleNamespace(**kwargs),
+        )
+        monkeypatch.setattr(
+            "internal.service.app_service.DeepThinkingAgent",
+            _FakeDeepThinkingAgent,
+        )
+
+        agent = AppService._create_runtime_agent(
+            llm=llm,
+            account=account,
+            draft_app_config=draft_app_config,
+            tools=["tool-a"],
+            enable_deep_thinking=True,
+            flask_app="flask-app",
+            invoke_from=InvokeFrom.WEB_APP.value,
+        )
+
+        assert isinstance(agent, _FakeDeepThinkingAgent)
+        assert capture["llm"] is llm
+        assert capture["agent_config"].enable_deep_thinking is True
+        assert capture["agent_config"].runtime_flask_app == "flask-app"
+        assert capture["agent_config"].invoke_from == InvokeFrom.WEB_APP.value
+        assert capture["agent_config"].tools == ["tool-a"]
+        assert "已绑定 Skills" in capture["agent_config"].preset_prompt
+        assert "Web Research" in capture["agent_config"].preset_prompt
+
+    def test_create_runtime_agent_should_append_mcp_prompt(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        llm = SimpleNamespace(features=[])
+        draft_app_config = {
+            "preset_prompt": "prompt",
+            "long_term_memory": {"enable": True},
+            "review_config": {"enable": False},
+            "mcp_bindings": [
+                {
+                    "name": "12306-mcp",
+                    "label": "12306 车票查询 MCP",
+                    "description": "免费直连的 12306 车票查询 MCP，适合铁路出行与余票查询。",
+                    "source_key": "@Joooook/12306-mcp",
+                    "enabled": True,
+                }
+            ],
+        }
+        capture = {}
+
+        class _FakeDeepThinkingAgent:
+            def __init__(self, llm, agent_config):
+                capture["llm"] = llm
+                capture["agent_config"] = agent_config
+
+        monkeypatch.setattr(
+            "internal.service.app_service.AgentConfig",
+            lambda **kwargs: SimpleNamespace(**kwargs),
+        )
+        monkeypatch.setattr(
+            "internal.service.app_service.DeepThinkingAgent",
+            _FakeDeepThinkingAgent,
+        )
+
+        agent = AppService._create_runtime_agent(
+            llm=llm,
+            account=account,
+            draft_app_config=draft_app_config,
+            tools=["tool-a"],
+            enable_deep_thinking=True,
+            flask_app="flask-app",
+            invoke_from=InvokeFrom.WEB_APP.value,
+        )
+
+        assert isinstance(agent, _FakeDeepThinkingAgent)
+        assert capture["agent_config"].tools == ["tool-a"]
+        assert "已绑定 MCP" in capture["agent_config"].preset_prompt
+        assert "12306 车票查询 MCP" in capture["agent_config"].preset_prompt
+        assert "请优先调用对应 MCP" in capture["agent_config"].preset_prompt
+
+    def test_create_runtime_agent_should_append_runtime_mcp_tool_names(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        llm = SimpleNamespace(features=[])
+        draft_app_config = {
+            "preset_prompt": "prompt",
+            "long_term_memory": {"enable": True},
+            "review_config": {"enable": False},
+        }
+        capture = {}
+
+        class _FakeTool:
+            def __init__(self, name, description):
+                self.name = name
+                self.description = description
+
+        class _FakeDeepThinkingAgent:
+            def __init__(self, llm, agent_config):
+                capture["llm"] = llm
+                capture["agent_config"] = agent_config
+
+        monkeypatch.setattr(
+            "internal.service.app_service.AgentConfig",
+            lambda **kwargs: SimpleNamespace(**kwargs),
+        )
+        monkeypatch.setattr(
+            "internal.service.app_service.DeepThinkingAgent",
+            _FakeDeepThinkingAgent,
+        )
+
+        agent = AppService._create_runtime_agent(
+            llm=llm,
+            account=account,
+            draft_app_config=draft_app_config,
+            tools=[
+                _FakeTool("mcp__12306-mcp__query_train_info", "查询列车信息"),
+                _FakeTool("mcp__12306-mcp__query_train_info_by_station", "按车站查询列车信息"),
+                _FakeTool("dataset_retrieval", "知识库检索"),
+            ],
+            enable_deep_thinking=True,
+            flask_app="flask-app",
+            invoke_from=InvokeFrom.WEB_APP.value,
+        )
+
+        assert isinstance(agent, _FakeDeepThinkingAgent)
+        assert "运行时可用的 MCP 工具" in capture["agent_config"].preset_prompt
+        assert "mcp__12306-mcp__query_train_info" in capture["agent_config"].preset_prompt
+        assert "mcp__12306-mcp__query_train_info_by_station" in capture["agent_config"].preset_prompt
+        assert "12306 MCP 使用流程" not in capture["agent_config"].preset_prompt
+        assert "dataset_retrieval" not in capture["agent_config"].preset_prompt
+
     def test_copy_app_should_clone_app_and_draft_config(self, monkeypatch):
         class _Session:
             def __init__(self):
@@ -824,6 +1026,9 @@ class TestAppService:
 
     def test_update_draft_app_config_should_validate_and_update_record(self, monkeypatch):
         service = _build_service()
+        service.app_config_service = SimpleNamespace(
+            prepare_mcp_tool_snapshots=lambda _bindings, existing_snapshots=None: existing_snapshots or []
+        )
         account = SimpleNamespace(id=uuid4())
         draft_record = SimpleNamespace(id=uuid4())
         app = SimpleNamespace(id=uuid4(), draft_app_config=draft_record)
@@ -839,6 +1044,12 @@ class TestAppService:
             "update",
             lambda target, **kwargs: updates.append((target, kwargs)) or target,
         )
+        enqueued = []
+        monkeypatch.setattr(
+            service,
+            "_enqueue_mcp_tool_snapshot_prewarm",
+            lambda app_id, config_type: enqueued.append((app_id, config_type)),
+        )
 
         result = service.update_draft_app_config(
             app.id,
@@ -850,6 +1061,7 @@ class TestAppService:
         assert updates[0][0] is draft_record
         assert "updated_at" in updates[0][1]
         assert updates[0][1]["model_config"]["model"] == "gpt-4o-mini"
+        assert enqueued == [(app.id, AppConfigType.DRAFT.value)]
 
     def test_publish_draft_app_config_should_create_runtime_config_and_history(self, monkeypatch):
         class _DeleteQuery:
@@ -914,6 +1126,40 @@ class TestAppService:
         )
         account = SimpleNamespace(id=uuid4())
         app_id = uuid4()
+        mcp_tool_snapshots = [
+            {
+                "binding_identity": "streamable_http:https://mcp.example.com:Weather MCP",
+                "binding_hash": "hash-1",
+                "binding": {
+                    "name": "Weather MCP",
+                    "description": "weather",
+                    "transport": "streamable_http",
+                    "url": "https://mcp.example.com",
+                    "enabled": True,
+                    "headers": [],
+                    "tool_names": [],
+                    "timeout_seconds": 30,
+                    "args": [],
+                    "env": {},
+                },
+                "status": "ready",
+                "tool_definitions": [
+                    {
+                        "name": "weather",
+                        "description": "天气查询",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ],
+                "tool_names": ["weather"],
+                "tool_count": 1,
+                "schema_hash": "schema-hash-1",
+                "last_attempt_at": 1,
+                "last_success_at": 1,
+                "last_error": "",
+                "retry_count": 0,
+                "retryable": False,
+            }
+        ]
         app = SimpleNamespace(
             id=app_id,
             published_at=None,
@@ -938,6 +1184,21 @@ class TestAppService:
                 text_to_speech={"enable": False},
                 suggested_after_answer={"enable": True},
                 review_config={"enable": False},
+                mcp_bindings=[
+                    {
+                        "name": "Weather MCP",
+                        "description": "weather",
+                        "transport": "streamable_http",
+                        "url": "https://mcp.example.com",
+                        "enabled": True,
+                        "headers": [],
+                        "tool_names": [],
+                        "timeout_seconds": 30,
+                        "args": [],
+                        "env": {},
+                    }
+                ],
+                mcp_tool_snapshots=mcp_tool_snapshots,
             ),
         )
         monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
@@ -965,6 +1226,21 @@ class TestAppService:
                 "text_to_speech": {"enable": False},
                 "suggested_after_answer": {"enable": True},
                 "review_config": {"enable": False},
+                "mcp_bindings": [
+                    {
+                        "name": "Weather MCP",
+                        "description": "weather",
+                        "transport": "streamable_http",
+                        "url": "https://mcp.example.com",
+                        "enabled": True,
+                        "headers": [],
+                        "tool_names": [],
+                        "timeout_seconds": 30,
+                        "args": [],
+                        "env": {},
+                    }
+                ],
+                "mcp_tool_snapshots": mcp_tool_snapshots,
             },
         )
 
@@ -981,6 +1257,12 @@ class TestAppService:
             "update",
             lambda target, **kwargs: updates.append((target, kwargs)) or target,
         )
+        prewarm_calls = []
+        monkeypatch.setattr(
+            service,
+            "_enqueue_mcp_tool_snapshot_prewarm",
+            lambda app_id, config_type: prewarm_calls.append((app_id, config_type)),
+        )
 
         result = service.publish_draft_app_config(app_id, account)
 
@@ -989,9 +1271,41 @@ class TestAppService:
         assert service.db.auto_commit_count == 1
         assert any(payload.get("status") == AppStatus.PUBLISHED.value for _, payload in updates)
         assert sum(1 for model, _ in create_calls if model.__name__ == "AppDatasetJoin") == 1
+        app_config_call = [payload for model, payload in create_calls if model.__name__ == "AppConfig"][0]
+        assert app_config_call["mcp_bindings"] == [
+            {
+                "name": "Weather MCP",
+                "description": "weather",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "enabled": True,
+                "headers": [],
+                "tool_names": [],
+                "timeout_seconds": 30,
+                "args": [],
+                "env": {},
+            }
+        ]
+        assert app_config_call["mcp_tool_snapshots"] == mcp_tool_snapshots
         history_call = [payload for model, payload in create_calls if model.__name__ == "AppConfigVersion"][0]
         assert history_call["version"] == 3
+        assert history_call["mcp_bindings"] == [
+            {
+                "name": "Weather MCP",
+                "description": "weather",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "enabled": True,
+                "headers": [],
+                "tool_names": [],
+                "timeout_seconds": 30,
+                "args": [],
+                "env": {},
+            }
+        ]
+        assert history_call["mcp_tool_snapshots"] == mcp_tool_snapshots
         assert synced_app_ids == [str(app_id)]
+        assert prewarm_calls == [(app.id, AppConfigType.PUBLISHED.value)]
 
     def test_publish_draft_app_config_should_skip_public_and_published_at_when_not_shared_and_already_published(self, monkeypatch):
         class _DeleteQuery:
@@ -1111,6 +1425,7 @@ class TestAppService:
             "update",
             lambda target, **kwargs: updates.append((target, kwargs)) or target,
         )
+        monkeypatch.setattr(service, "_enqueue_mcp_tool_snapshot_prewarm", lambda *_args, **_kwargs: None)
 
         result = service.publish_draft_app_config(app_id, account, share_to_square=False)
 
@@ -1208,6 +1523,9 @@ class TestAppService:
 
     def test_fallback_history_to_draft_should_validate_and_update_draft_record(self, monkeypatch):
         service = _build_service()
+        service.app_config_service = SimpleNamespace(
+            prepare_mcp_tool_snapshots=lambda _bindings, existing_snapshots=None: existing_snapshots or []
+        )
         account = SimpleNamespace(id=uuid4())
         draft_record = SimpleNamespace(id=uuid4())
         app = SimpleNamespace(id=uuid4(), draft_app_config=draft_record)
@@ -1232,6 +1550,21 @@ class TestAppService:
             text_to_speech={"enable": False},
             suggested_after_answer={"enable": True},
             review_config={"enable": False},
+            mcp_bindings=[
+                {
+                    "name": "Weather MCP",
+                    "description": "weather",
+                    "transport": "streamable_http",
+                    "url": "https://mcp.example.com",
+                    "enabled": True,
+                    "headers": [],
+                    "tool_names": [],
+                    "timeout_seconds": 30,
+                    "args": [],
+                    "env": {},
+                }
+            ],
+            mcp_tool_snapshots=[],
         )
         monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
         monkeypatch.setattr(service, "get", lambda *_args, **_kwargs: history)
@@ -1242,6 +1575,12 @@ class TestAppService:
             "update",
             lambda target, **kwargs: updates.append((target, kwargs)) or target,
         )
+        prewarm_calls = []
+        monkeypatch.setattr(
+            service,
+            "_enqueue_mcp_tool_snapshot_prewarm",
+            lambda app_id, config_type: prewarm_calls.append((app_id, config_type)),
+        )
 
         result = service.fallback_history_to_draft(app.id, history.id, account)
 
@@ -1249,6 +1588,7 @@ class TestAppService:
         assert updates[0][0] is draft_record
         assert "updated_at" in updates[0][1]
         assert updates[0][1]["preset_prompt"] == "prompt"
+        assert prewarm_calls == [(app.id, AppConfigType.DRAFT.value)]
 
     def test_fallback_history_to_draft_should_raise_when_history_not_found(self, monkeypatch):
         service = _build_service()
@@ -1270,6 +1610,7 @@ class TestAppService:
             query=SimpleNamespace(data="你好"),
             image_urls=SimpleNamespace(data=[]),
             conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=False),
         )
         draft_config = {
             "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
@@ -1384,6 +1725,7 @@ class TestAppService:
             query=SimpleNamespace(data="你好"),
             image_urls=SimpleNamespace(data=[]),
             conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=False),
         )
         draft_config = {
             "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
@@ -1484,6 +1826,168 @@ class TestAppService:
         merged = [item for item in save_calls[0]["agent_thoughts"] if item.event == QueueEvent.AGENT_MESSAGE][0]
         assert merged.thought == "AB"
         assert merged.answer == "AB"
+
+    def test_debug_chat_should_emit_aggregate_metrics(self, monkeypatch):
+        service = _build_service()
+        account = SimpleNamespace(id=uuid4())
+        app_id = uuid4()
+        conversation = SimpleNamespace(id=uuid4(), summary="memory")
+        app = SimpleNamespace(id=app_id, debug_conversation=conversation)
+        message = SimpleNamespace(id=uuid4())
+        req = SimpleNamespace(
+            query=SimpleNamespace(data="你好"),
+            image_urls=SimpleNamespace(data=[]),
+            conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=False),
+        )
+        draft_config = {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "dialog_round": 3,
+            "tools": [],
+            "datasets": [],
+            "workflows": [],
+            "retrieval_config": {},
+            "preset_prompt": "prompt",
+            "long_term_memory": {"enable": True},
+            "review_config": {"enable": False},
+        }
+
+        llm = SimpleNamespace(
+            features=["tool_call"],
+            convert_to_human_message=lambda query, image_urls: {"query": query, "image_urls": image_urls},
+        )
+        monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
+        monkeypatch.setattr(service, "get_draft_app_config", lambda *_args, **_kwargs: draft_config)
+        monkeypatch.setattr(service, "create", lambda *_args, **_kwargs: message)
+        service.language_model_service = SimpleNamespace(load_language_model=lambda _config: llm)
+        service.app_config_service = SimpleNamespace(
+            get_langchain_tools_by_tools_config=lambda _tools: [],
+            get_langchain_tools_by_workflow_ids=lambda _workflow_ids: [],
+        )
+        monkeypatch.setattr(
+            "internal.service.app_service.TokenBufferMemory",
+            lambda **_kwargs: SimpleNamespace(get_history_prompt_messages=lambda **_args: []),
+        )
+
+        task_id = uuid4()
+        message_event_id = uuid4()
+        stream_events = [
+            AgentThought(
+                id=uuid4(),
+                task_id=task_id,
+                event=QueueEvent.DEEP_COMPLETE,
+                total_token_count=120,
+                total_price=0.12,
+                latency=20,
+            ),
+            AgentThought(
+                id=message_event_id,
+                task_id=task_id,
+                event=QueueEvent.AGENT_MESSAGE,
+                thought="最终答案",
+                answer="最终答案",
+                message=[{"role": "assistant", "content": "最终答案"}],
+                total_token_count=30,
+                total_price=0.03,
+                latency=5,
+            ),
+        ]
+
+        class _Agent:
+            def __init__(self, **_kwargs):
+                pass
+
+            @staticmethod
+            def stream(_payload):
+                return iter(stream_events)
+
+        monkeypatch.setattr("internal.service.app_service.FunctionCallAgent", _Agent)
+        service.conversation_service = SimpleNamespace(save_agent_thoughts=lambda **_kwargs: None)
+
+        events = list(service.debug_chat(app_id, req, account))
+
+        first_payload = json.loads(events[0].split("data:", 1)[1])
+        second_payload = json.loads(events[1].split("data:", 1)[1])
+
+        assert first_payload["aggregate_total_token_count"] == 120
+        assert first_payload["aggregate_latency"] == 20
+        assert second_payload["aggregate_total_token_count"] == 150
+        assert second_payload["aggregate_latency"] == 25
+
+    def test_debug_chat_should_use_runtime_model_resolution_when_available(
+        self, monkeypatch
+    ):
+        service = _build_service()
+        account = SimpleNamespace(id=uuid4())
+        app_id = uuid4()
+        conversation = SimpleNamespace(id=uuid4(), summary="memory")
+        app = SimpleNamespace(id=app_id, debug_conversation=conversation)
+        message = SimpleNamespace(id=uuid4())
+        req = SimpleNamespace(
+            query=SimpleNamespace(data="请分析图片"),
+            image_urls=SimpleNamespace(data=["https://a.com/1.png"]),
+            conversation_id=SimpleNamespace(data=""),
+            enable_deep_thinking=SimpleNamespace(data=True),
+        )
+        draft_config = {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "dialog_round": 2,
+            "tools": [],
+            "datasets": [],
+            "workflows": [],
+            "retrieval_config": {},
+            "preset_prompt": "prompt",
+            "long_term_memory": {"enable": True},
+            "review_config": {"enable": False},
+        }
+        llm = SimpleNamespace()
+        capabilities = {"image_input": {"enabled": True, "via_fallback": False}}
+        resolution_capture = {}
+        stream_capture = {}
+        save_calls = []
+
+        monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
+        monkeypatch.setattr(service, "get_draft_app_config", lambda *_args, **_kwargs: draft_config)
+        monkeypatch.setattr(service, "create", lambda *_args, **_kwargs: message)
+        service.language_model_service = SimpleNamespace(
+            resolve_runtime_language_model=lambda model_config, image_urls, entrypoint: resolution_capture.update(
+                {
+                    "model_config": model_config,
+                    "image_urls": image_urls,
+                    "entrypoint": entrypoint,
+                }
+            )
+            or SimpleNamespace(llm=llm, capabilities=capabilities)
+        )
+        monkeypatch.setattr(
+            "internal.service.app_service.TokenBufferMemory",
+            lambda **_kwargs: SimpleNamespace(
+                get_history_prompt_messages=lambda **_args: ["history"]
+            ),
+        )
+        monkeypatch.setattr(
+            service,
+            "_stream_agent_events",
+            lambda **kwargs: stream_capture.update(kwargs)
+            or iter(["event: agent_end\ndata:{}\n\n"]),
+        )
+        service.conversation_service = SimpleNamespace(
+            save_agent_thoughts=lambda **kwargs: save_calls.append(kwargs),
+        )
+
+        with Flask(__name__).app_context():
+            events = list(service.debug_chat(app_id, req, account))
+
+        assert events == ["event: agent_end\ndata:{}\n\n"]
+        assert resolution_capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "image_urls": req.image_urls.data,
+            "entrypoint": "debugger",
+        }
+        assert draft_config["capabilities"] == capabilities
+        assert stream_capture["llm"] is llm
+        assert stream_capture["enable_deep_thinking"] is True
+        assert save_calls[0]["app_config"]["capabilities"] == capabilities
 
     def test_stop_debug_chat_should_validate_app_then_set_stop_flag(self, monkeypatch):
         service = _build_service()
@@ -2110,6 +2614,50 @@ class TestAppServiceDraftConfigValidation:
         assert validated["text_to_speech"]["voice"] == ALLOWED_AUDIO_VOICES[0]
         assert validated["review_config"]["inputs_config"]["enable"] is True
 
+    def test_validate_should_accept_and_normalize_mcp_bindings(self):
+        service = _build_validation_service()
+        payload = {
+            "mcp_bindings": [
+                {
+                    "name": "Weather MCP",
+                    "description": "ModelScope weather",
+                    "transport": "streamable_http",
+                    "url": "https://mcp.example.com",
+                    "enabled": True,
+                    "headers": [{"key": " Authorization ", "value": " Bearer token "}],
+                    "tool_names": ["weather"],
+                    "timeout_seconds": 20,
+                    "args": ["--flag"],
+                    "env": {" API_KEY ": " secret "},
+                }
+            ]
+        }
+
+        validated = service._validate_draft_app_config(payload, SimpleNamespace(id=uuid4()))
+
+        assert validated["mcp_bindings"] == [
+            {
+                "name": "Weather MCP",
+                "description": "ModelScope weather",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "command": "",
+                "enabled": True,
+                "headers": [{"key": "Authorization", "value": "Bearer token"}],
+                "tool_names": ["weather"],
+                "timeout_seconds": 20,
+                "args": ["--flag"],
+                "env": {"API_KEY": "secret"},
+                "provider_key": "",
+                "source_type": "",
+                "source_key": "",
+                "source_url": "",
+                "label": "",
+                "icon": "",
+                "category": "",
+            }
+        ]
+
     def test_validate_should_accept_review_config_when_disabled(self):
         service = _build_validation_service()
         payload = {
@@ -2673,6 +3221,7 @@ class TestAppServiceDraftConfigValidation:
             "update",
             lambda target, **kwargs: updates.append((target, kwargs)) or target,
         )
+        monkeypatch.setattr(service, "_enqueue_mcp_tool_snapshot_prewarm", lambda *_args, **_kwargs: None)
 
         service.publish_draft_app_config(app_id, account, share_to_square=False)
 
@@ -2791,6 +3340,7 @@ class TestAppServiceDraftConfigValidation:
             "update",
             lambda target, **kwargs: updates.append((target, kwargs)) or target,
         )
+        monkeypatch.setattr(service, "_enqueue_mcp_tool_snapshot_prewarm", lambda *_args, **_kwargs: None)
 
         result = service.publish_draft_app_config(app_id, account)
 

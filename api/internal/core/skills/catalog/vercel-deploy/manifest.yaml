@@ -1,0 +1,17 @@
+source_key: vercel-deploy
+name: vercel-deploy
+label: vercel-deploy
+description: Deploy applications and websites to Vercel. Use when the user requests
+  deployment actions like "deploy my app", "deploy and give me the link", "push this
+  live", or "create a preview deployment".
+category: 部署
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

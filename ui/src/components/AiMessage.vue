@@ -5,7 +5,17 @@ import DotFlashing from '@/components/DotFlashing.vue'
 import { useAudioPlayer } from '@/hooks/use-audio'
 import { useMarkdownRenderer } from '@/hooks/use-markdown-renderer'
 import { copyTextToClipboard } from '@/utils/clipboard'
+import {
+  mergeChatArtifacts,
+  normalizeChatOutputParts,
+  type ChatArtifact,
+  type ChatOutputPart,
+} from '@/views/shared/chat-output'
 import AgentThought from './AgentThought.vue'
+import ChatImageGallery from './ChatImageGallery.vue'
+import DeepAgentTimeline from './DeepAgentTimeline.vue'
+import DeepThinkingPanel from './DeepThinkingPanel.vue'
+import { QueueEvent } from '@/config'
 import 'github-markdown-css'
 import 'highlight.js/styles/github.css'
 
@@ -34,6 +44,16 @@ const props = defineProps({
   enable_text_to_speech: { type: Boolean, default: false, required: false },
   message_id: { type: String, default: '', required: false },
   answer: { type: String, default: '', required: true },
+  answer_parts: {
+    type: Array as PropType<Array<Record<string, unknown>>>,
+    default: () => [],
+    required: false,
+  },
+  artifacts: {
+    type: Array as PropType<Array<Record<string, unknown>>>,
+    default: () => [],
+    required: false,
+  },
   loading: { type: Boolean, default: false, required: false },
   latency: { type: Number, default: 0, required: false },
   total_token_count: { type: Number, default: 0, required: false },
@@ -53,11 +73,75 @@ const props = defineProps({
 })
 const emits = defineEmits(['selectSuggestedQuestion'])
 const { renderMarkdown, handleMarkdownCopyClick } = useMarkdownRenderer()
-const compiledMarkdown = computed(() => {
-  return renderMarkdown(props.answer)
+const normalizedArtifacts = computed(() => {
+  return mergeChatArtifacts([], props.artifacts) as ChatArtifact[]
+})
+const resolvedAnswerParts = computed(() => {
+  return normalizeChatOutputParts(props.answer_parts, props.answer, normalizedArtifacts.value) as ChatOutputPart[]
+})
+const renderedTextParts = computed(() => {
+  return resolvedAnswerParts.value
+    .filter((part): part is Extract<ChatOutputPart, { type: 'text' }> => part.type === 'text')
+    .map((part, index) => ({
+      key: `text-${index}`,
+      html: renderMarkdown(part.text),
+    }))
+})
+const galleryImages = computed(() => {
+  const images: Array<{ name: string, url: string, mime_type?: string, extension?: string }> = []
+  const seenUrls = new Set<string>()
+
+  for (const part of resolvedAnswerParts.value) {
+    if (part.type !== 'image')
+      continue
+    const url = String(part.url || '').trim()
+    if (!url || seenUrls.has(url))
+      continue
+    seenUrls.add(url)
+    images.push({
+      name: part.name || '',
+      url,
+      mime_type: part.mime_type,
+      extension: part.extension,
+    })
+  }
+
+  return images
+})
+const renderedArtifactParts = computed(() => {
+  return resolvedAnswerParts.value
+    .filter((part): part is Extract<ChatOutputPart, { type: 'artifact' }> => part.type === 'artifact')
+    .map((part, index) => ({
+      key: `artifact-${index}`,
+      name: part.name,
+      url: part.url,
+      mime_type: part.mime_type,
+      extension: part.extension,
+      size: part.size,
+    }))
+})
+const hasRenderableAnswer = computed(() => {
+  return renderedTextParts.value.length > 0 || galleryImages.value.length > 0 || renderedArtifactParts.value.length > 0
 })
 const avatarText = computed(() => {
   return String(props.app?.avatar_text || '').trim()
+})
+
+const deepTimelineThoughts = computed(() => {
+  return props.agent_thoughts.filter((t: Record<string, unknown>) =>
+    [
+      QueueEvent.deepStep,
+      QueueEvent.deepComplete,
+      QueueEvent.deepArtifactCreated,
+    ].includes(String(t.event ?? '')),
+  ) as Record<string, unknown>[]
+})
+
+/** 兼容旧版 deep_thinking 文本事件 */
+const legacyDeepThinkingThought = computed(() => {
+  return props.agent_thoughts.find(
+    (t: Record<string, unknown>) => t.event === QueueEvent.deepThinking,
+  ) as Record<string, unknown> | undefined
 })
 
 const fallbackAudioId = computed(() => {
@@ -169,6 +253,18 @@ const handleMarkdownClick = async (event: MouseEvent) => {
     <div class="flex-1 min-w-0 max-w-full flex flex-col items-start gap-2">
       <!-- 应用名称 -->
       <div class="text-gray-700 font-bold text-sm">{{ props.app?.name }}</div>
+      <!-- 深度思考面板（在推理步骤之前单独展示） -->
+      <deep-agent-timeline
+        v-if="deepTimelineThoughts.length > 0"
+        :thoughts="deepTimelineThoughts"
+        :loading="props.loading"
+      />
+      <deep-thinking-panel
+        v-else-if="legacyDeepThinkingThought"
+        :thought="String(legacyDeepThinkingThought.thought ?? '')"
+        :latency="Number(legacyDeepThinkingThought.latency ?? 0)"
+        :loading="props.loading"
+      />
       <!-- 推理步骤 -->
       <agent-thought
         v-if="props.show_agent_thought"
@@ -182,20 +278,47 @@ const handleMarkdownClick = async (event: MouseEvent) => {
       <div class="w-full max-w-full min-w-0 flex flex-col gap-1">
         <!-- AI消息 -->
         <div
-          v-if="props.loading && props.answer.trim() === ''"
+          v-if="props.loading && !hasRenderableAnswer"
           class="message-bubble-content glass-message-bubble px-4 py-3 rounded-2xl break-all transition-all duration-300"
         >
           <dot-flashing />
         </div>
-        <div
-          v-else
-          :class="[
-            'message-bubble-content glass-message-bubble markdown-body px-4 py-3 rounded-2xl break-all transition-all duration-300',
-            isCurrentPlaying ? 'ai-message-playing' : '',
-          ]"
-          v-html="compiledMarkdown"
-          @click="handleMarkdownClick"
-        ></div>
+        <template v-else>
+          <template v-for="part in renderedTextParts" :key="part.key">
+            <div
+              :class="[
+                'message-bubble-content glass-message-bubble markdown-body px-4 py-3 rounded-2xl break-all transition-all duration-300',
+                isCurrentPlaying ? 'ai-message-playing' : '',
+              ]"
+              v-html="part.html"
+              @click="handleMarkdownClick"
+            ></div>
+          </template>
+          <chat-image-gallery
+            v-if="galleryImages.length > 0"
+            :images="galleryImages"
+            title="生成图片"
+            class="message-gallery-card"
+          />
+          <template v-for="part in renderedArtifactParts" :key="part.key">
+            <div class="message-artifact-card">
+              <div class="message-artifact-card__name">{{ part.name }}</div>
+              <div class="message-artifact-card__meta">
+                <span v-if="part.extension">{{ part.extension }}</span>
+                <span v-if="typeof part.size === 'number'">{{ part.size }} bytes</span>
+                <span v-else-if="part.mime_type">{{ part.mime_type }}</span>
+              </div>
+              <a
+                class="message-artifact-card__link"
+                :href="part.url"
+                target="_blank"
+                rel="noreferrer"
+              >
+                下载附件
+              </a>
+            </div>
+          </template>
+        </template>
         <!-- 消息展示与操作 -->
         <div class="flex items-center justify-between gap-3">
           <!-- 消息数据额外展示 -->
@@ -266,6 +389,47 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   width: fit-content;
   max-width: min(600px, 100%);
   min-width: 0;
+}
+
+.message-artifact-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94));
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.message-artifact-card__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.message-artifact-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.message-artifact-card__link {
+  font-size: 13px;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.message-artifact-card__link:hover {
+  text-decoration: underline;
+}
+
+.message-gallery-card {
+  width: min(560px, 100%);
 }
 
 .glass-message-bubble::before {

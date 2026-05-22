@@ -1,0 +1,21 @@
+model: deepseek-v3-0324
+label: deepseek-ai/DeepSeek-V3-0324
+model_type: chat
+features: []
+context_window: 65536
+max_output_tokens: 8192
+attributes:
+  model: deepseek-ai/DeepSeek-V3-0324
+parameters:
+- name: temperature
+  use_template: temperature
+  default: 0.7
+- name: top_p
+  use_template: top_p
+  default: 1
+- name: max_tokens
+  use_template: max_tokens
+  default: 2048
+  max: 8192
+metadata:
+  pricing_source: atlascloud_docs

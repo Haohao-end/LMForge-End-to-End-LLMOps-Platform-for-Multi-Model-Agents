@@ -41,7 +41,8 @@ export const normalizeMessageMetrics = (
     ? message.agent_thoughts.reduce((sum, item) => sum + toPositiveNumber(item?.latency), 0)
     : 0
   const latencyFromDuration = requestDurationMs > 0 ? requestDurationMs / 1000 : 0
-  const normalizedLatency = latencyFromMessage || latencyFromThoughts || latencyFromDuration
+  const normalizedLatency =
+    Math.max(latencyFromMessage, latencyFromDuration) || latencyFromThoughts
   message.latency = Number(normalizedLatency.toFixed(2))
 
   const tokenFromMessage = Math.floor(toNonNegativeNumber(message.total_token_count))

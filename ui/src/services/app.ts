@@ -74,10 +74,11 @@ export const debugChat = (
   image_urls: string[],
   conversation_id: string = '',
   onData: (event_response: Record<string, any>) => void,
+  enable_deep_thinking: boolean = false,
 ) => {
   return ssePost(
     `/apps/${app_id}/conversations`,
-    { body: { query, image_urls, conversation_id } },
+    { body: { query, image_urls, conversation_id, enable_deep_thinking } },
     onData,
   )
 }

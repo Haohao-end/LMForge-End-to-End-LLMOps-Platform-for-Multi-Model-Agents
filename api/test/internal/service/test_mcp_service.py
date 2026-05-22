@@ -1,0 +1,177 @@
+from contextlib import contextmanager
+from types import SimpleNamespace
+
+from sqlalchemy.exc import ProgrammingError
+
+from internal.service.mcp_service import McpService
+
+
+@contextmanager
+def _null_context():
+    yield
+
+
+def _field(value):
+    return SimpleNamespace(data=value)
+
+
+def _req(*, current_page=1, page_size=20, search_word="", category=""):
+    return SimpleNamespace(
+        current_page=_field(current_page),
+        page_size=_field(page_size),
+        search_word=_field(search_word),
+        category=_field(category),
+    )
+
+
+def _build_catalog_provider():
+    return SimpleNamespace(
+            name="weather_gateway",
+            provider_entity=SimpleNamespace(
+                name="weather_gateway",
+                label="天气 MCP",
+                description="提供天气查询",
+                icon="",
+                background="#DBEAFE",
+                category="productivity",
+                transport="streamable_http",
+                url="https://mcp.example.com",
+                command="",
+            headers=[],
+            tool_names=[],
+            args=[],
+            env={},
+            timeout_seconds=30,
+            source_type="catalog",
+            source_key="@modelscope/weather_gateway",
+            source_url="https://www.modelscope.cn/mcp/servers/@modelscope/weather_gateway",
+            created_at=1744848000,
+            is_public=True,
+        ),
+    )
+
+
+def _build_service(*, table_exists: bool, stub_catalog_payload: bool = True):
+    catalog_provider = _build_catalog_provider()
+    db = SimpleNamespace(
+        session=SimpleNamespace(
+            query=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected db query")),
+        ),
+        auto_commit=_null_context,
+    )
+    service = McpService(
+        db=db,
+        mcp_provider_manager=SimpleNamespace(
+            get_providers=lambda: [catalog_provider],
+            get_provider=lambda provider_name: catalog_provider if provider_name == catalog_provider.name else None,
+        ),
+        icon_generator_service=SimpleNamespace(generate_icon=lambda *_args, **_kwargs: "icon"),
+    )
+    service._has_mcp_provider_table = lambda: table_exists  # type: ignore[method-assign]
+    if stub_catalog_payload:
+        service._build_catalog_provider_payload = lambda _catalog_provider, include_tools=False: {
+            "provider_key": "catalog::weather_gateway",
+            "provider_id": "catalog::weather_gateway",
+            "name": "weather_gateway",
+            "label": "天气 MCP",
+            "icon": "",
+            "background": "#DBEAFE",
+            "description": "提供天气查询",
+            "category": "productivity",
+            "transport": "streamable_http",
+            "url": "https://mcp.example.com",
+            "command": "",
+            "headers": [],
+            "tool_names": [],
+            "args": [],
+            "env": {},
+            "timeout_seconds": 30,
+            "source_type": "catalog",
+            "source_key": "@modelscope/weather_gateway",
+            "source_url": "https://www.modelscope.cn/mcp/servers/@modelscope/weather_gateway",
+            "creator_name": "ModelScope",
+            "creator_avatar": "",
+            "is_public": True,
+            "is_bindable": True,
+            "bind_reason": "",
+            "published_at": 1744848000,
+            "created_at": 1744848000,
+            "updated_at": 1744848000,
+            "tool_count": 0,
+            "tools": [],
+            "binding": {
+                "name": "weather_gateway",
+                "description": "提供天气查询",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "command": "",
+                "enabled": True,
+                "headers": [],
+                "tool_names": [],
+                "args": [],
+                "env": {},
+                "provider_key": "catalog::weather_gateway",
+                "source_type": "catalog",
+                "source_key": "@modelscope/weather_gateway",
+                "source_url": "https://www.modelscope.cn/mcp/servers/@modelscope/weather_gateway",
+                "label": "天气 MCP",
+                "icon": "",
+                "category": "productivity",
+            },
+        }
+    return service
+
+
+def test_get_public_mcp_providers_with_page_should_fallback_to_catalog_when_table_missing():
+    service = _build_service(table_exists=False)
+
+    providers, paginator = service.get_public_mcp_providers_with_page(_req(page_size=20))
+
+    assert len(providers) == 1
+    assert providers[0]["name"] == "weather_gateway"
+    assert paginator.total_record == 1
+    assert paginator.total_page == 1
+
+
+def test_get_mcp_providers_with_page_should_return_empty_when_table_missing():
+    service = _build_service(table_exists=False)
+
+    providers, paginator = service.get_mcp_providers_with_page(_req(page_size=20), SimpleNamespace(id="account"))
+
+    assert providers == []
+    assert paginator.total_record == 0
+    assert paginator.total_page == 0
+
+
+def test_get_public_mcp_providers_with_page_should_support_catalog_integer_timestamps():
+    service = _build_service(table_exists=False, stub_catalog_payload=False)
+
+    providers, paginator = service.get_public_mcp_providers_with_page(_req(page_size=20))
+
+    assert len(providers) == 1
+    assert providers[0]["published_at"] == 1744848000
+    assert providers[0]["created_at"] == 1744848000
+    assert paginator.total_record == 1
+    assert paginator.total_page == 1
+
+
+def test_get_mcp_providers_with_page_should_return_empty_when_paginate_raises_missing_table():
+    service = _build_service(table_exists=True)
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def paginate(self, *_args, **_kwargs):
+            raise ProgrammingError("select 1", {}, SimpleNamespace(pgcode="42P01"))
+
+    service.db.session = SimpleNamespace(query=lambda *_args, **_kwargs: _Query())
+
+    providers, paginator = service.get_mcp_providers_with_page(_req(page_size=20), SimpleNamespace(id="account"))
+
+    assert providers == []
+    assert paginator.total_record == 0
+    assert paginator.total_page == 0

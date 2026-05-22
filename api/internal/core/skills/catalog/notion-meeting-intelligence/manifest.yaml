@@ -1,0 +1,16 @@
+source_key: notion-meeting-intelligence
+name: notion-meeting-intelligence
+label: notion-meeting-intelligence
+description: Prepare meeting materials with Notion context and Codex research; use
+  when gathering context, drafting agendas/pre-reads, and tailoring materials to attendees.
+category: 协作
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

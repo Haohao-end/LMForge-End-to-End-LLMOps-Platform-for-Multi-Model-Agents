@@ -3,6 +3,7 @@ from marshmallow import Schema, fields, pre_dump
 from wtforms import IntegerField, StringField, BooleanField
 from wtforms.validators import Optional, NumberRange, DataRequired, Length
 from internal.lib.helper import datetime_to_timestamp
+from internal.lib.helper import build_input_parts, build_output_payload
 from internal.model import Message
 from pkg.paginator import PaginatorReq
 
@@ -21,7 +22,10 @@ class GetConversationMessagesWithPageResp(Schema):
     conversation_id = fields.UUID(dump_default="")
     query = fields.String(dump_default="")
     image_urls = fields.List(fields.String, dump_default=[])
+    input_parts = fields.List(fields.Dict, dump_default=[])
     answer = fields.String(dump_default="")
+    answer_parts = fields.List(fields.Dict, dump_default=[])
+    artifacts = fields.List(fields.Dict, dump_default=[])
     total_token_count = fields.Integer(dump_default=0)
     latency = fields.Float(dump_default=0)
     agent_thoughts = fields.List(fields.Dict, dump_default=[])
@@ -30,12 +34,16 @@ class GetConversationMessagesWithPageResp(Schema):
 
     @pre_dump
     def process_data(self, data: Message, **kwargs):
+        output_payload = build_output_payload(data.answer, getattr(data, "agent_thoughts", []) or [])
         return {
             "id": data.id,
             "conversation_id": data.conversation_id,
             "query": data.query,
             "image_urls": data.image_urls,
+            "input_parts": build_input_parts(data.query, data.image_urls),
             "answer": data.answer,
+            "answer_parts": output_payload["answer_parts"],
+            "artifacts": output_payload["artifacts"],
             "total_token_count": data.total_token_count,
             "latency": data.latency,
             "agent_thoughts": [{

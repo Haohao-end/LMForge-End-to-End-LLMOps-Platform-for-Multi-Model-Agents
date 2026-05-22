@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from threading import Thread
 from typing import Generator
 
-from flask import current_app
+from flask import current_app, has_app_context
 from injector import inject
 from langchain_core.messages import HumanMessage
 
@@ -15,6 +15,7 @@ from internal.entity.app_entity import AppStatus
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
 from internal.exception import NotFoundException, ForbiddenException
+from internal.lib.helper import build_input_parts, build_output_payload
 from internal.model import Account, EndUser, Conversation, Message
 from internal.schema.openapi_schema import OpenAPIChatReq
 from pkg.response import Response
@@ -82,7 +83,20 @@ class OpenAPIService(BaseService):
         # 7.获取校验后的运行时配置
         app_config = self.app_config_service.get_app_config(app)
 
-        # 8.新建一条消息记录
+        # 8.在落库前解析运行时模型能力，避免带图请求被静默降级
+        if hasattr(self.language_model_service, "resolve_runtime_language_model"):
+            model_resolution = self.language_model_service.resolve_runtime_language_model(
+                app_config.get("model_config", {}),
+                image_urls=req.image_urls.data,
+                entrypoint=LanguageModelService.ENTRYPOINT_OPENAPI,
+            )
+            llm = model_resolution.llm
+            app_config["capabilities"] = model_resolution.capabilities
+        else:
+            model_resolution = None
+            llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
+
+        # 9.新建一条消息记录
         message = self.create(Message, **{
             "app_id": app.id,
             "conversation_id": conversation.id,
@@ -92,9 +106,6 @@ class OpenAPIService(BaseService):
             "image_urls": req.image_urls.data,
             "status": MessageStatus.NORMAL,
         })
-
-        # 9.从语言模型中根据模型配置获取模型实例
-        llm = self.language_model_service.load_language_model(app_config.get("model_config", {}))
 
         # 10.实例化TokenBufferMemory用于提取短期记忆
         token_buffer_memory = TokenBufferMemory(
@@ -106,29 +117,16 @@ class OpenAPIService(BaseService):
             message_limit=app_config["dialog_round"],
         )
 
-        # 11.将草稿配置中的tools转换成LangChain工具
-        tools = self.app_config_service.get_langchain_tools_by_tools_config(app_config["tools"])
+        # 11.根据应用配置构建运行时工具
+        tools = AppService._build_runtime_tools_for_config(
+            app_config_service=self.app_config_service,
+            retrieval_service=self.retrieval_service,
+            account=account,
+            draft_app_config=app_config,
+            flask_app=current_app._get_current_object() if has_app_context() else None,
+        )
 
-        # 12.检测是否关联了知识库
-        if app_config["datasets"]:
-            # 13.构建LangChain知识库检索工具
-            dataset_retrieval = self.retrieval_service.create_langchain_tool_from_search(
-                flask_app=current_app._get_current_object(),
-                dataset_ids=[dataset["id"] for dataset in app_config["datasets"]],
-                account_id=account.id,
-                retrieval_source=RetrievalSource.APP.value,
-                **app_config["retrieval_config"],
-            )
-            tools.append(dataset_retrieval)
-
-        # 14.检测是否关联工作流，如果关联了工作流则将工作流构建成工具添加到tools中
-        if app_config["workflows"]:
-            workflow_tools = self.app_config_service.get_langchain_tools_by_workflow_ids(
-                [workflow["id"] for workflow in app_config["workflows"]]
-            )
-            tools.extend(workflow_tools)
-
-        # 14.根据LLM是否支持tool_call决定使用不同的Agent
+        # 12.根据LLM是否支持tool_call决定使用不同的Agent
         agent_class = FunctionCallAgent if ModelFeature.TOOL_CALL.value in llm.features else ReACTAgent
         agent = agent_class(
             llm=llm,
@@ -219,6 +217,7 @@ class OpenAPIService(BaseService):
             message_id=message.id,
             agent_thoughts=agent_result.agent_thoughts,
         )
+        output_payload = build_output_payload(agent_result.answer, agent_result.agent_thoughts)
 
         return Response(data={
             "id": str(message.id),
@@ -226,7 +225,11 @@ class OpenAPIService(BaseService):
             "conversation_id": str(conversation.id),
             "query": req.query.data,
             "image_urls": req.image_urls.data,
+            "input_parts": build_input_parts(req.query.data, req.image_urls.data),
             "answer": agent_result.answer,
+            "answer_parts": output_payload["answer_parts"],
+            "artifacts": output_payload["artifacts"],
+            "capabilities": model_resolution.capabilities if model_resolution else {},
             "total_token_count": 0,
             "latency": agent_result.latency,
             "agent_thoughts": [{

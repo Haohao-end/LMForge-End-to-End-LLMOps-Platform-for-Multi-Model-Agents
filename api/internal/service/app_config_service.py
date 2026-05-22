@@ -9,6 +9,8 @@ from internal.core.language_model import LanguageModelManager
 from internal.core.tools.api_tools.entities import ToolEntity
 from internal.core.tools.api_tools.providers import ApiProviderManager
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
+from internal.core.tools.mcp_tools.providers import McpToolFactory
+from .skill_service import SkillService
 from internal.lib.helper import datetime_to_timestamp, get_value_type
 from internal.model import App, ApiTool, Dataset, AppConfig, AppConfigVersion, AppDatasetJoin, Workflow
 from pkg.sqlalchemy import SQLAlchemy
@@ -28,6 +30,11 @@ class AppConfigService(BaseService):
     api_provider_manager: ApiProviderManager
     language_model_manager: LanguageModelManager
     builtin_provider_manager: BuiltinProviderManager
+    skill_service: SkillService | None = None
+
+    def __post_init__(self) -> None:
+        if self.skill_service is None:
+            self.skill_service = SkillService(self.db)
 
     def get_draft_app_config(self, app: App) -> dict[str, Any]:
         """根据传递的应用获取该应用的草稿配置"""
@@ -59,12 +66,37 @@ class AppConfigService(BaseService):
         if set(validate_workflows) != set(draft_app_config.workflows):
             self.update(draft_app_config, workflows=validate_workflows)
 
-        # 8.将数据转换成字典后返回
+        # 8.读取并规范化 MCP 绑定列表
+        mcp_bindings, validate_mcp_bindings = self._process_and_validate_mcp_bindings(
+            getattr(draft_app_config, "mcp_bindings", [])
+        )
+        if getattr(draft_app_config, "mcp_bindings", []) != validate_mcp_bindings:
+            self.update(draft_app_config, mcp_bindings=validate_mcp_bindings)
+
+        # 9.读取并规范化 MCP 工具快照
+        mcp_tool_snapshots, validate_mcp_tool_snapshots = self._process_and_validate_mcp_tool_snapshots(
+            getattr(draft_app_config, "mcp_tool_snapshots", []),
+            validate_mcp_bindings,
+        )
+        if getattr(draft_app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
+            self.update(draft_app_config, mcp_tool_snapshots=validate_mcp_tool_snapshots)
+
+        # 10.读取并规范化 Skills 绑定列表
+        skills, validate_skills = self.skill_service.process_and_validate_skill_bindings(
+            getattr(draft_app_config, "skills", [])
+        )
+        if getattr(draft_app_config, "skills", []) != validate_skills:
+            self.update(draft_app_config, skills=validate_skills)
+
+        # 10.将数据转换成字典后返回
         return self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
             datasets,
+            mcp_bindings,
+            mcp_tool_snapshots,
+            skills,
             draft_app_config
         )
 
@@ -101,12 +133,37 @@ class AppConfigService(BaseService):
         if set(validate_workflows) != set(app_config.workflows):
             self.update(app_config, workflows=validate_workflows)
 
-        # 8.将数据转换成字典后返回
+        # 8.读取并规范化 MCP 绑定列表
+        mcp_bindings, validate_mcp_bindings = self._process_and_validate_mcp_bindings(
+            getattr(app_config, "mcp_bindings", [])
+        )
+        if getattr(app_config, "mcp_bindings", []) != validate_mcp_bindings:
+            self.update(app_config, mcp_bindings=validate_mcp_bindings)
+
+        # 9.读取并规范化 MCP 工具快照
+        mcp_tool_snapshots, validate_mcp_tool_snapshots = self._process_and_validate_mcp_tool_snapshots(
+            getattr(app_config, "mcp_tool_snapshots", []),
+            validate_mcp_bindings,
+        )
+        if getattr(app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
+            self.update(app_config, mcp_tool_snapshots=validate_mcp_tool_snapshots)
+
+        # 10.读取并规范化 Skills 绑定列表
+        skills, validate_skills = self.skill_service.process_and_validate_skill_bindings(
+            getattr(app_config, "skills", [])
+        )
+        if getattr(app_config, "skills", []) != validate_skills:
+            self.update(app_config, skills=validate_skills)
+
+        # 10.将数据转换成字典后返回
         return self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
             datasets,
+            mcp_bindings,
+            mcp_tool_snapshots,
+            skills,
             app_config
         )
 
@@ -116,14 +173,49 @@ class AppConfigService(BaseService):
         tools, _ = self._process_and_validate_tools(app_config_version.tools)
         datasets, _ = self._process_and_validate_datasets(app_config_version.datasets)
         workflows, _ = self._process_and_validate_workflows(app_config_version.workflows)
+        mcp_bindings, _ = self._process_and_validate_mcp_bindings(getattr(app_config_version, "mcp_bindings", []))
+        mcp_tool_snapshots, _ = self._process_and_validate_mcp_tool_snapshots(
+            getattr(app_config_version, "mcp_tool_snapshots", []),
+            mcp_bindings,
+        )
+        skills, _ = self.skill_service.process_and_validate_skill_bindings(getattr(app_config_version, "skills", []))
 
         return self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
             datasets,
+            mcp_bindings,
+            mcp_tool_snapshots,
+            skills,
             app_config_version,
         )
+
+    def get_langchain_tools_by_mcp_bindings(
+        self,
+        mcp_bindings: list[dict],
+        mcp_tool_snapshots: list[dict] | None = None,
+    ) -> list[BaseTool]:
+        """根据传递的 MCP 绑定列表获取 LangChain 工具。"""
+        if not isinstance(mcp_bindings, list):
+            return []
+        return McpToolFactory().get_tools(mcp_bindings, mcp_tool_snapshots=mcp_tool_snapshots)
+
+    def prepare_mcp_tool_snapshots(
+        self,
+        mcp_bindings: list[dict],
+        existing_snapshots: list[dict] | None = None,
+    ) -> list[dict]:
+        """根据 MCP 绑定生成预热快照，不进行远端发现。"""
+        return McpToolFactory().prepare_binding_snapshots(mcp_bindings, existing_snapshots)
+
+    def refresh_mcp_tool_snapshots(
+        self,
+        mcp_bindings: list[dict],
+        existing_snapshots: list[dict] | None = None,
+    ) -> list[dict]:
+        """根据 MCP 绑定刷新远端快照。"""
+        return McpToolFactory().refresh_binding_snapshots(mcp_bindings, existing_snapshots)
 
     def get_langchain_tools_by_tools_config(self, tools_config: list[dict]) -> list[BaseTool]:
         """根据传递的工具配置列表获取langchain工具列表"""
@@ -193,6 +285,9 @@ class AppConfigService(BaseService):
             tools: list[dict],
             workflows: list[dict],
             datasets: list[dict],
+            mcp_bindings: list[dict],
+            mcp_tool_snapshots: list[dict],
+            skills: list[dict],
             app_config: Union[AppConfig, AppConfigVersion]
     ) -> dict[str, Any]:
         """根据传递的插件列表、工作流列表、知识库列表以及应用配置创建字典信息"""
@@ -202,6 +297,9 @@ class AppConfigService(BaseService):
             "dialog_round": app_config.dialog_round,
             "preset_prompt": app_config.preset_prompt,
             "tools": tools,
+            "mcp_bindings": mcp_bindings,
+            "mcp_tool_snapshots": mcp_tool_snapshots,
+            "skills": skills,
             "workflows": workflows,
             "datasets": datasets,
             "retrieval_config": app_config.retrieval_config,
@@ -298,6 +396,173 @@ class AppConfigService(BaseService):
                 })
 
         return tools, validate_tools
+
+    def _process_and_validate_mcp_bindings(self, origin_mcp_bindings: list[dict]) -> tuple[list[dict], list[dict]]:
+        """根据传递的 MCP 绑定列表并返回展示信息和校验后的数据。"""
+        if not isinstance(origin_mcp_bindings, list):
+            return [], []
+
+        validate_mcp_bindings: list[dict] = []
+        for binding in origin_mcp_bindings:
+            if not isinstance(binding, dict):
+                continue
+
+            name = str(binding.get("name", "")).strip()
+            transport = str(binding.get("transport", "streamable_http")).strip().lower() or "streamable_http"
+            description = str(binding.get("description", "")).strip()
+            enabled = bool(binding.get("enabled", True))
+            headers = binding.get("headers", [])
+            tool_names = binding.get("tool_names", [])
+            timeout_seconds = binding.get("timeout_seconds", 30)
+            url = str(binding.get("url", "")).strip()
+            command = str(binding.get("command", "")).strip()
+            args = binding.get("args", [])
+            env = binding.get("env", {})
+            provider_key = str(binding.get("provider_key", "")).strip()
+            source_type = str(binding.get("source_type", "")).strip()
+            source_key = str(binding.get("source_key", "")).strip()
+            source_url = str(binding.get("source_url", "")).strip()
+            label = str(binding.get("label", "")).strip()
+            icon = str(binding.get("icon", "")).strip()
+            category = str(binding.get("category", "")).strip()
+
+            if not name:
+                continue
+            if transport in {"http", "sse", "streamable_http", "streamable-http"}:
+                if not url:
+                    continue
+            elif transport == "stdio":
+                if not command:
+                    continue
+            else:
+                continue
+
+            if not isinstance(headers, list):
+                headers = []
+            if not isinstance(tool_names, list):
+                tool_names = []
+            if not isinstance(args, list):
+                args = []
+            if not isinstance(env, dict):
+                env = {}
+
+            cleaned_headers = []
+            for header in headers:
+                if not isinstance(header, dict):
+                    continue
+                key = str(header.get("key", "")).strip()
+                value = str(header.get("value", "")).strip()
+                if key:
+                    cleaned_headers.append({"key": key, "value": value})
+
+            cleaned_tool_names = []
+            for tool_name in tool_names:
+                normalized_tool_name = str(tool_name).strip()
+                if normalized_tool_name:
+                    cleaned_tool_names.append(normalized_tool_name)
+
+            cleaned_args = [str(arg).strip() for arg in args if str(arg).strip()]
+            cleaned_env = {
+                str(key).strip(): str(value).strip()
+                for key, value in env.items()
+                if str(key).strip()
+            }
+            timeout_value = (
+                timeout_seconds
+                if isinstance(timeout_seconds, int)
+                and not isinstance(timeout_seconds, bool)
+                and timeout_seconds > 0
+                else 30
+            )
+
+            validate_binding = {
+                "name": name,
+                "description": description,
+                "transport": transport,
+                "url": url,
+                "command": command,
+                "args": cleaned_args,
+                "env": cleaned_env,
+                "enabled": enabled,
+                "headers": cleaned_headers,
+                "tool_names": cleaned_tool_names,
+                "timeout_seconds": timeout_value,
+                "provider_key": provider_key,
+                "source_type": source_type,
+                "source_key": source_key,
+                "source_url": source_url,
+                "label": label,
+                "icon": icon,
+                "category": category,
+            }
+            validate_mcp_bindings.append(validate_binding)
+
+        deduped_validate_mcp_bindings: list[dict] = []
+        deduped_mcp_bindings: list[dict] = []
+        seen_binding_targets: set[str] = set()
+        for binding in validate_mcp_bindings:
+            binding_identity = binding.get("provider_key") or f"{binding['transport']}:{binding.get('url') or binding.get('command')}:{binding['name']}"
+            if binding_identity in seen_binding_targets:
+                continue
+            seen_binding_targets.add(binding_identity)
+            deduped_validate_mcp_bindings.append(binding)
+            deduped_mcp_bindings.append(binding)
+
+        return deduped_mcp_bindings, deduped_validate_mcp_bindings
+
+    def _process_and_validate_mcp_tool_snapshots(
+        self,
+        origin_mcp_tool_snapshots: list[dict],
+        validate_mcp_bindings: list[dict],
+    ) -> tuple[list[dict], list[dict]]:
+        """根据传递的 MCP 快照列表并返回展示信息和校验后的数据。"""
+        if not isinstance(origin_mcp_tool_snapshots, list):
+            return [], []
+
+        valid_binding_identities = {
+            McpToolFactory.build_binding_identity(binding)
+            for binding in validate_mcp_bindings
+            if isinstance(binding, dict)
+        }
+
+        validate_snapshots: list[dict] = []
+        for snapshot in origin_mcp_tool_snapshots:
+            if not isinstance(snapshot, dict):
+                continue
+
+            binding_identity = str(snapshot.get("binding_identity") or "").strip()
+            if not binding_identity:
+                binding = snapshot.get("binding")
+                if isinstance(binding, dict):
+                    binding_identity = McpToolFactory.build_binding_identity(binding)
+            if not binding_identity or binding_identity not in valid_binding_identities:
+                continue
+
+            binding = snapshot.get("binding")
+            normalized_binding = binding if isinstance(binding, dict) else {}
+            tool_definitions = snapshot.get("tool_definitions", [])
+            normalized_tool_definitions = tool_definitions if isinstance(tool_definitions, list) else []
+            validate_snapshots.append({
+                "binding_identity": binding_identity,
+                "binding_hash": str(snapshot.get("binding_hash") or "").strip(),
+                "binding": normalized_binding,
+                "status": str(snapshot.get("status") or "").strip().lower() or "warming",
+                "tool_definitions": [tool for tool in normalized_tool_definitions if isinstance(tool, dict)],
+                "tool_names": [
+                    str(tool_name).strip()
+                    for tool_name in (snapshot.get("tool_names") or [])
+                    if str(tool_name).strip()
+                ],
+                "tool_count": int(snapshot.get("tool_count") or len(normalized_tool_definitions) or 0),
+                "schema_hash": str(snapshot.get("schema_hash") or "").strip(),
+                "last_attempt_at": snapshot.get("last_attempt_at"),
+                "last_success_at": snapshot.get("last_success_at"),
+                "last_error": str(snapshot.get("last_error") or "").strip(),
+                "retry_count": int(snapshot.get("retry_count") or 0),
+                "retryable": bool(snapshot.get("retryable", False)),
+            })
+
+        return validate_snapshots, validate_snapshots
 
     def _process_and_validate_datasets(self, origin_datasets: list[dict]) -> tuple[list[dict], list[dict]]:
         """根据传递的知识库并返回知识库配置与校验后的数据"""
@@ -424,15 +689,6 @@ class AppConfigService(BaseService):
             })
 
         return workflows, validate_workflows
-
-
-
-
-
-
-
-
-
 
 
 

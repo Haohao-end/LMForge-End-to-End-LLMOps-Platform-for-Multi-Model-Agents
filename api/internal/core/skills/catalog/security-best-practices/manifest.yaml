@@ -1,0 +1,19 @@
+source_key: security-best-practices
+name: security-best-practices
+label: security-best-practices
+description: Perform language and framework specific security best-practice reviews
+  and suggest improvements. Trigger only when the user explicitly requests security
+  best practices guidance, a security review/report, or secure-by-default coding help.
+  Trigger only for supported languages (python, javascript/typescript, go). Do not
+  trigger for general code review, debugging, or non-security tasks.
+category: 安全
+tags:
+- github
+- curated
+- skill-md
+icon: ''
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []

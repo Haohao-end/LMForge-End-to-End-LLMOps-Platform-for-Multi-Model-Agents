@@ -1,0 +1,16 @@
+source_key: frontend-skill
+name: frontend-skill
+label: 前端技能
+description: 用于视觉层次、留白、动效和整体布局质量要求高的前端页面设计与实现任务。
+category: 设计
+tags:
+  - github
+  - curated
+  - prompt-only
+  - frontend
+icon: icon.svg
+enabled: true
+version: 1
+executor_type: prompt
+capabilities: {}
+tools: []
