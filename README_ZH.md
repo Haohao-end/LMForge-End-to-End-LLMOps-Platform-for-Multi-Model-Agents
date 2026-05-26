@@ -81,7 +81,7 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
 ### 供应商生态
 
 <p align="center">
-  <img src="ui/public/atlas-cloud-logo.png" alt="Atlas Cloud" width="520" />
+  <img src="ui/dist/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="520" />
 </p>
 
 - Atlas Cloud 现已作为 OpenAI 兼容提供商可用，可通过 `ATLASCLOUD_API_KEY` 和 `ATLASCLOUD_API_BASE` 接入。
