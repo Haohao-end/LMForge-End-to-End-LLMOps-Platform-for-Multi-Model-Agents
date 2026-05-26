@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import AiDynamicBackground from '@/components/AiDynamicBackground.vue'
+import { AI_SURFACE_BACKGROUND_GRADIENT } from '@/config'
 import { OPEN_AGENT_NAME } from '@/config/openagent'
 import { useMarkdownRenderer } from '@/hooks/use-markdown-renderer'
 import { searchConversations } from '@/services/conversation-search'
@@ -373,10 +374,10 @@ onMounted(() => {
 <template>
   <div
     key="background-container"
- ref="pageRef"
- data-testid="conversation-search-page"
+    ref="pageRef"
+    data-testid="conversation-search-page"
     class="relative w-full h-screen overflow-hidden flex flex-col"
-    style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 25%, #f3e8ff 50%, #fce7f3 75%, #f0f9ff 100%);"
+    :style="{ background: AI_SURFACE_BACKGROUND_GRADIENT }"
     @click="closeMenu"
     @wheel="handlePageWheel"
   >

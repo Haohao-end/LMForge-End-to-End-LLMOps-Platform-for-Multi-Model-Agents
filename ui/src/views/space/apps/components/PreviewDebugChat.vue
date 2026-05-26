@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AiDynamicBackground from '@/components/AiDynamicBackground.vue'
 import AiMessage from '@/components/AiMessage.vue'
 import ChatComposer from '@/components/ChatComposer.vue'
 import HumanMessage from '@/components/HumanMessage.vue'
@@ -550,143 +551,250 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <scroll-navigator :show-scroll-to-top-button="false">
-    <div class="h-full min-h-0 flex flex-col overflow-hidden">
-      <div
-        v-if="getDebugConversationMessagesWithPageLoading && messages.length === 0"
-        class="flex-1 min-h-0 px-6 pt-6"
-      >
-        <chat-conversation-skeleton :pair-count="6" />
-      </div>
-      <!-- 历史对话列表 -->
-      <div v-else-if="messages.length > 0" class="flex-1 min-h-0 flex flex-col px-6">
-        <dynamic-scroller
-          ref="scroller"
-          :items="messages.slice().reverse()"
-          :min-item-size="1"
-          @scroll="handleScroll"
-          @wheel.passive="handleScrollerWheel"
-          class="flex-1 min-h-0 overflow-y-auto scrollbar-w-none"
-        >
-          <template v-slot="{ item, active }">
-            <dynamic-scroller-item :item="item" :active="active" :data-index="item.id">
-              <div class="flex flex-col gap-6 py-6">
-                <human-message
-                  data-scroll-item
-                  :query="item.query"
-                  :image_urls="item.image_urls"
-                  :account="accountStore.account"
-                />
-                <ai-message
-                  :message_id="item.id"
-                  :enable_text_to_speech="props.text_to_speech.enable"
-                  :agent_thoughts="item.agent_thoughts"
-                  :answer="item.answer"
-                  :answer_parts="item.answer_parts || []"
-                  :artifacts="item.artifacts || []"
-                  :app="props.app"
-                  :suggested_questions="
-                    item.suggested_questions && item.suggested_questions.length > 0
-                      ? item.suggested_questions
-                      : item.id === message_id
-                        ? suggested_questions
-                        : []
-                  "
-                  :loading="item.id === message_id && debugChatLoading"
-                  :latency="item.latency"
-                  :total_token_count="item.total_token_count"
-                  :agent_thought_default_visible="false"
-                  :agent_thought_follow_latest="false"
-                  @select-suggested-question="handleSubmitQuestion"
-                />
-              </div>
-            </dynamic-scroller-item>
-          </template>
-        </dynamic-scroller>
-        <!-- 停止调试会话 -->
-        <div v-if="task_id && debugChatLoading" class="h-[50px] flex items-center justify-center">
-          <a-button :loading="stopDebugChatLoading" class="rounded-lg px-2" @click="handleStop">
-            <template #icon>
-              <icon-poweroff />
-            </template>
-            停止响应
-          </a-button>
-        </div>
-      </div>
-      <!-- 对话列表为空时展示的对话开场白 -->
-      <div
-        v-else
-        class="flex-1 min-h-0 flex flex-col p-6 gap-2 items-center justify-center overflow-y-auto scrollbar-w-none"
-      >
-        <!-- 应用图标与名称 -->
-        <div class="flex flex-col items-center gap-2">
-          <a-avatar :size="48" shape="square" class="rounded-lg" :image-url="props.app?.icon" />
-          <div class="text-lg text-gray-700">{{ props.app?.name }}</div>
-        </div>
-        <!-- 对话开场白 -->
+  <div class="space-apps-debug-chat relative h-full min-h-0 overflow-hidden">
+    <div class="space-apps-debug-chat__ambient absolute inset-0 pointer-events-none">
+      <AiDynamicBackground
+        className="space-apps-debug-chat__background"
+        intensity="low"
+        :showParticles="false"
+        :showGrid="false"
+      />
+    </div>
+    <div class="space-apps-debug-chat__veil absolute inset-0 pointer-events-none"></div>
+
+    <scroll-navigator
+      :show-scroll-to-top-button="false"
+      class="relative z-10 h-full min-h-0"
+    >
+      <div class="space-apps-debug-chat__surface h-full min-h-0 flex flex-col overflow-hidden">
         <div
-          v-if="props.opening_statement"
-          class="bg-gray-100 w-full px-4 py-3 rounded-lg text-gray-700"
+          v-if="getDebugConversationMessagesWithPageLoading && messages.length === 0"
+          class="flex-1 min-h-0 px-6 pt-6"
         >
-          {{ props.opening_statement }}
+          <chat-conversation-skeleton :pair-count="6" />
         </div>
-        <!-- 开场白建议问题 -->
-        <div class="flex flex-col items-start gap-2 w-full">
-          <div
-            v-for="(opening_question, idx) in props.opening_questions.filter(
-              (item) => item.trim() !== '',
-            )"
-            :key="idx"
-            class="w-fit max-w-full px-4 py-1.5 border rounded-lg text-gray-700 cursor-pointer hover:bg-gray-50 break-words"
-            @click="async () => await handleSubmitQuestion(opening_question)"
+        <!-- 历史对话列表 -->
+        <div v-else-if="messages.length > 0" class="flex-1 min-h-0 flex flex-col px-6">
+          <dynamic-scroller
+            ref="scroller"
+            :items="messages.slice().reverse()"
+            :min-item-size="1"
+            @scroll="handleScroll"
+            @wheel.passive="handleScrollerWheel"
+            class="flex-1 min-h-0 overflow-y-auto scrollbar-w-none"
           >
-            {{ opening_question }}
+            <template v-slot="{ item, active }">
+              <dynamic-scroller-item :item="item" :active="active" :data-index="item.id">
+                <div class="flex flex-col gap-6 py-6">
+                  <human-message
+                    data-scroll-item
+                    :query="item.query"
+                    :image_urls="item.image_urls"
+                    :account="accountStore.account"
+                  />
+                  <ai-message
+                    :message_id="item.id"
+                    :enable_text_to_speech="props.text_to_speech.enable"
+                    :agent_thoughts="item.agent_thoughts"
+                    :answer="item.answer"
+                    :answer_parts="item.answer_parts || []"
+                    :artifacts="item.artifacts || []"
+                    :app="props.app"
+                    :suggested_questions="
+                      item.suggested_questions && item.suggested_questions.length > 0
+                        ? item.suggested_questions
+                        : item.id === message_id
+                          ? suggested_questions
+                          : []
+                    "
+                    :loading="item.id === message_id && debugChatLoading"
+                    :latency="item.latency"
+                    :total_token_count="item.total_token_count"
+                    :agent_thought_default_visible="false"
+                    :agent_thought_follow_latest="false"
+                    @select-suggested-question="handleSubmitQuestion"
+                  />
+                </div>
+              </dynamic-scroller-item>
+            </template>
+          </dynamic-scroller>
+          <!-- 停止调试会话 -->
+          <div v-if="task_id && debugChatLoading" class="h-[50px] flex items-center justify-center">
+            <a-button :loading="stopDebugChatLoading" class="rounded-lg px-2" @click="handleStop">
+              <template #icon>
+                <icon-poweroff />
+              </template>
+              停止响应
+            </a-button>
           </div>
         </div>
-      </div>
-      <!-- 对话输入框 -->
-      <div class="w-full flex flex-col flex-shrink-0">
-        <!-- 顶部输入框 -->
-        <div class="px-6">
-          <chat-composer
-            v-model="query"
-            size="compact"
-            v-model:deep-thinking-enabled="enableDeepThinking"
-            :textarea-ref-setter="setQueryTextareaRef"
-            :file-input-ref-setter="setFileInputRef"
-            :image-urls="image_urls"
-            :show-image-previews="true"
-            :show-upload-button="true"
-            :show-deep-thinking-toggle="true"
-            :clear-disabled="deleteDebugConversationLoading || messages.length === 0"
-            :clear-loading="deleteDebugConversationLoading"
-            :upload-loading="uploadFileLoading"
-            :submit-loading="debugChatLoading"
-            :audio-to-text-loading="audioToTextLoading"
-            :is-recording="isRecording"
-            clear-title="清空调试会话"
-            placeholder="发送调试消息"
-            @clear="handleClearConversation"
-            @upload="triggerFileInput"
-            @file-change="(event) => handleFileChange(event)"
-            @input="() => adjustQueryTextareaHeight()"
-            @keydown="(event) => handleQueryKeydown(event)"
-            @remove-image="
-              (index) => {
-                image_urls.splice(index, 1)
-              }
-            "
-            @start-record="handleStartRecord"
-            @stop-record="handleStopRecord"
-            @submit="handleSubmit"
-          />
+        <!-- 对话列表为空时展示的对话开场白 -->
+        <div
+          v-else
+          class="flex-1 min-h-0 flex flex-col p-6 gap-2 items-center justify-center overflow-y-auto scrollbar-w-none"
+        >
+          <!-- 应用图标与名称 -->
+          <div class="flex flex-col items-center gap-2">
+            <a-avatar :size="48" shape="square" class="rounded-lg" :image-url="props.app?.icon" />
+            <div class="text-lg text-gray-700">{{ props.app?.name }}</div>
+          </div>
+          <!-- 对话开场白 -->
+          <div
+            v-if="props.opening_statement"
+            class="bg-gray-100 w-full px-4 py-3 rounded-lg text-gray-700"
+          >
+            {{ props.opening_statement }}
+          </div>
+          <!-- 开场白建议问题 -->
+          <div class="flex flex-col items-start gap-2 w-full">
+            <div
+              v-for="(opening_question, idx) in props.opening_questions.filter(
+                (item) => item.trim() !== '',
+              )"
+              :key="idx"
+              class="w-fit max-w-full px-4 py-1.5 border rounded-lg text-gray-700 cursor-pointer hover:bg-gray-50 break-words"
+              @click="async () => await handleSubmitQuestion(opening_question)"
+            >
+              {{ opening_question }}
+            </div>
+          </div>
         </div>
-        <!-- 底部提示信息 -->
-        <div class="text-center text-gray-500 text-xs py-4">
-          内容由AI生成，无法确保真实准确，仅供参考
+        <!-- 对话输入框 -->
+        <div class="w-full flex flex-col flex-shrink-0">
+          <!-- 顶部输入框 -->
+          <div class="px-6">
+            <chat-composer
+              v-model="query"
+              size="compact"
+              v-model:deep-thinking-enabled="enableDeepThinking"
+              :textarea-ref-setter="setQueryTextareaRef"
+              :file-input-ref-setter="setFileInputRef"
+              :image-urls="image_urls"
+              :show-image-previews="true"
+              :show-upload-button="true"
+              :show-deep-thinking-toggle="true"
+              :clear-disabled="deleteDebugConversationLoading || messages.length === 0"
+              :clear-loading="deleteDebugConversationLoading"
+              :upload-loading="uploadFileLoading"
+              :submit-loading="debugChatLoading"
+              :audio-to-text-loading="audioToTextLoading"
+              :is-recording="isRecording"
+              clear-title="清空调试会话"
+              placeholder="发送调试消息"
+              @clear="handleClearConversation"
+              @upload="triggerFileInput"
+              @file-change="(event) => handleFileChange(event)"
+              @input="() => adjustQueryTextareaHeight()"
+              @keydown="(event) => handleQueryKeydown(event)"
+              @remove-image="
+                (index) => {
+                  image_urls.splice(index, 1)
+                }
+              "
+              @start-record="handleStartRecord"
+              @stop-record="handleStopRecord"
+              @submit="handleSubmit"
+            />
+          </div>
+          <!-- 底部提示信息 -->
+          <div class="text-center text-gray-500 text-xs py-4">
+            内容由AI生成，无法确保真实准确，仅供参考
+          </div>
         </div>
+        <!-- 停止会话按钮 -->
       </div>
-      <!-- 停止会话按钮 -->
-    </div>
-  </scroll-navigator>
+    </scroll-navigator>
+  </div>
 </template>
+
+<style scoped>
+.space-apps-debug-chat {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.82), transparent 32%),
+    radial-gradient(circle at 82% 12%, rgba(224, 242, 254, 0.66), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(250, 252, 255, 0.8) 52%, rgba(245, 249, 255, 0.86) 100%);
+}
+
+.space-apps-debug-chat__ambient {
+  opacity: 0.9;
+}
+
+.space-apps-debug-chat__veil {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.2) 34%, rgba(255, 255, 255, 0.06) 60%, rgba(255, 255, 255, 0.18) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.08) 100%);
+}
+
+.space-apps-debug-chat__surface {
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+}
+
+:deep(.space-apps-debug-chat .glass-message-bubble) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.74) 0%, rgba(247, 251, 255, 0.62) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow:
+    0 10px 28px rgba(148, 163, 184, 0.1) !important,
+    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important,
+    inset 0 -1px 0 rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(18px) saturate(1.08) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.08) !important;
+}
+
+:deep(.space-apps-debug-chat .glass-message-bubble:hover) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0%, rgba(243, 248, 255, 0.72) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.96) !important;
+  box-shadow:
+    0 14px 36px rgba(148, 163, 184, 0.14) !important,
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important,
+    inset 0 -1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+:deep(.space-apps-debug-chat .glass-suggestion-bubble) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(247, 251, 255, 0.58) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.84) !important;
+  box-shadow:
+    0 8px 24px rgba(148, 163, 184, 0.08) !important,
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important,
+    inset 0 -1px 0 rgba(255, 255, 255, 0.32) !important;
+  backdrop-filter: blur(16px) saturate(1.04) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.04) !important;
+}
+
+:deep(.space-apps-debug-chat .glass-suggestion-bubble:hover) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.86) 0%, rgba(244, 249, 255, 0.7) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+:deep(.space-apps-debug-chat .deep-agent-timeline) {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(226, 232, 240, 0.96) !important;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08) !important;
+}
+
+:deep(.space-apps-debug-chat .deep-agent-step__dot),
+:deep(.space-apps-debug-chat .deep-agent-todo__dot) {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.95) !important;
+}
+
+:deep(.space-apps-debug-chat .deep-agent-todo-list) {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border-color: rgba(226, 232, 240, 0.9) !important;
+}
+
+:deep(.space-apps-debug-chat .deep-agent-artifact) {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(191, 219, 254, 0.24) !important;
+  box-shadow: 0 8px 24px rgba(148, 163, 184, 0.08) !important;
+}
+
+:deep(.space-apps-debug-chat .deep-agent-step__technical pre) {
+  background: rgba(248, 250, 252, 0.86) !important;
+}
+
+:deep(.space-apps-debug-chat .message-artifact-card) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.86)) !important;
+  border-color: rgba(226, 232, 240, 0.95) !important;
+  box-shadow: 0 10px 28px rgba(148, 163, 184, 0.08) !important;
+}
+</style>

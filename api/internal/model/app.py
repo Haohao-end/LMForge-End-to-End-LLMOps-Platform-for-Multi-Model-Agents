@@ -37,7 +37,6 @@ class App(db.Model):
         Index("app_account_id_idx", "account_id"),
         Index("app_is_public_idx", "is_public"),
         Index("app_tags_idx", "tags", postgresql_using="gin"),
-        Index("app_like_count_idx", "like_count")
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
@@ -53,9 +52,6 @@ class App(db.Model):
     is_public = Column(Boolean, nullable=False, server_default=text("false"))  # 是否公开到广场
     tags = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用标签列表
     published_at = Column(DateTime, nullable=True)  # 发布到广场的时间
-    view_count = Column(Integer, nullable=False, server_default=text("0"))  # 浏览次数
-    like_count = Column(Integer, nullable=False, server_default=text("0"))  # 点赞数
-    fork_count = Column(Integer, nullable=False, server_default=text("0"))  # 被复制次数
     original_app_id = Column(UUID, nullable=True)  # 原始应用ID(用于Fork追踪)
     updated_at = Column(
         DateTime,
@@ -199,6 +195,7 @@ class AppConfig(db.Model):
     mcp_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 绑定列表
     mcp_tool_snapshots = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 工具快照
     skills = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联技能列表
+    agent_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联子Agent列表
     workflows = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联的工作流列表
     retrieval_config = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 检索配置
     long_term_memory = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))  # 长期记忆配置
@@ -249,6 +246,7 @@ class AppConfigVersion(db.Model):
     mcp_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 绑定列表
     mcp_tool_snapshots = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 工具快照
     skills = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联技能列表
+    agent_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联子Agent列表
     workflows = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联的工作流列表
     datasets = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联的知识库列表
     retrieval_config = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))  # 检索配置
@@ -294,34 +292,4 @@ class AppDatasetJoin(db.Model):
         server_onupdate=text("CURRENT_TIMESTAMP(0)"),
         default=_utcnow_naive,
     )
-    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP(0)"))
-
-
-class AppLike(db.Model):
-    """用户点赞应用关联表"""
-    __tablename__ = "app_like"
-    __table_args__ = (
-        PrimaryKeyConstraint("id", name="pk_app_like_id"),
-        Index("app_like_app_id_idx", "app_id"),
-        Index("app_like_account_id_idx", "account_id"),
-    )
-
-    id = Column(UUID, nullable=False, server_default=text("uuid_generate_v4()"))
-    app_id = Column(UUID, nullable=False)
-    account_id = Column(UUID, nullable=False)
-    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP(0)"))
-
-
-class AppFavorite(db.Model):
-    """用户收藏应用关联表"""
-    __tablename__ = "app_favorite"
-    __table_args__ = (
-        PrimaryKeyConstraint("id", name="pk_app_favorite_id"),
-        Index("app_favorite_app_id_idx", "app_id"),
-        Index("app_favorite_account_id_idx", "account_id"),
-    )
-
-    id = Column(UUID, nullable=False, server_default=text("uuid_generate_v4()"))
-    app_id = Column(UUID, nullable=False)
-    account_id = Column(UUID, nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP(0)"))

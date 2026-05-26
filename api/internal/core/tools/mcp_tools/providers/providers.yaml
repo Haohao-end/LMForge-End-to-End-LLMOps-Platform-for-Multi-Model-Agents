@@ -25,7 +25,7 @@
   category: data_analysis
   transport: streamable_http
   command: ""
-  url: https://mcp.api-inference.modelscope.net/0f8d8bde112847/mcp
+  url: https://mcp.api-inference.modelscope.net/736c38ad140e45/mcp
   headers: []
   tool_names: []
   args: []
@@ -63,7 +63,7 @@
   category: general
   transport: streamable_http
   command: ""
-  url: https://mcp.api-inference.modelscope.net/77c109fcdabb45/mcp
+  url: https://mcp.api-inference.modelscope.net/198086eeedf448/mcp
   headers: []
   tool_names: []
   args: []
@@ -82,7 +82,7 @@
   category: productivity
   transport: streamable_http
   command: ""
-  url: https://mcp.api-inference.modelscope.net/540c010e843a4e/mcp
+  url: https://mcp.api-inference.modelscope.net/fbc1920197624e/mcp
   headers: []
   tool_names: []
   args: []
@@ -101,7 +101,7 @@
   category: general
   transport: streamable_http
   command: ""
-  url: https://mcp.api-inference.modelscope.net/5db48a8cef5240/mcp
+  url: https://mcp.api-inference.modelscope.net/bcb784e2572846/mcp
   headers: []
   tool_names: []
   args: []

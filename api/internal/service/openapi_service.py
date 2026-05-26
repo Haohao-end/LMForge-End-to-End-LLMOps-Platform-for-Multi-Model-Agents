@@ -21,6 +21,7 @@ from internal.schema.openapi_schema import OpenAPIChatReq
 from pkg.response import Response
 from pkg.sqlalchemy import SQLAlchemy
 from .app_config_service import AppConfigService
+from .app_config_service import call_config_loader
 from .app_service import AppService
 from .base_service import BaseService
 from .conversation_service import ConversationService
@@ -81,7 +82,11 @@ class OpenAPIService(BaseService):
             })
 
         # 7.获取校验后的运行时配置
-        app_config = self.app_config_service.get_app_config(app)
+        app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            app,
+            persist_changes=False,
+        )
 
         # 8.在落库前解析运行时模型能力，避免带图请求被静默降级
         if hasattr(self.language_model_service, "resolve_runtime_language_model"):
@@ -121,9 +126,15 @@ class OpenAPIService(BaseService):
         tools = AppService._build_runtime_tools_for_config(
             app_config_service=self.app_config_service,
             retrieval_service=self.retrieval_service,
+            app_service=self.app_service,
             account=account,
             draft_app_config=app_config,
             flask_app=current_app._get_current_object() if has_app_context() else None,
+            runtime_context={
+                "root_app_id": str(app.id),
+                "call_stack": [str(app.id)],
+                "account_id": str(account.id),
+            },
         )
 
         # 12.根据LLM是否支持tool_call决定使用不同的Agent

@@ -1,0 +1,41 @@
+name: atlascloud_gpt_image_2_edit
+label: GPT Image 2 编辑
+description: 使用 Atlas Cloud 的 OpenAI GPT Image 2 对输入图片进行自然语言编辑
+params:
+  - name: prompt
+    label: 编辑描述
+    type: string
+    required: true
+  - name: images
+    label: 参考图片URL
+    type: string
+    required: true
+  - name: size
+    label: 图片尺寸
+    type: select
+    default: "1024x1024"
+    required: false
+    options:
+      - value: "1024x1024"
+        label: "1024x1024"
+      - value: "1024x1536"
+        label: "1024x1536"
+      - value: "1536x1024"
+        label: "1536x1024"
+  - name: quality
+    label: 图片质量
+    type: select
+    default: medium
+    required: false
+    options:
+      - value: low
+        label: 低
+      - value: medium
+        label: 中
+      - value: high
+        label: 高
+  - name: input_fidelity
+    label: 保留细节
+    type: boolean
+    default: false
+    required: false

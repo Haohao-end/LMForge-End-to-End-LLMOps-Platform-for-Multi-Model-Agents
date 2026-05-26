@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="atlascloudVideoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <linearGradient id="atlascloudVideoCloud" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="100%" stop-color="#a78bfa" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="28" fill="url(#atlascloudVideoBg)" />
+  <circle cx="60" cy="56" r="15" fill="#f59e0b" />
+  <circle cx="78" cy="104" r="22" fill="url(#atlascloudVideoCloud)" />
+  <circle cx="109" cy="86" r="30" fill="url(#atlascloudVideoCloud)" />
+  <circle cx="138" cy="104" r="20" fill="url(#atlascloudVideoCloud)" />
+  <rect x="56" y="102" width="92" height="38" rx="19" fill="url(#atlascloudVideoCloud)" />
+  <rect x="72" y="82" width="66" height="44" rx="8" fill="none" stroke="#ffffff" stroke-width="7" />
+  <polygon points="92,93 92,115 112,104" fill="#ffffff" />
+  <rect x="78" y="88" width="6" height="30" rx="3" fill="#ffffff" opacity="0.28" />
+  <rect x="116" y="88" width="6" height="30" rx="3" fill="#ffffff" opacity="0.28" />
+</svg>

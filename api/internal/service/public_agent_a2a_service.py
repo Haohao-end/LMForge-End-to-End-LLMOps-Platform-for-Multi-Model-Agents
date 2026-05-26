@@ -23,7 +23,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import selectinload
 from pkg.sqlalchemy import SQLAlchemy
 
-from .app_config_service import AppConfigService
+from .app_config_service import AppConfigService, call_config_loader
 from .app_service import AppService
 from .base_service import BaseService
 from .conversation_service import ConversationService
@@ -472,7 +472,11 @@ class PublicAgentA2AService(BaseService):
     def get_agent_card(self, app_id: UUID | str) -> dict[str, Any]:
         """返回公开Agent的A2A Agent Card。"""
         app = self._get_public_app(app_id)
-        app_config = self.app_config_service.get_app_config(app)
+        app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            app,
+            persist_changes=False,
+        )
         message_url = self.public_agent_registry_service.build_agent_message_url(app.id)
         card_url = self.public_agent_registry_service.build_agent_card_url(app.id)
 
@@ -500,7 +504,7 @@ class PublicAgentA2AService(BaseService):
                     "id": str(app.id),
                     "name": app.name,
                     "description": app.description or app_config.get("opening_statement", ""),
-                    "tags": app.tags or [],
+                    "tags": getattr(app, "tags", []) or [],
                     "examples": app_config.get("opening_questions", [])[:3],
                     "inputModes": ["text/plain"],
                     "outputModes": ["text/plain", "image/*", "application/octet-stream"],
@@ -520,6 +524,7 @@ class PublicAgentA2AService(BaseService):
         app = self._get_public_app(app_id)
         request_payload = payload or {}
         image_urls = self._extract_image_urls_from_payload(request_payload)
+        runtime_context = self._extract_runtime_context_from_payload(request_payload)
         if image_urls:
             raise ValidateErrorException(
                 "当前公共应用预览链路暂不支持图片输入，请移除图片后重试",
@@ -543,7 +548,7 @@ class PublicAgentA2AService(BaseService):
             or str(request_payload.get("context_id", "")).strip()
             or str(app.id)
         )
-        agent_result = self._invoke_public_agent(app, query, flask_app=flask_app)
+        agent_result = self._invoke_public_agent(app, query, flask_app=flask_app, runtime_context=runtime_context)
         output_payload = build_output_payload(agent_result.answer, getattr(agent_result, "agent_thoughts", []) or [])
 
         return {
@@ -576,6 +581,7 @@ class PublicAgentA2AService(BaseService):
         app = self._get_public_app(app_id)
         request_payload = payload or {}
         image_urls = self._extract_image_urls_from_payload(request_payload)
+        runtime_context = self._extract_runtime_context_from_payload(request_payload)
         if image_urls:
             raise ValidateErrorException(
                 "当前公共应用预览链路暂不支持图片输入，请移除图片后重试",
@@ -605,6 +611,7 @@ class PublicAgentA2AService(BaseService):
             context_id=context_id,
             flask_app=flask_app,
             request_payload=request_payload,
+            runtime_context=runtime_context,
         )
 
     def _stream_public_agent_events(
@@ -614,9 +621,14 @@ class PublicAgentA2AService(BaseService):
         context_id: str,
         request_payload: dict[str, Any],
         flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> Generator[str, None, None]:
         """流式输出公开Agent事件。"""
-        app_config = self.app_config_service.get_app_config(app)
+        app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            app,
+            persist_changes=False,
+        )
         if hasattr(self.language_model_service, "resolve_runtime_language_model"):
             model_resolution = self.language_model_service.resolve_runtime_language_model(
                 app_config.get("model_config", {}),
@@ -633,6 +645,7 @@ class PublicAgentA2AService(BaseService):
             owner_account,
             app_config,
             flask_app=flask_app,
+            runtime_context=runtime_context,
         )
         agent = self.app_service._create_runtime_agent(
             llm,
@@ -723,9 +736,14 @@ class PublicAgentA2AService(BaseService):
         app: App,
         query: str,
         flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ):
         """以内存方式调用公开Agent，不落库。"""
-        app_config = self.app_config_service.get_app_config(app)
+        app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            app,
+            persist_changes=False,
+        )
         if hasattr(self.language_model_service, "resolve_runtime_language_model"):
             model_resolution = self.language_model_service.resolve_runtime_language_model(
                 app_config.get("model_config", {}),
@@ -742,6 +760,7 @@ class PublicAgentA2AService(BaseService):
             owner_account,
             app_config,
             flask_app=flask_app,
+            runtime_context=runtime_context,
         )
         agent = self.app_service._create_runtime_agent(
             llm,
@@ -985,6 +1004,19 @@ class PublicAgentA2AService(BaseService):
                 image_urls.append(nested_url)
 
         return image_urls
+
+    @classmethod
+    def _extract_runtime_context_from_payload(cls, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """从 A2A payload 的 metadata 中提取运行时上下文。"""
+        metadata = payload.get("metadata", {})
+        if not isinstance(metadata, dict):
+            return None
+
+        runtime_context = metadata.get("runtime_context", {})
+        if not isinstance(runtime_context, dict):
+            return None
+
+        return runtime_context
 
     @classmethod
     def _extract_answer_text(cls, response: dict[str, Any]) -> str:

@@ -3,6 +3,7 @@ import { computed, nextTick, type PropType, ref, watch } from 'vue'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
 import { cloneDeep, isEqual } from 'lodash'
 import { Message } from '@arco-design/web-vue'
+import { apiPrefix } from '@/config'
 import type { McpBinding, McpToolSnapshot } from '@/models/app'
 import McpMarketplacePickerModal from './McpMarketplacePickerModal.vue'
 import { resolveMcpBindingStatus } from './mcp-status'
@@ -112,6 +113,71 @@ const syncLocalBindings = (newBindings: McpBindingForm[]) => {
 }
 
 const getBindingStatus = (binding: McpBindingForm) => resolveMcpBindingStatus(binding, props.mcp_tool_snapshots || [])
+
+const normalizeIconUrl = (icon: string = '') => {
+  if (!icon) return ''
+  if (icon.startsWith('data:') || /^https?:\/\//.test(icon)) return icon
+  const fallbackOrigin = globalThis.location?.origin ?? 'http://localhost'
+  const apiUrl = new URL(apiPrefix, fallbackOrigin)
+  const basePath = apiUrl.pathname.replace(/\/+$/, '')
+  let path = icon.startsWith('/') ? icon : `/${icon}`
+
+  if (path.startsWith('/api/') && !basePath.startsWith('/api')) {
+    path = path.replace(/^\/api/, '')
+  }
+
+  if (basePath && basePath !== '/' && !path.startsWith(`${basePath}/`)) {
+    if (path.startsWith('/api/')) {
+      path = path.replace(/^\/api/, '')
+    }
+    return `${apiUrl.origin}${basePath}${path}`
+  }
+
+  return `${apiUrl.origin}${path}`
+}
+
+const avatarPalettes = [
+  ['#334155', '#0f172a'],
+  ['#0369a1', '#1d4ed8'],
+  ['#047857', '#0f766e'],
+  ['#c2410c', '#d97706'],
+  ['#be123c', '#e11d48'],
+  ['#0f766e', '#14b8a6'],
+]
+
+const hashString = (value: string) => {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 33 + value.charCodeAt(i)) >>> 0
+  }
+  return hash
+}
+
+const getBindingAvatarText = (binding: Pick<McpBinding, 'label' | 'name' | 'provider_key'>) => {
+  const source = (binding.label || binding.name || binding.provider_key || 'M').trim()
+  const latinParts = source.match(/[A-Za-z0-9]+/g)
+  if (latinParts && latinParts.length > 0) {
+    return latinParts
+      .slice(0, 2)
+      .map((item) => item[0]?.toUpperCase())
+      .join('')
+  }
+
+  const chineseParts = source.match(/[\u4e00-\u9fff]/g)
+  if (chineseParts && chineseParts.length > 0) {
+    return chineseParts.slice(0, 2).join('')
+  }
+
+  return source.slice(0, 2).toUpperCase()
+}
+
+const getBindingAvatarStyle = (binding: Pick<McpBinding, 'provider_key' | 'category' | 'label'>) => {
+  const palette = avatarPalettes[hashString(`${String(binding.provider_key || '').trim()}:${String(binding.category || '').trim()}:${String(binding.label || '').trim()}`) % avatarPalettes.length]
+  return {
+    background: `linear-gradient(135deg, ${palette[0]} 0%, ${palette[1]} 100%)`,
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+  }
+}
 
 const openEditModal = (idx: number) => {
   const binding = activateMcpBindings.value[idx]
@@ -303,32 +369,50 @@ watch(
     </template>
 
     <div v-if="activateMcpBindings.length > 0" class="flex flex-col gap-2">
-        <div
+      <div
         v-for="(binding, idx) in activateMcpBindings"
         :key="`${binding.name}-${idx}`"
         class="flex items-start justify-between gap-3 bg-white p-3 rounded-lg cursor-pointer hover:shadow-sm group"
         @click="openEditModal(idx)"
       >
-        <div class="flex flex-col gap-1 min-w-0 flex-1">
-          <div class="flex items-center gap-2 min-w-0">
-            <div class="text-gray-700 font-bold truncate">{{ binding.name }}</div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              <a-tag size="small" :color="getBindingStatus(binding).color">
-                {{ getBindingStatus(binding).label }}
-              </a-tag>
-              <a-tooltip
-                v-if="getBindingStatus(binding).show_help && getBindingStatus(binding).tooltip"
-                :content="getBindingStatus(binding).tooltip"
-                position="top"
-              >
-                <icon-question-circle class="text-gray-400 text-sm" />
-              </a-tooltip>
+        <div class="flex items-start gap-3 min-w-0 flex-1">
+          <a-avatar
+            :size="34"
+            shape="square"
+            class="shrink-0 overflow-hidden"
+            :style="binding.icon ? { backgroundColor: '#f3f4f6' } : getBindingAvatarStyle(binding)"
+          >
+            <img
+              v-if="binding.icon"
+              :src="normalizeIconUrl(binding.icon)"
+              :alt="binding.label || binding.name"
+              class="w-full h-full object-cover"
+            />
+            <span v-else class="text-white font-semibold text-[12px] tracking-wide">
+              {{ getBindingAvatarText(binding) }}
+            </span>
+          </a-avatar>
+          <div class="flex flex-col gap-1 min-w-0 flex-1">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="text-gray-700 font-bold truncate">{{ binding.name }}</div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <a-tag size="small" :color="getBindingStatus(binding).color">
+                  {{ getBindingStatus(binding).label }}
+                </a-tag>
+                <a-tooltip
+                  v-if="getBindingStatus(binding).show_help && getBindingStatus(binding).tooltip"
+                  :content="getBindingStatus(binding).tooltip"
+                  position="top"
+                >
+                  <icon-question-circle class="text-gray-400 text-sm" />
+                </a-tooltip>
+              </div>
+              <a-tag size="small" color="arcoblue">{{ binding.transport }}</a-tag>
             </div>
-            <a-tag size="small" color="arcoblue">{{ binding.transport }}</a-tag>
-          </div>
-          <div class="text-xs text-gray-500 truncate">{{ binding.description }}</div>
-          <div class="text-xs text-gray-400 truncate">
-            {{ binding.url || binding.command || '未配置地址' }}
+            <div class="text-xs text-gray-500 truncate">{{ binding.description }}</div>
+            <div class="text-xs text-gray-400 truncate">
+              {{ binding.url || binding.command || '未配置地址' }}
+            </div>
           </div>
         </div>
         <a-button

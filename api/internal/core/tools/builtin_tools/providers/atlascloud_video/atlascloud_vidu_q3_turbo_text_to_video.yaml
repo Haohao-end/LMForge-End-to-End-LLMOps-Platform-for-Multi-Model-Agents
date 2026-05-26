@@ -1,0 +1,69 @@
+name: atlascloud_vidu_q3_turbo_text_to_video
+label: Vidu Q3 Turbo 文生视频
+description: 使用 Atlas Cloud 的 Vidu Q3 Turbo 生成高质量视频，支持分辨率、运动幅度和音频开关
+params:
+  - name: prompt
+    label: 视频描述
+    type: string
+    required: true
+  - name: resolution
+    label: 分辨率
+    type: select
+    default: "720p"
+    required: false
+    options:
+      - value: "540p"
+        label: "540p"
+      - value: "720p"
+        label: "720p"
+      - value: "1080p"
+        label: "1080p"
+  - name: duration
+    label: 视频时长
+    type: number
+    default: 5
+    min: 1
+    max: 16
+    required: false
+  - name: aspect_ratio
+    label: 视频比例
+    type: select
+    default: "16:9"
+    required: false
+    options:
+      - value: "16:9"
+        label: "16:9"
+      - value: "4:3"
+        label: "4:3"
+      - value: "9:16"
+        label: "9:16"
+  - name: movement_amplitude
+    label: 运动幅度
+    type: select
+    default: auto
+    required: false
+    options:
+      - value: auto
+        label: 自动
+      - value: small
+        label: 小
+      - value: medium
+        label: 中
+      - value: large
+        label: 大
+  - name: generate_audio
+    label: 生成音频
+    type: boolean
+    default: true
+    required: false
+  - name: bgm
+    label: 背景音乐
+    type: boolean
+    default: true
+    required: false
+  - name: seed
+    label: 随机种子
+    type: number
+    default: -1
+    min: -1
+    required: false

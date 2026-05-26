@@ -64,22 +64,16 @@ const onCreatorAvatarError = () => {
 type PreviewApp = PublicApp & { draft_updated_at: number }
 const app = ref<PreviewApp>({
   id: '',
-  name: '',
-  icon: '',
-  description: '',
-  tags: [],
-  view_count: 0,
-  like_count: 0,
-  fork_count: 0,
-  favorite_count: 0,
-  creator_name: '',
-  creator_avatar: '',
-  published_at: 0,
-  created_at: 0,
-  is_liked: false,
-  is_favorited: false,
-  draft_updated_at: 0,
-})
+  name: '',
+  icon: '',
+  description: '',
+  tags: [],
+  creator_name: '',
+  creator_avatar: '',
+  published_at: 0,
+  created_at: 0,
+  draft_updated_at: 0,
+})
 
 // 加载公共应用详情
 const loadApp = async () => {
@@ -199,43 +193,16 @@ onMounted(async () => await loadApp())
               <div class="flex items-center h-[18px] text-xs text-gray-500">
                 {{ app.creator_name }}
               </div>
-              <div class="flex items-center h-[18px] text-xs text-gray-500">
-                <icon-eye />
-                {{ app.view_count }} 次浏览
-              </div>
-              <div class="flex items-center h-[18px] text-xs text-gray-500">
-                <icon-branch />
-                {{ app.fork_count }} 次Fork
-              </div>
-              <a-tag size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
-                发布于 {{ formatTimestampShort(app.published_at) }}
-              </a-tag>
+              <a-tag size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
+                发布于 {{ formatTimestampShort(app.published_at) }}
+              </a-tag>
             </div>
           </div>
         </div>
       </div>
-      <!-- 导航菜单 -->
-      <div class="absolute left-1/2 -translate-x-1/2">
-        <a-space :size="12">
-          <router-link
-            :to="{ name: 'store-public-apps-preview', params: { app_id: String(route.params?.app_id) } }"
-            class="text-base font-bold text-gray-500"
-            active-class="!text-blue-700"
-          >
-            编排
-          </router-link>
-          <router-link
-            :to="{ name: 'store-public-apps-analysis', params: { app_id: String(route.params?.app_id) } }"
-            class="text-base font-bold text-gray-500"
-            active-class="!text-blue-700"
-          >
-            统计分析
-          </router-link>
-        </a-space>
-      </div>
-      <!-- 右侧按钮信息 -->
-      <div class="">
-        <a-button
+      <!-- 右侧按钮信息 -->
+      <div class="">
+        <a-button
           :loading="forkLoading"
           type="primary"
           @click="handleForkToMySpace"

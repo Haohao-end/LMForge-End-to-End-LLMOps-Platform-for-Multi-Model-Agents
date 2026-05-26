@@ -45,6 +45,7 @@ class UpdateAppReq(FlaskForm):
 class GetAppsWithPageReq(PaginatorReq):
     """获取应用分页列表数据请求"""
     search_word = StringField("search_word", default="", validators=[Optional()])
+    published_only = BooleanField("published_only", default=False)
 
 
 class GetAppsWithPageResp(Schema):
@@ -56,6 +57,7 @@ class GetAppsWithPageResp(Schema):
     preset_prompt = fields.String(dump_default="")
     model_config = fields.Dict(dump_default={})
     status = fields.String(dump_default="")
+    is_public = fields.Boolean(dump_default=False)
     creator_name = fields.String(dump_default="")
     creator_avatar = fields.String(dump_default="")
     draft_updated_at = fields.Integer(dump_default=0)
@@ -76,6 +78,7 @@ class GetAppsWithPageResp(Schema):
                 "model": app_config.model_config.get("model", "")
             },
             "status": data.status,
+            "is_public": data.is_public,
             "creator_name": data.account.name if data.account else "",
             "creator_avatar": data.account.avatar if data.account else "",
             "draft_updated_at": datetime_to_timestamp(data.draft_app_config.updated_at),
@@ -161,6 +164,7 @@ class GetPublishHistoriesWithPageResp(Schema):
                     getattr(data, "mcp_tool_snapshots", []),
                 ),
                 "skills": display_config.get("skills", getattr(data, "skills", [])),
+                "agent_bindings": display_config.get("agent_bindings", getattr(data, "agent_bindings", [])),
                 "workflows": display_config.get("workflows", data.workflows),
                 "datasets": display_config.get("datasets", data.datasets),
                 "retrieval_config": display_config.get("retrieval_config", data.retrieval_config),

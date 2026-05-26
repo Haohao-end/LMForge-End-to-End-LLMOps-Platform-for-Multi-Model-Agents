@@ -1,4 +1,4 @@
-from langchain_core.tools import Tool
+from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from internal.lib.helper import add_attribute
 
@@ -38,11 +38,15 @@ def _get_wikipedia_summary(query: str, lang: str = "zh", **kwargs) -> str:
 
 
 @add_attribute("args_schema", WikipediaSummaryArgsSchema)
-def wikipedia_summary(**kwargs) -> Tool:
+def wikipedia_summary(**kwargs) -> StructuredTool:
     """维基百科摘要查询工具"""
-    return Tool(
+    return StructuredTool.from_function(
         name="wikipedia_summary",
         description="获取维基百科词条的摘要信息和链接。输入应该是词条名称。",
-        func=lambda query, lang="zh": _get_wikipedia_summary(query, lang, **kwargs),
-        args_schema=WikipediaSummaryArgsSchema
+        func=lambda query, lang="zh": _get_wikipedia_summary(**{
+            **kwargs,
+            "query": query,
+            "lang": lang,
+        }),
+        args_schema=WikipediaSummaryArgsSchema,
     )

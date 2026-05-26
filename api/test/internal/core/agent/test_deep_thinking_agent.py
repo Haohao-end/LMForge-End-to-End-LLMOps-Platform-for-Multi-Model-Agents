@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from contextlib import nullcontext
 from types import SimpleNamespace
@@ -363,6 +364,10 @@ class TestAgentConfig:
         )
         assert "你是助手" in filled
         assert "用户喜欢简洁" in filled
+        assert "最终自检" in filled
+        assert "agent_bindings" in filled
+        assert "Markdown" in filled
+        assert "附件是可选补充材料" in filled
 
 
 # ============================================================
@@ -432,6 +437,20 @@ class TestDeepThinkingAgentGraph:
         agent = self._build_agent()
         assert agent._agent is not None
 
+    def test_heuristic_deep_route_should_not_force_artifacts_for_plan_only_queries(self):
+        """仅包含“方案/计划”但没有显式输出意图时，不应强制产物输出。"""
+        route = DeepThinkingAgent._heuristic_deep_route("请帮我规划一个上海三日游方案")
+
+        assert route.need_artifact_output is False
+        assert route.need_sandbox is False
+
+    def test_heuristic_deep_route_should_enable_artifacts_for_plan_with_export_intent(self):
+        """当“方案”同时带有导出/保存类语义时，应进入产物输出路径。"""
+        route = DeepThinkingAgent._heuristic_deep_route("请帮我规划一个上海三日游方案，并导出成 markdown 文档")
+
+        assert route.need_artifact_output is True
+        assert route.need_sandbox is True
+
     @patch.object(DeepThinkingAgent, "_build_deep_agent")
     @patch.object(DeepThinkingAgent, "_decide_deep_route")
     def test_deep_agent_node_publishes_timeline_events(self, mock_route, mock_build_deep):
@@ -450,6 +469,12 @@ class TestDeepThinkingAgentGraph:
         agent._deep_agent_node(self._build_state())
 
         assert any(event.event == QueueEvent.DEEP_STEP for event in published)
+        assert any(
+            event.event == QueueEvent.DEEP_STEP
+            and event.tool == "self_check"
+            and event.tool_input.get("timeline", {}).get("step_type") == "reflection"
+            for event in published
+        )
         assert any(event.event == QueueEvent.DEEP_COMPLETE for event in published)
 
     @patch.object(DeepThinkingAgent, "_build_deep_agent")
@@ -497,6 +522,7 @@ class TestDeepThinkingAgentGraph:
         assert any(isinstance(message, AIMessage) for message in msgs)
         assert "<deep_execution_summary>" in msgs[0].content
         assert "<deep_thinking_result>" in msgs[0].content
+        assert "<deep_self_check>" in msgs[0].content
 
     @patch.object(DeepThinkingAgent, "_build_deep_agent")
     def test_deep_agent_node_should_publish_deep_usage_totals(self, mock_build_deep):
@@ -530,6 +556,46 @@ class TestDeepThinkingAgentGraph:
         )
         assert complete_event.total_token_count > 0
         assert complete_event.total_price > 0
+
+    def test_build_deep_agent_registers_harness_profile_and_injects_long_term_memory(self):
+        """deepagents profile 应禁用默认 task 路径，并将长期记忆注入系统提示词。"""
+        captured = {
+            "profile_keys": [],
+            "profile": None,
+            "system_prompt": "",
+        }
+        agent = self._build_agent()
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda *_: None)
+        route = self._route()
+
+        def capture_register_harness_profile(profile_key, profile):
+            captured["profile_keys"].append(profile_key)
+            captured["profile"] = profile
+
+        def capture_create_deep_agent(*args, **kwargs):
+            captured["system_prompt"] = kwargs.get("system_prompt", "")
+            return MagicMock()
+
+        with patch("internal.core.agent.agents.deep_thinking_agent._infer_deepagents_profile_keys", return_value=["deepseek"]), \
+             patch("deepagents.register_harness_profile", side_effect=capture_register_harness_profile), \
+             patch("deepagents.create_deep_agent", side_effect=capture_create_deep_agent), \
+             patch.dict(os.environ, {}, clear=True):
+            agent._build_deep_agent(
+                task_id=uuid4(),
+                route_decision=route,
+                timeline=timeline,
+                long_term_memory="用户偏好：回答要简洁",
+            )
+
+        assert captured["profile_keys"]
+        assert "用户偏好：回答要简洁" in captured["system_prompt"]
+        assert "优先复用当前应用已经绑定好的工具" in captured["system_prompt"]
+        profile = captured["profile"]
+        assert profile is not None
+        assert "write_file" in getattr(profile, "excluded_tools", set())
+        assert "edit_file" in getattr(profile, "excluded_tools", set())
+        general_purpose = getattr(profile, "general_purpose_subagent", None)
+        assert getattr(general_purpose, "enabled", True) is False
 
     def test_build_deep_agent_uses_sandbox_when_env_set(self):
         """配置完整且路由要求沙箱时，应构建 BaiduCfcSandboxBackend。"""
@@ -871,6 +937,40 @@ class TestDeepThinkingAgentGraph:
 
         assert "sandbox:/mnt/data/" not in sanitized
 
+    def test_build_final_self_check_should_pass_for_clean_artifacts(self):
+        """轻量自检应在答案干净且附件链接真实时通过。"""
+        route = self._route(need_sandbox=True, need_artifact_output=True)
+
+        result = DeepThinkingAgent._build_final_self_check(
+            route_decision=route,
+            used_sandbox=True,
+            deep_answer="这是最终答案，没有本地路径。",
+            artifacts=[
+                {"name": "plan.txt", "url": "https://cos.example.com/artifacts/plan.txt"},
+            ],
+        )
+
+        assert result["status"] == "success"
+        assert "最终自检通过" in result["summary"]
+        assert "本地路径" in result["detail"]
+        assert "\"artifact_count\": 1" in result["technical_detail"]
+
+    def test_build_final_self_check_should_warn_when_optional_artifacts_missing(self):
+        """附件缺失但只是可选补充材料时，自检应提醒但通过。"""
+        route = self._route(need_sandbox=True, need_artifact_output=True)
+
+        result = DeepThinkingAgent._build_final_self_check(
+            route_decision=route,
+            used_sandbox=True,
+            deep_answer="这是最终答案，没有本地路径。",
+            artifacts=[],
+        )
+
+        assert result["status"] == "warning"
+        assert "提醒：未生成附件" in result["summary"]
+        assert "可选补充材料" in result["detail"]
+        assert "\"artifact_count\": 0" in result["technical_detail"]
+
 
 # ============================================================
 #  Integration Tests（需要真实百度 CFC 沙箱）
@@ -888,6 +988,10 @@ class TestBaiduCfcSandboxIntegration:
     @pytest.fixture(scope="class")
     def sandbox(self):
         """创建真实沙箱实例，测试完成后关闭。"""
+        e2b_module = sys.modules.get("e2b_code_interpreter")
+        if e2b_module is None or getattr(e2b_module, "__spec__", None) is None:
+            pytest.skip("e2b_code_interpreter 未安装，跳过集成测试")
+
         api_key = os.environ.get("E2B_API_KEY", "")
         domain  = os.environ.get("E2B_DOMAIN",  "")
         if not api_key or not domain:

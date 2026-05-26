@@ -5,6 +5,7 @@ import SuggestedAfterAnswerAbilityItem from './abilities/SuggestedAfterAnswerAbi
 import ReviewConfigAbilityItem from './abilities/ReviewConfigAbilityItem.vue'
 import DatasetsAbilityItem from './abilities/DatasetsAbilityItem.vue'
 import McpBindingsAbilityItem from './abilities/McpBindingsAbilityItem.vue'
+import AgentBindingsAbilityItem from './abilities/AgentBindingsAbilityItem.vue'
 import SkillsAbilityItem from './abilities/SkillsAbilityItem.vue'
 import ToolsAbilityItem from './abilities/ToolsAbilityItem.vue'
 import WorkflowsAbilityItem from './abilities/WorkflowsAbilityItem.vue'
@@ -21,6 +22,7 @@ const defaultActivateKeys = [
   'tools',
   'mcp_bindings',
   'skills',
+  'agent_bindings',
   'workflows',
   'datasets',
   'long_term_memory',
@@ -33,12 +35,12 @@ const defaultActivateKeys = [
 </script>
 
 <template>
-  <div class="flex flex-col h-[calc(100vh-141px)]">
+  <div class="flex flex-col h-[calc(100vh-141px)] min-w-0 w-full overflow-hidden">
     <!-- 应用能力标题 -->
     <div class="p-4 text-gray-700 font-bold">应用能力</div>
     <!-- 应用能力列表 -->
-    <div class="flex-1 overflow-scroll scrollbar-w-none">
-      <a-collapse :bordered="false" :default-active-key="defaultActivateKeys">
+    <div class="flex-1 min-w-0 overflow-y-auto overflow-x-hidden scrollbar-w-none">
+      <a-collapse :bordered="false" :default-active-key="defaultActivateKeys" class="w-full min-w-0">
         <template #expand-icon="{ active }">
           <icon-down v-if="active" />
           <icon-right v-else />
@@ -73,6 +75,18 @@ const defaultActivateKeys = [
               emits('update:draft_app_config', {
                 ...props.draft_app_config,
                 skills,
+              })
+          "
+          :app_id="props.app_id"
+        />
+        <!-- Agent 子应用绑定 -->
+        <agent-bindings-ability-item
+          :agent_bindings="props.draft_app_config.agent_bindings || []"
+          @update:agent_bindings="
+            (agent_bindings) =>
+              emits('update:draft_app_config', {
+                ...props.draft_app_config,
+                agent_bindings,
               })
           "
           :app_id="props.app_id"
@@ -150,6 +164,9 @@ const defaultActivateKeys = [
 
 <style>
 .app-ability-item {
+  width: 100%;
+  min-width: 0;
+
   .arco-collapse-item-header {
     background-color: transparent;
     border: none;

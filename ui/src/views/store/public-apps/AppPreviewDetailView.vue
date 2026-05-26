@@ -12,6 +12,7 @@ type DraftAppConfigForm = {
   preset_prompt?: string
   mcp_bindings?: Array<Record<string, unknown>>
   skills?: Array<Record<string, unknown>>
+  agent_bindings?: Array<Record<string, unknown>>
   long_term_memory?: { enable: boolean }
   suggested_after_answer?: { enable: boolean }
   opening_questions?: string[]
@@ -52,20 +53,19 @@ watch(
 
 <template>
   <div class="w-full h-[calc(100vh-77px)] min-h-0 bg-white overflow-hidden">
-    <div class="grid grid-cols-[26fr_14fr] h-full w-full min-h-0 overflow-hidden">
-      <div class="bg-gray-50 flex flex-col h-full">
+    <div class="grid min-h-0 grid-cols-[minmax(0,26fr)_minmax(0,14fr)] h-full w-full overflow-hidden">
+      <div class="bg-gray-50 flex flex-col h-full min-w-0 overflow-hidden">
         <div class="flex items-center h-16 border-b p-4 gap-4">
-          <div class="text-lg text-gray-700">应用编排</div>
+          <div class="text-lg text-gray-700">应用配置</div>
           <model-config-readonly
-            :dialog_round="draftAppConfigForm.dialog_round"
             :model_config="draftAppConfigForm.model_config"
           />
         </div>
-        <div class="grid grid-cols-[13fr_13fr] overflow-hidden h-[calc(100vh-141px)]">
-          <div class="border-r py-4">
+        <div class="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden h-[calc(100vh-141px)]">
+          <div class="border-r py-4 min-w-0 overflow-hidden">
             <preset-prompt-textarea-readonly :preset_prompt="draftAppConfigForm.preset_prompt" />
           </div>
-          <agent-app-ability-readonly :draft_app_config="draftAppConfigForm" />
+          <agent-app-ability-readonly class="min-w-0" :draft_app_config="draftAppConfigForm" />
         </div>
       </div>
       <div class="min-w-[404px] h-full min-h-0 flex flex-col overflow-hidden">

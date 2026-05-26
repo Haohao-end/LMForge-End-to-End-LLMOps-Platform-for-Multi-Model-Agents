@@ -64,7 +64,7 @@
     - chat
 - name: atlascloud
   label: Atlas Cloud
-  description: Atlas Cloud 提供 OpenAI 兼容的模型接入，可通过统一 API 调用 deepseek-ai/DeepSeek-V3-0324 等聊天模型。
+  description: Atlas Cloud 提供 OpenAI 兼容的模型接入，可通过统一 API 调用 deepseek-v4-pro（deepseek-ai/deepseek-v4-pro）、deepseek-v3-0324（deepseek-ai/DeepSeek-V3-0324）等聊天模型。
   icon: icon.png
   background: "#FFFFFF"
   supported_model_types:

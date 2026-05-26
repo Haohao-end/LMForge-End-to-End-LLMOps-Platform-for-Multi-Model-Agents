@@ -10,7 +10,6 @@ const props = defineProps({
     },
     required: true,
   },
-  dialog_round: { type: Number, default: 3, required: true },
 })
 
 const modelDisplayName = computed(() => {
@@ -26,9 +25,6 @@ const modelDisplayName = computed(() => {
         <icon-robot />
       </template>
       {{ modelDisplayName }}
-    </a-tag>
-    <a-tag color="arcoblue" size="small">
-      对话轮次: {{ props.dialog_round }}
     </a-tag>
   </div>
 </template>

@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+from copy import deepcopy
+from inspect import Parameter, signature
 from typing import Any, Union
 from uuid import UUID
 
-from flask import request
+from flask import g, has_app_context
 from injector import inject
 from langchain_core.tools import BaseTool
 from internal.core.language_model import LanguageModelManager
@@ -16,10 +18,33 @@ from internal.model import App, ApiTool, Dataset, AppConfig, AppConfigVersion, A
 from pkg.sqlalchemy import SQLAlchemy
 from .base_service import BaseService
 from internal.core.language_model.entities.model_entity import ModelParameterType
-from internal.entity.app_entity import DEFAULT_APP_CONFIG
+from internal.entity.app_entity import DEFAULT_APP_CONFIG, AppStatus
 from internal.entity.workflow_entity import WorkflowStatus
 from internal.core.workflow import Workflow as WorkflowTool
 from ..core.workflow.entities.workflow_entity import WorkflowConfig
+from internal.exception import ValidateErrorException
+
+
+def call_config_loader(loader: Any, app: App, *, persist_changes: bool) -> dict[str, Any]:
+    """调用 app 配置读取函数。
+
+    兼容旧的单参数调用方，同时允许支持 `persist_changes` 的新实现显式关闭读时写回。
+    """
+    try:
+        loader_signature = signature(loader)
+    except (TypeError, ValueError):
+        loader_signature = None
+
+    if loader_signature is not None:
+        parameters = loader_signature.parameters
+        accepts_persist_changes = (
+            "persist_changes" in parameters
+            or any(param.kind == Parameter.VAR_KEYWORD for param in parameters.values())
+        )
+        if accepts_persist_changes:
+            return loader(app, persist_changes=persist_changes)
+
+    return loader(app)
 
 
 @inject
@@ -36,21 +61,243 @@ class AppConfigService(BaseService):
         if self.skill_service is None:
             self.skill_service = SkillService(self.db)
 
-    def get_draft_app_config(self, app: App) -> dict[str, Any]:
+    @staticmethod
+    def _build_agent_runtime_tool_name(app_id: UUID | str) -> str:
+        """生成子 Agent 工具名，确保在 LangChain 中唯一且稳定。"""
+        return f"agent_app_{str(app_id).replace('-', '')}"
+
+    @classmethod
+    def _build_runtime_config_cache_key(
+        cls,
+        kind: str,
+        *,
+        app_config: AppConfig | AppConfigVersion,
+        current_account_id: UUID | None = None,
+        current_app_id: UUID | None = None,
+    ) -> str:
+        record_id = str(getattr(app_config, "id", "") or "")
+        updated_at = getattr(app_config, "updated_at", None)
+        created_at = getattr(app_config, "created_at", None)
+        return "|".join(
+            [
+                str(kind or "").strip(),
+                record_id,
+                str(datetime_to_timestamp(updated_at)) if updated_at else "",
+                str(datetime_to_timestamp(created_at)) if created_at else "",
+                str(current_account_id or ""),
+                str(current_app_id or getattr(app_config, "app_id", "") or ""),
+            ]
+        )
+
+    @staticmethod
+    def _get_runtime_config_cache() -> dict[str, dict[str, Any]]:
+        """获取请求级配置缓存，避免同一请求重复做运行态校验。"""
+        if not has_app_context():
+            return {}
+
+        cache = getattr(g, "_app_config_runtime_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            g._app_config_runtime_cache = cache
+        return cache
+
+    def _get_runtime_config_from_cache(self, cache_key: str) -> dict[str, Any] | None:
+        cache = self._get_runtime_config_cache()
+        cached_value = cache.get(cache_key)
+        if not isinstance(cached_value, dict):
+            return None
+        return deepcopy(cached_value)
+
+    def _set_runtime_config_cache(self, cache_key: str, value: dict[str, Any]) -> None:
+        cache = self._get_runtime_config_cache()
+        cache[cache_key] = deepcopy(value)
+
+    def _has_agent_binding_path(
+        self,
+        source_app_id: UUID | str,
+        target_app_id: UUID | str,
+        current_account_id: UUID | None = None,
+        visited: set[str] | None = None,
+        depth: int = 0,
+        max_depth: int = 12,
+    ) -> bool:
+        """判断 target_app_id 是否能通过已发布的 agent 绑定路径回到 source_app_id。"""
+        normalized_source_app_id = str(source_app_id)
+        normalized_target_app_id = str(target_app_id)
+        if normalized_source_app_id == normalized_target_app_id:
+            return True
+
+        if depth >= max_depth:
+            return True
+
+        visited = visited or set()
+        if normalized_target_app_id in visited:
+            return False
+        visited.add(normalized_target_app_id)
+
+        try:
+            target_uuid = UUID(normalized_target_app_id)
+        except Exception:
+            return False
+
+        target_app = self.db.session.query(App).filter(
+            App.id == target_uuid,
+            App.status == AppStatus.PUBLISHED.value,
+        ).one_or_none()
+        if not target_app:
+            return False
+
+        if current_account_id is not None and not target_app.is_public and target_app.account_id != current_account_id:
+            return False
+
+        target_app_config = target_app.app_config
+        if not target_app_config:
+            return False
+
+        for binding in getattr(target_app_config, "agent_bindings", []) or []:
+            if not isinstance(binding, dict):
+                continue
+
+            nested_app_id = str(binding.get("app_id", "")).strip()
+            if not nested_app_id:
+                continue
+
+            if nested_app_id == normalized_source_app_id:
+                return True
+
+            if self._has_agent_binding_path(
+                normalized_source_app_id,
+                nested_app_id,
+                current_account_id=current_account_id,
+                visited=visited,
+                depth=depth + 1,
+                max_depth=max_depth,
+            ):
+                return True
+
+        return False
+
+    def process_and_validate_agent_bindings(
+        self,
+        origin_agent_bindings: list[dict[str, Any]],
+        *,
+        current_account_id: UUID | None = None,
+        current_app_id: UUID | None = None,
+        strict: bool = False,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """校验 Agent 绑定并返回展示信息与可落库信息。"""
+        if not isinstance(origin_agent_bindings, list) or not origin_agent_bindings:
+            return [], []
+
+        normalized_origin_app_ids: list[UUID] = []
+        normalized_origin_app_id_set: set[str] = set()
+
+        for binding in origin_agent_bindings:
+            if not isinstance(binding, dict):
+                continue
+
+            app_id_text = str(binding.get("app_id", "")).strip()
+            if not app_id_text:
+                continue
+
+            try:
+                app_uuid = UUID(app_id_text)
+            except Exception:
+                if strict:
+                    raise ValidateErrorException("Agent绑定的应用ID必须为UUID")
+                continue
+
+            normalized_app_id = str(app_uuid)
+            if current_app_id is not None and normalized_app_id == str(current_app_id):
+                if strict:
+                    raise ValidateErrorException("不能绑定当前应用自身")
+                continue
+
+            if normalized_app_id in normalized_origin_app_id_set:
+                if strict:
+                    raise ValidateErrorException("绑定Agent存在重复")
+                continue
+
+            normalized_origin_app_ids.append(app_uuid)
+            normalized_origin_app_id_set.add(normalized_app_id)
+
+        if not normalized_origin_app_ids:
+            return [], []
+
+        target_records = self.db.session.query(App).filter(
+            App.id.in_(normalized_origin_app_ids),
+            App.status == AppStatus.PUBLISHED.value,
+        ).all()
+        target_record_map = {str(target_app.id): target_app for target_app in target_records}
+
+        display_bindings: list[dict[str, Any]] = []
+        validate_bindings: list[dict[str, Any]] = []
+
+        for app_uuid in normalized_origin_app_ids:
+            target_app = target_record_map.get(str(app_uuid))
+            if not target_app:
+                continue
+
+            if current_account_id is None:
+                if not target_app.is_public:
+                    continue
+            else:
+                if not target_app.is_public and target_app.account_id != current_account_id:
+                    continue
+
+            if current_app_id is not None and self._has_agent_binding_path(
+                current_app_id,
+                target_app.id,
+                current_account_id=current_account_id,
+            ):
+                if strict:
+                    raise ValidateErrorException("Agent绑定存在循环引用")
+                continue
+
+            invoke_mode = "a2a" if target_app.is_public else "tool"
+            normalized_binding = {
+                "app_id": str(target_app.id),
+                "invoke_mode": invoke_mode,
+            }
+            validate_bindings.append(normalized_binding)
+            display_bindings.append({
+                **normalized_binding,
+                "name": target_app.name,
+                "icon": target_app.icon,
+                "description": target_app.description,
+                "source_scope": "public" if target_app.is_public else "own",
+                "is_public": target_app.is_public,
+                "status": target_app.status,
+                "tool_name": self._build_agent_runtime_tool_name(target_app.id),
+            })
+
+        return display_bindings, validate_bindings
+
+    def get_draft_app_config(self, app: App, persist_changes: bool = True) -> dict[str, Any]:
         """根据传递的应用获取该应用的草稿配置"""
         # 1.提取应用的草稿配置
         draft_app_config = app.draft_app_config
+        cache_key = self._build_runtime_config_cache_key(
+            "draft",
+            app_config=draft_app_config,
+            current_account_id=getattr(app, "account_id", None),
+            current_app_id=getattr(app, "id", None),
+        )
+        if not persist_changes:
+            cached_value = self._get_runtime_config_from_cache(cache_key)
+            if cached_value is not None:
+                return cached_value
 
         # 2.校验model_config配置信息，如果使用了不存在的提供者或者模型 则使用默认值(宽松校验)
         validate_model_config = self._process_and_validate_model_config(draft_app_config.model_config)
-        if draft_app_config.model_config != validate_model_config:
+        if persist_changes and draft_app_config.model_config != validate_model_config:
             self.update(draft_app_config, model_config=validate_model_config)
 
         # 3.循环遍历工具列表删除已经被删除的工具信息
         tools, validate_tools = self._process_and_validate_tools(draft_app_config.tools)
 
         # 4.判断是否需要更新草稿配置中的工具列表信息
-        if draft_app_config.tools != validate_tools:
+        if persist_changes and draft_app_config.tools != validate_tools:
             # 14.更新草稿配置中的工具列表
             self.update(draft_app_config, tools=validate_tools)
 
@@ -58,19 +305,19 @@ class AppConfigService(BaseService):
         datasets, validate_datasets = self._process_and_validate_datasets(draft_app_config.datasets)
 
         # 6.判断是否存在已删除的知识库，如果存在则更新
-        if set(validate_datasets) != set(draft_app_config.datasets):
+        if persist_changes and set(validate_datasets) != set(draft_app_config.datasets):
             self.update(draft_app_config, datasets=validate_datasets)
 
         # 7.校验工作流列表对应的数据
         workflows, validate_workflows = self._process_and_validate_workflows(draft_app_config.workflows)
-        if set(validate_workflows) != set(draft_app_config.workflows):
+        if persist_changes and set(validate_workflows) != set(draft_app_config.workflows):
             self.update(draft_app_config, workflows=validate_workflows)
 
         # 8.读取并规范化 MCP 绑定列表
         mcp_bindings, validate_mcp_bindings = self._process_and_validate_mcp_bindings(
             getattr(draft_app_config, "mcp_bindings", [])
         )
-        if getattr(draft_app_config, "mcp_bindings", []) != validate_mcp_bindings:
+        if persist_changes and getattr(draft_app_config, "mcp_bindings", []) != validate_mcp_bindings:
             self.update(draft_app_config, mcp_bindings=validate_mcp_bindings)
 
         # 9.读取并规范化 MCP 工具快照
@@ -78,18 +325,28 @@ class AppConfigService(BaseService):
             getattr(draft_app_config, "mcp_tool_snapshots", []),
             validate_mcp_bindings,
         )
-        if getattr(draft_app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
+        if persist_changes and getattr(draft_app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
             self.update(draft_app_config, mcp_tool_snapshots=validate_mcp_tool_snapshots)
 
         # 10.读取并规范化 Skills 绑定列表
         skills, validate_skills = self.skill_service.process_and_validate_skill_bindings(
-            getattr(draft_app_config, "skills", [])
+            getattr(draft_app_config, "skills", []),
+            sync_catalog=persist_changes,
         )
-        if getattr(draft_app_config, "skills", []) != validate_skills:
+        if persist_changes and getattr(draft_app_config, "skills", []) != validate_skills:
             self.update(draft_app_config, skills=validate_skills)
 
-        # 10.将数据转换成字典后返回
-        return self._process_and_transformer_app_config(
+        # 11.读取并规范化 Agent 绑定列表
+        agent_bindings, validate_agent_bindings = self.process_and_validate_agent_bindings(
+            getattr(draft_app_config, "agent_bindings", []),
+            current_account_id=getattr(app, "account_id", None),
+            current_app_id=getattr(app, "id", None),
+        )
+        if persist_changes and getattr(draft_app_config, "agent_bindings", []) != validate_agent_bindings:
+            self.update(draft_app_config, agent_bindings=validate_agent_bindings)
+
+        # 12.将数据转换成字典后返回
+        result = self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
@@ -97,24 +354,38 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
+            agent_bindings,
             draft_app_config
         )
+        if not persist_changes:
+            self._set_runtime_config_cache(cache_key, result)
+        return result
 
-    def get_app_config(self, app: App) -> dict[str, Any]:
+    def get_app_config(self, app: App, persist_changes: bool = True) -> dict[str, Any]:
         """根据传递的应用获取该应用的运行配置"""
         # 1.提取应用的草稿配置
         app_config = app.app_config
+        cache_key = self._build_runtime_config_cache_key(
+            "published",
+            app_config=app_config,
+            current_account_id=getattr(app, "account_id", None),
+            current_app_id=getattr(app, "id", None),
+        )
+        if not persist_changes:
+            cached_value = self._get_runtime_config_from_cache(cache_key)
+            if cached_value is not None:
+                return cached_value
 
         # 2.校验model_config配置信息，如果使用了不存在的提供者或者模型 则使用默认值(宽松校验)
         validate_model_config = self._process_and_validate_model_config(app_config.model_config)
-        if app_config.model_config != validate_model_config:
+        if persist_changes and app_config.model_config != validate_model_config:
             self.update(app_config, model_config=validate_model_config)
 
         # 3.循环遍历工具列表删除已经被删除的工具信息
         tools, validate_tools = self._process_and_validate_tools(app_config.tools)
 
         # 4.判断是否需要更新草稿配置中的工具列表信息
-        if app_config.tools != validate_tools:
+        if persist_changes and app_config.tools != validate_tools:
             # 14.更新草稿配置中的工具列表
             self.update(app_config, tools=validate_tools)
 
@@ -124,20 +395,21 @@ class AppConfigService(BaseService):
         datasets, validate_datasets = self._process_and_validate_datasets(origin_datasets)
 
         # 6.判断是否存在已删除的知识库，如果存在则更新
-        for dataset_id in (set(origin_datasets) - set(validate_datasets)):
-            with self.db.auto_commit():
-                self.db.session.query(AppDatasetJoin).filter(AppDatasetJoin.dataset_id == dataset_id).delete()
+        if persist_changes:
+            for dataset_id in (set(origin_datasets) - set(validate_datasets)):
+                with self.db.auto_commit():
+                    self.db.session.query(AppDatasetJoin).filter(AppDatasetJoin.dataset_id == dataset_id).delete()
 
         # 7.校验工作流列表对应的数据
         workflows, validate_workflows = self._process_and_validate_workflows(app_config.workflows)
-        if set(validate_workflows) != set(app_config.workflows):
+        if persist_changes and set(validate_workflows) != set(app_config.workflows):
             self.update(app_config, workflows=validate_workflows)
 
         # 8.读取并规范化 MCP 绑定列表
         mcp_bindings, validate_mcp_bindings = self._process_and_validate_mcp_bindings(
             getattr(app_config, "mcp_bindings", [])
         )
-        if getattr(app_config, "mcp_bindings", []) != validate_mcp_bindings:
+        if persist_changes and getattr(app_config, "mcp_bindings", []) != validate_mcp_bindings:
             self.update(app_config, mcp_bindings=validate_mcp_bindings)
 
         # 9.读取并规范化 MCP 工具快照
@@ -145,18 +417,28 @@ class AppConfigService(BaseService):
             getattr(app_config, "mcp_tool_snapshots", []),
             validate_mcp_bindings,
         )
-        if getattr(app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
+        if persist_changes and getattr(app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
             self.update(app_config, mcp_tool_snapshots=validate_mcp_tool_snapshots)
 
         # 10.读取并规范化 Skills 绑定列表
         skills, validate_skills = self.skill_service.process_and_validate_skill_bindings(
-            getattr(app_config, "skills", [])
+            getattr(app_config, "skills", []),
+            sync_catalog=persist_changes,
         )
-        if getattr(app_config, "skills", []) != validate_skills:
+        if persist_changes and getattr(app_config, "skills", []) != validate_skills:
             self.update(app_config, skills=validate_skills)
 
-        # 10.将数据转换成字典后返回
-        return self._process_and_transformer_app_config(
+        # 11.读取并规范化 Agent 绑定列表
+        agent_bindings, validate_agent_bindings = self.process_and_validate_agent_bindings(
+            getattr(app_config, "agent_bindings", []),
+            current_account_id=getattr(app, "account_id", None),
+            current_app_id=getattr(app, "id", None),
+        )
+        if persist_changes and getattr(app_config, "agent_bindings", []) != validate_agent_bindings:
+            self.update(app_config, agent_bindings=validate_agent_bindings)
+
+        # 12.将数据转换成字典后返回
+        result = self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
@@ -164,23 +446,50 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
+            agent_bindings,
             app_config
         )
+        if not persist_changes:
+            self._set_runtime_config_cache(cache_key, result)
+        return result
 
-    def get_version_display_config(self, app_config_version: AppConfigVersion) -> dict[str, Any]:
+    def get_version_display_config(
+        self,
+        app_config_version: AppConfig | AppConfigVersion,
+        current_account_id: UUID | None = None,
+        current_app_id: UUID | None = None,
+    ) -> dict[str, Any]:
         """根据传递的版本配置，返回用于前端展示的完整配置结构。"""
+        cache_key = self._build_runtime_config_cache_key(
+            "version_display",
+            app_config=app_config_version,
+            current_account_id=current_account_id,
+            current_app_id=current_app_id,
+        )
+        cached_value = self._get_runtime_config_from_cache(cache_key)
+        if cached_value is not None:
+            return cached_value
+
         validate_model_config = self._process_and_validate_model_config(app_config_version.model_config)
         tools, _ = self._process_and_validate_tools(app_config_version.tools)
-        datasets, _ = self._process_and_validate_datasets(app_config_version.datasets)
+        datasets, _ = self._process_and_validate_datasets(getattr(app_config_version, "datasets", []))
         workflows, _ = self._process_and_validate_workflows(app_config_version.workflows)
         mcp_bindings, _ = self._process_and_validate_mcp_bindings(getattr(app_config_version, "mcp_bindings", []))
         mcp_tool_snapshots, _ = self._process_and_validate_mcp_tool_snapshots(
             getattr(app_config_version, "mcp_tool_snapshots", []),
             mcp_bindings,
         )
-        skills, _ = self.skill_service.process_and_validate_skill_bindings(getattr(app_config_version, "skills", []))
+        skills, _ = self.skill_service.process_and_validate_skill_bindings(
+            getattr(app_config_version, "skills", []),
+            sync_catalog=False,
+        )
+        agent_bindings, _ = self.process_and_validate_agent_bindings(
+            getattr(app_config_version, "agent_bindings", []),
+            current_account_id=current_account_id,
+            current_app_id=current_app_id,
+        )
 
-        return self._process_and_transformer_app_config(
+        result = self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
@@ -188,8 +497,11 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
+            agent_bindings,
             app_config_version,
         )
+        self._set_runtime_config_cache(cache_key, result)
+        return result
 
     def get_langchain_tools_by_mcp_bindings(
         self,
@@ -288,6 +600,7 @@ class AppConfigService(BaseService):
             mcp_bindings: list[dict],
             mcp_tool_snapshots: list[dict],
             skills: list[dict],
+            agent_bindings: list[dict],
             app_config: Union[AppConfig, AppConfigVersion]
     ) -> dict[str, Any]:
         """根据传递的插件列表、工作流列表、知识库列表以及应用配置创建字典信息"""
@@ -300,6 +613,7 @@ class AppConfigService(BaseService):
             "mcp_bindings": mcp_bindings,
             "mcp_tool_snapshots": mcp_tool_snapshots,
             "skills": skills,
+            "agent_bindings": agent_bindings,
             "workflows": workflows,
             "datasets": datasets,
             "retrieval_config": app_config.retrieval_config,
@@ -689,9 +1003,3 @@ class AppConfigService(BaseService):
             })
 
         return workflows, validate_workflows
-
-
-
-
-
-

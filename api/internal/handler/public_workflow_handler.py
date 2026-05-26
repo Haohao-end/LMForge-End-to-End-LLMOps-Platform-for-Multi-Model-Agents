@@ -10,9 +10,6 @@ from pkg.response import success_json, success_message, validate_error_json
 from internal.schema.public_workflow_schema import (
     ShareWorkflowToSquareReq,
     GetPublicWorkflowsWithPageReq,
-    PublicWorkflowResp,
-    LikeWorkflowResp,
-    FavoriteWorkflowResp,
     ForkWorkflowResp,
 )
 from internal.service.public_workflow_service import PublicWorkflowService
@@ -62,20 +59,6 @@ class PublicWorkflowHandler:
         workflow = self.public_workflow_service.fork_public_workflow(workflow_id, current_user)
         resp = ForkWorkflowResp()
         return success_json(resp.dump({"id": str(workflow.id), "name": workflow.name}))
-
-    @login_required
-    def like_workflow(self, workflow_id: UUID):
-        """点赞/取消点赞工作流"""
-        result = self.public_workflow_service.like_workflow(workflow_id, current_user)
-        resp = LikeWorkflowResp()
-        return success_json(resp.dump(result))
-
-    @login_required
-    def favorite_workflow(self, workflow_id: UUID):
-        """收藏/取消收藏工作流"""
-        result = self.public_workflow_service.favorite_workflow(workflow_id, current_user)
-        resp = FavoriteWorkflowResp()
-        return success_json(resp.dump(result))
 
     def get_public_workflow_detail(self, workflow_id: UUID):
         """获取公共工作流详情（支持未登录访问）"""

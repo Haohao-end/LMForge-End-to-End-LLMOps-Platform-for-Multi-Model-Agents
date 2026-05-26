@@ -28,11 +28,27 @@ class _DummyResponse:
         self.closed = True
 
 
+class _FakeSession:
+    def __init__(self, handler):
+        self._handler = handler
+        self.trust_env = False
+
+    def post(self, url, **kwargs):
+        return self._handler(url, **kwargs)
+
+
 def _build_service():
     return AudioService(
         db=SimpleNamespace(),
         app_service=SimpleNamespace(),
     )
+
+
+@pytest.fixture(autouse=True)
+def _clear_audio_session_cache():
+    AudioService._get_requests_session.cache_clear()
+    yield
+    AudioService._get_requests_session.cache_clear()
 
 
 class TestAudioService:
@@ -66,7 +82,10 @@ class TestAudioService:
             captured["kwargs"] = kwargs
             return _Response()
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", _fake_post)
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(_fake_post),
+        )
         audio = FileStorage(stream=BytesIO(b"wav-data"), filename="voice.wav")
 
         text = service.audio_to_text(audio)
@@ -97,8 +116,10 @@ class TestAudioService:
         monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key")
         monkeypatch.setenv("SILICONFLOW_API_BASE", "https://api.example.com")
         monkeypatch.setattr(
-            "internal.service.audio_service.requests.post",
-            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("network-error")),
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("network-error"))
+            ),
         )
         audio = FileStorage(stream=BytesIO(b"wav-data"), filename="voice.wav")
 
@@ -413,8 +434,10 @@ class TestAudioService:
         monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key")
         monkeypatch.setenv("SILICONFLOW_API_BASE", "https://api.example.com")
         monkeypatch.setattr(
-            "internal.service.audio_service.requests.post",
-            lambda *_args, **_kwargs: (_ for _ in ()).throw(requests.exceptions.RequestException("boom")),
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(requests.exceptions.RequestException("boom"))
+            ),
         )
 
         with pytest.raises(FailException):
@@ -443,7 +466,10 @@ class TestAudioService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("forbidden", response=self)
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(lambda *_args, **_kwargs: _Response()),
+        )
 
         with pytest.raises(FailException, match="余额不足"):
             service._create_tts_response(input_text="hello", voice="alex")
@@ -463,7 +489,10 @@ class TestAudioService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("forbidden", response=self)
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(lambda *_args, **_kwargs: _Response()),
+        )
 
         with pytest.raises(FailException, match="访问被拒绝"):
             service._create_tts_response(input_text="hello", voice="alex")
@@ -483,7 +512,10 @@ class TestAudioService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("too-many-requests", response=self)
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(lambda *_args, **_kwargs: _Response()),
+        )
 
         with pytest.raises(FailException, match="请求过于频繁"):
             service._create_tts_response(input_text="hello", voice="alex")
@@ -503,7 +535,10 @@ class TestAudioService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("server-error", response=self)
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(lambda *_args, **_kwargs: _Response()),
+        )
 
         with pytest.raises(FailException, match="文字转语音请求失败，请稍后重试"):
             service._create_tts_response(input_text="hello", voice="alex")
@@ -523,7 +558,10 @@ class TestAudioService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("server-error", response=self)
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(lambda *_args, **_kwargs: _Response()),
+        )
 
         with pytest.raises(FailException, match="文字转语音请求失败，请稍后重试"):
             service._create_tts_response(input_text="hello", voice="alex")
@@ -543,7 +581,10 @@ class TestAudioService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("forbidden", response=self)
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(lambda *_args, **_kwargs: _Response()),
+        )
 
         with pytest.raises(FailException, match="访问被拒绝"):
             service._create_tts_response(input_text="hello", voice="alex")
@@ -563,7 +604,10 @@ class TestAudioService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("forbidden", response=self)
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(lambda *_args, **_kwargs: _Response()),
+        )
 
         with pytest.raises(FailException, match="文字转语音请求失败，请稍后重试"):
             service._create_tts_response(input_text="hello", voice="alex")
@@ -585,7 +629,10 @@ class TestAudioService:
             captures["kwargs"] = kwargs
             return response
 
-        monkeypatch.setattr("internal.service.audio_service.requests.post", _fake_post)
+        monkeypatch.setattr(
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(_fake_post),
+        )
 
         result = service._create_tts_response(input_text="hello", voice="anna")
 
@@ -599,8 +646,10 @@ class TestAudioService:
         monkeypatch.setenv("SILICONFLOW_API_KEY", "test-key")
         monkeypatch.setenv("SILICONFLOW_API_BASE", "https://api.example.com")
         monkeypatch.setattr(
-            "internal.service.audio_service.requests.post",
-            lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("boom")),
+            "internal.service.audio_service.requests.Session",
+            lambda: _FakeSession(
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("boom"))
+            ),
         )
 
         with pytest.raises(FailException):

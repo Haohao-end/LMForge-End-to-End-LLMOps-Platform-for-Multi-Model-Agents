@@ -104,8 +104,10 @@ class TestOpenAPIService:
             "long_term_memory": {"enable": True},
             "review_config": {"enable": False},
         }
+        capture = {}
         service.app_config_service = SimpleNamespace(
-            get_app_config=lambda _app: app_config,
+            get_app_config=lambda _app, persist_changes=True: capture.update({"persist_changes": persist_changes})
+            or app_config,
             get_langchain_tools_by_tools_config=lambda _tools: [],
         )
 
@@ -221,6 +223,7 @@ class TestOpenAPIService:
         assert captured_state["agent_state"]["history"] == ["history-message"]
         assert save_payload["message_id"] == message_id
         assert len(save_payload["agent_thoughts"]) == 1
+        assert capture["persist_changes"] is False
 
     def test_chat_should_return_runtime_capabilities_and_parts_when_resolution_available(
         self, monkeypatch

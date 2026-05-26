@@ -472,8 +472,122 @@ def test_function_call_agent_tools_node_should_resolve_common_agent_aliases():
 
     assert dataset_tool.invocations == [{}]
     assert train_tool.invocations == []
-    assert "请从当前可用工具列表中重新选择" in json.loads(agent.agent_queue_manager.published[-1][1].observation)
-    assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in json.loads(agent.agent_queue_manager.published[-1][1].observation)
+    published_observation = agent.agent_queue_manager.published[-1][1].observation
+    assert "请从当前可用工具列表中重新选择" in published_observation
+    assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in published_observation
+
+
+def test_function_call_agent_prompt_loader_tool_should_redact_full_prompt_and_queue_pending_prompt():
+    class _Tool:
+        def __init__(self, name, result=None):
+            self.name = name
+            self._result = result
+            self.invocations = []
+
+        def invoke(self, args):
+            self.invocations.append(args)
+            return self._result
+
+    full_prompt = "# 前端技能\n\n用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。"
+    tool = _Tool(
+        "skill_prompt__frontend_skill",
+        result={
+            "skill_id": "skill-1",
+            "source_key": "frontend-skill",
+            "name": "frontend-skill",
+            "label": "前端技能",
+            "description": "用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。",
+            "category": "设计",
+            "executor_type": "prompt",
+            "prompt": full_prompt,
+            "readme": full_prompt,
+            "prompt_length": len(full_prompt),
+            "lease_id": "lease-1",
+            "ephemeral": True,
+        },
+    )
+    agent = _new_function_call_agent(_NodeLLM(features=[]), _build_agent_config(tools=[tool]))
+    task_id = uuid4()
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "1", "name": "skill_prompt__frontend_skill", "args": {}},
+            {"id": "2", "name": "skill_prompt__frontend_skill", "args": {}},
+        ],
+    )
+
+    result = agent._tools_node({"task_id": task_id, "messages": [ai_message]})
+
+    assert tool.invocations == [{}, {}]
+    assert len(result["messages"]) == 2
+    public_result = json.loads(result["messages"][0].content)
+    assert public_result["skill_id"] == "skill-1"
+    assert public_result["source_key"] == "frontend-skill"
+    assert public_result["prompt_length"] == len(full_prompt)
+    assert public_result["ephemeral"] is True
+    assert public_result["lease_id"] == "lease-1"
+    assert "prompt" not in public_result
+    assert "readme" not in public_result
+    assert len(result["pending_skill_prompts"]) == 1
+    assert result["pending_skill_prompts"][0]["prompt"] == full_prompt
+    assert result["pending_skill_prompts"][0]["skill_id"] == "skill-1"
+    assert result["pending_skill_prompts"][0]["source_key"] == "frontend-skill"
+    published = agent.agent_queue_manager.published[-1][1]
+    published_observation = json.loads(published.observation)
+    assert published.event == QueueEvent.AGENT_ACTION
+    assert "prompt" not in published_observation
+    assert "readme" not in published_observation
+    assert published_observation["prompt_length"] == len(full_prompt)
+
+
+def test_function_call_agent_llm_node_should_inject_pending_skill_prompt_then_clear_state(monkeypatch):
+    monkeypatch.setattr("internal.core.agent.agents.function_call_agent.tiktoken.get_encoding", lambda _name: _FakeEncoding())
+    task_id = uuid4()
+    captured = {}
+
+    llm = _NodeLLM(
+        features=[],
+        metadata={"pricing": {"input": 0.1, "output": 0.2, "unit": 0.001}},
+        stream_chunks=[_Chunk("final answer")],
+    )
+
+    def _stream(self, messages):
+        captured["messages"] = messages
+        for chunk in self.stream_chunks:
+            yield chunk
+
+    monkeypatch.setattr(_NodeLLM, "stream", _stream)
+
+    agent = _new_function_call_agent(llm, _build_agent_config())
+    full_prompt = "# 前端技能\n\n用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。"
+    state = {
+        "task_id": task_id,
+        "messages": [HumanMessage(content="q")],
+        "iteration_count": 0,
+        "pending_skill_prompts": [
+            {
+                "lease_id": "lease-1",
+                "skill_id": "skill-1",
+                "source_key": "frontend-skill",
+                "name": "frontend-skill",
+                "label": "前端技能",
+                "description": "用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。",
+                "category": "设计",
+                "executor_type": "prompt",
+                "prompt": full_prompt,
+            }
+        ],
+    }
+
+    result = agent._llm_node(state)
+
+    assert result["messages"][0].content == "final answer"
+    assert result["pending_skill_prompts"] == []
+    assert any(
+        isinstance(message, SystemMessage) and full_prompt in message.content
+        for message in captured["messages"]
+    )
+    assert QueueEvent.AGENT_END in [thought.event for _, thought in agent.agent_queue_manager.published]
 
 
 def test_function_call_agent_tools_node_should_refeed_available_tools_when_12306_alias_mismatches():
@@ -506,7 +620,7 @@ def test_function_call_agent_tools_node_should_refeed_available_tools_when_12306
     )
 
     assert train_tool.invocations == []
-    published_observation = json.loads(agent.agent_queue_manager.published[-1][1].observation)
+    published_observation = agent.agent_queue_manager.published[-1][1].observation
     assert "请从当前可用工具列表中重新选择" in published_observation
     assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in published_observation
 
@@ -541,7 +655,7 @@ def test_function_call_agent_tools_node_should_refeed_available_tools_when_gener
     )
 
     assert train_tool.invocations == []
-    published_observation = json.loads(agent.agent_queue_manager.published[-1][1].observation)
+    published_observation = agent.agent_queue_manager.published[-1][1].observation
     assert "请从当前可用工具列表中重新选择" in published_observation
     assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in published_observation
 
@@ -664,6 +778,48 @@ def test_react_agent_should_delegate_and_cover_message_and_tool_json_branches(mo
         {"task_id": task_id, "messages": [HumanMessage(content="q")], "iteration_count": 0}
     )
     assert short_result["messages"][0].content == "ab"
+
+    prompt_full = "# 前端技能\n\n用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。"
+    captured_prompt_messages = {}
+    prompt_loader_llm = _NodeLLM(
+        features=[],
+        metadata={"pricing": {"input": 0.1, "output": 0.2, "unit": 0.001}},
+        stream_chunks=[_Chunk("react final answer")],
+    )
+
+    def _prompt_loader_stream(self, messages):
+        captured_prompt_messages["messages"] = messages
+        for chunk in self.stream_chunks:
+            yield chunk
+
+    monkeypatch.setattr(_NodeLLM, "stream", _prompt_loader_stream)
+    prompt_loader_agent = _new_react_agent(prompt_loader_llm, _build_agent_config())
+    prompt_loader_result = prompt_loader_agent._llm_node(
+        {
+            "task_id": task_id,
+            "messages": [HumanMessage(content="q")],
+            "iteration_count": 0,
+            "pending_skill_prompts": [
+                {
+                    "lease_id": "lease-2",
+                    "skill_id": "skill-2",
+                    "source_key": "frontend-skill",
+                    "name": "frontend-skill",
+                    "label": "前端技能",
+                    "description": "用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。",
+                    "category": "设计",
+                    "executor_type": "prompt",
+                    "prompt": prompt_full,
+                }
+            ],
+        }
+    )
+    assert prompt_loader_result["messages"][0].content == "react final answer"
+    assert prompt_loader_result["pending_skill_prompts"] == []
+    assert any(
+        isinstance(message, SystemMessage) and prompt_full in message.content
+        for message in captured_prompt_messages["messages"]
+    )
 
     limit_agent = _new_react_agent(_NodeLLM(features=[]), _build_agent_config(max_iteration_count=0))
     limit_result = limit_agent._llm_node(

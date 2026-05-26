@@ -5,8 +5,6 @@ import { Message } from '@arco-design/web-vue'
 import {
   getPublicWorkflows,
   forkPublicWorkflow,
-  likeWorkflow,
-  favoriteWorkflow,
   type PublicWorkflow
 } from '@/services/public-workflow'
 import { getAppTags, type AppTag } from '@/services/public-app'
@@ -19,19 +17,10 @@ const loading = ref(false)
 const workflows = ref<PublicWorkflow[]>([])
 const tags = ref<AppTag[]>([])
 const selectedTags = ref<string[]>([])
-type WorkflowSortBy = 'most_liked' | 'most_favorited' | 'most_forked' | 'latest'
-const sortBy = ref<WorkflowSortBy>('most_liked')
 const searchWord = ref('')
 const page = ref(1)
 const pageSize = ref(20)
 const hasMore = ref(true)
-
-const sortOptions: Array<{ label: string; value: WorkflowSortBy }> = [
-  { label: '最多点赞', value: 'most_liked' },
-  { label: '最多收藏', value: 'most_favorited' },
-  { label: '最多Fork', value: 'most_forked' },
-  { label: '最新发布', value: 'latest' }
-]
 
 const loadWorkflows = async () => {
   if (loading.value) return
@@ -43,7 +32,6 @@ const loadWorkflows = async () => {
       current_page: page.value,
       page_size: pageSize.value,
       tags: selectedTags.value.join(','),
-      sort_by: sortBy.value,
       search_word: searchWord.value
     })
     const list = res.data.list
@@ -84,28 +72,6 @@ const handlePreview = (workflow: PublicWorkflow) => {
   router.push({ name: 'store-workflows-preview', params: { workflow_id: workflow.id } })
 }
 
-const handleLike = async (workflow: PublicWorkflow) => {
-  try {
-    const res = await likeWorkflow(workflow.id)
-    workflow.is_liked = res.data.is_liked
-    workflow.like_count = res.data.like_count
-    Message.success(res.data.is_liked ? '点赞成功' : '已取消点赞')
-  } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '操作失败'))
-  }
-}
-
-const handleFavorite = async (workflow: PublicWorkflow) => {
-  try {
-    const res = await favoriteWorkflow(workflow.id)
-    workflow.is_favorited = res.data.is_favorited
-    workflow.favorite_count = res.data.favorite_count || workflow.favorite_count
-    Message.success(res.data.is_favorited ? '收藏成功' : '已取消收藏')
-  } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '操作失败'))
-  }
-}
-
 const toggleTag = (tagId: string) => {
   const index = selectedTags.value.indexOf(tagId)
   if (index > -1) {
@@ -113,13 +79,6 @@ const toggleTag = (tagId: string) => {
   } else {
     selectedTags.value.push(tagId)
   }
-  page.value = 1
-  hasMore.value = true
-  loadWorkflows()
-}
-
-const handleSortChange = (newSort: WorkflowSortBy) => {
-  sortBy.value = newSort
   page.value = 1
   hasMore.value = true
   loadWorkflows()
@@ -193,28 +152,12 @@ onMounted(() => {
             {{ tag.name }}
           </a>
         </div>
-
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-sm text-gray-500 mr-1">排序:</span>
-            <a
-              v-for="option in sortOptions"
-              :key="option.value"
-              class="text-sm text-gray-600 px-2 h-7 leading-7 hover:text-blue-600 transition-all cursor-pointer whitespace-nowrap"
-              :class="{ 'text-blue-600 font-medium': sortBy === option.value }"
-              @click="handleSortChange(option.value)"
-            >
-              {{ option.label }}
-            </a>
-          </div>
-
-          <a-input-search
-            v-model="searchWord"
-            placeholder="搜索工作流"
-            class="w-full sm:w-[240px] bg-white rounded-lg border-gray-300"
-            @search="handleSearch"
-          />
-        </div>
+        <a-input-search
+          v-model="searchWord"
+          placeholder="搜索工作流"
+          class="w-full sm:w-[240px] bg-white rounded-lg border-gray-300"
+          @search="handleSearch"
+        />
       </div>
 
       <div class="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide" @scroll="handleScroll">
@@ -242,32 +185,28 @@ onMounted(() => {
                 <resource-card-description :text="workflow.description" />
               </button>
 
-              <!-- 操作按钮 -->
-              <div class="flex items-center gap-2 mt-2 mb-2">
-                <button type="button" class="flex items-center gap-1.5 px-3 h-8 rounded-full transition-all duration-200 hover:scale-105" :class="workflow.is_liked ? 'bg-red-50' : 'bg-gray-50'" @click.stop="handleLike(workflow)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" :fill="workflow.is_liked ? '#ef4444' : 'none'" :stroke="workflow.is_liked ? 'none' : '#ef4444'" stroke-width="2">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                  </svg>
-                  <span :class="workflow.is_liked ? 'text-red-600' : 'text-gray-600'" class="text-xs font-medium">{{ workflow.like_count }}</span>
-                </button>
-
-                <button type="button" class="flex items-center gap-1.5 px-3 h-8 rounded-full transition-all duration-200 hover:scale-105" :class="workflow.is_favorited ? 'bg-yellow-50' : 'bg-gray-50'" @click.stop="handleFavorite(workflow)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" :fill="workflow.is_favorited ? '#eab308' : 'none'" :stroke="workflow.is_favorited ? 'none' : '#eab308'" stroke-width="2">
-                    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-                  </svg>
-                  <span :class="workflow.is_favorited ? 'text-yellow-600' : 'text-gray-600'" class="text-xs font-medium">{{ workflow.favorite_count || 0 }}</span>
-                </button>
-
-                <button type="button" class="flex items-center gap-1.5 px-3 h-8 rounded-full transition-all duration-200 hover:scale-105" :class="workflow.is_forked ? 'bg-blue-50' : 'bg-gray-50'" @click.stop="handleFork(workflow)">
-                  <icon-branch :size="16" :style="{ color: workflow.is_forked ? '#3b82f6' : '#9ca3af' }" />
-                  <span :class="workflow.is_forked ? 'text-blue-600' : 'text-gray-600'" class="text-xs font-medium">{{ workflow.fork_count }}</span>
-                </button>
-              </div>
-
-              <!-- 发布者和发布时间 -->
-              <div class="flex items-center gap-1.5">
-                <a-avatar :size="18" :image-url="workflow.account_avatar" />
-                <div class="text-xs text-gray-400">{{ workflow.account_name || '匿名用户' }} · 发布于 {{ workflow.published_at > 0 ? formatTimestampShort(workflow.published_at) : '未知时间' }}</div>
+              <!-- 发布者、发布时间和Fork按钮 -->
+              <div class="mt-3 flex items-center justify-between gap-3">
+                <div class="flex min-w-0 flex-1 items-center gap-1.5">
+                  <a-avatar :size="18" :image-url="workflow.account_avatar" />
+                  <div class="min-w-0 flex-1 truncate text-xs text-gray-400">
+                    {{ workflow.account_name || '匿名用户' }} · 发布于 {{ workflow.published_at > 0 ? formatTimestampShort(workflow.published_at) : '未知时间' }}
+                  </div>
+                </div>
+                <a-tooltip :content="workflow.is_forked ? '已添加到个人空间' : '添加到个人空间'">
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105"
+                    :class="workflow.is_forked ? 'bg-gray-100 cursor-not-allowed opacity-50' : 'bg-blue-50 hover:bg-blue-100'"
+                    :disabled="workflow.is_forked"
+                    @click.stop="handleFork(workflow)"
+                  >
+                    <icon-branch
+                      :size="16"
+                      :style="{ color: workflow.is_forked ? '#9ca3af' : '#3b82f6' }"
+                    />
+                  </button>
+                </a-tooltip>
               </div>
             </a-card>
           </a-col>

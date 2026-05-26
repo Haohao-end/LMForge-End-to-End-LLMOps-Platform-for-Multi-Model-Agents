@@ -3,7 +3,7 @@ import logging
 import re
 import time
 import uuid
-from typing import Literal, Any
+from typing import Literal, Any, ClassVar
 
 import tiktoken
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, RemoveMessage, AIMessage
@@ -24,6 +24,9 @@ from .base_agent import BaseAgent
 from internal.core.language_model.entities.model_entity import ModelFeature
 
 
+logger = logging.getLogger(__name__)
+
+
 _HARD_FAIL_TOOL_NAMES = {
     "qwen_image_text_to_image",
     "qwen_image_edit",
@@ -37,6 +40,8 @@ _TOOL_ALIAS_SYNONYMS = {
 
 class FunctionCallAgent(BaseAgent):
     """基于函数/工具调用的智能体"""
+
+    _PROMPT_ONLY_SKILL_LOADER_PREFIX: ClassVar[str] = "skill_prompt__"
 
     def _build_agent(self) -> CompiledStateGraph:
         """构建LangGraph图结构编译程序"""
@@ -156,12 +161,14 @@ class FunctionCallAgent(BaseAgent):
                     task_id=state["task_id"],
                     event=QueueEvent.AGENT_END.value,
                 ))
-            return {"messages": [AIMessage(MAX_ITERATION_RESPONSE)]}
+            return {"messages": [AIMessage(MAX_ITERATION_RESPONSE)], "pending_skill_prompts": []}
 
         # 2.从智能体配置中提取大语言模型
         id = uuid.uuid4()
         start_at = time.perf_counter()
         llm = self.llm
+        pending_skill_prompts = self._deduplicate_pending_skill_prompts(state.get("pending_skill_prompts") or [])
+        llm_messages = self._inject_pending_skill_prompts(state["messages"], pending_skill_prompts)
 
         # 3.检测大语言模型实例是否有bind_tools方法，如果没有则不绑定，如果有还需要检测tools是否为空，不为空则绑定
         if (
@@ -177,7 +184,7 @@ class FunctionCallAgent(BaseAgent):
         buffered_text_chunks: list[str] = []
         saw_tool_calls = False
         try:
-            for chunk in llm.stream(state["messages"]):
+            for chunk in llm.stream(llm_messages):
                 if chunk is None:  # 跳过无效 chunk
                     continue
                 if gathered is None:
@@ -199,17 +206,39 @@ class FunctionCallAgent(BaseAgent):
             raise e
 
         if gathered is None:
-            return {"messages": [AIMessage(content="")], "iteration_count": state["iteration_count"] + 1}
+            if pending_skill_prompts:
+                logger.info(
+                    "技能 prompt 租约已回收: lease_ids=%s",
+                    [
+                        str(item.get("lease_id") or item.get("skill_id") or item.get("source_key") or "")
+                        for item in pending_skill_prompts
+                        if isinstance(item, dict)
+                    ],
+                )
+            return {
+                "messages": [AIMessage(content="")],
+                "iteration_count": state["iteration_count"] + 1,
+                "pending_skill_prompts": [],
+            }
 
         # 8.计算LLM的输入+输出的token总数
         input_token_count, output_token_count, total_token_count, total_price, unit, input_price, output_price = (
-            self._calculate_usage(state, gathered)
+            self._calculate_usage(state, gathered, messages=llm_messages)
         )
 
         # 11.如果类型为推理则添加智能体推理事件
         final_tool_calls = getattr(gathered, "tool_calls", []) or []
         # 某些流式实现会先在中间 chunk 暴露 tool_calls，再在最终聚合对象里补齐。
         if saw_tool_calls or final_tool_calls:
+            if pending_skill_prompts:
+                logger.info(
+                    "技能 prompt 租约已回收: lease_ids=%s",
+                    [
+                        str(item.get("lease_id") or item.get("skill_id") or item.get("source_key") or "")
+                        for item in pending_skill_prompts
+                        if isinstance(item, dict)
+                    ],
+                )
             self.agent_queue_manager.publish(state["task_id"], AgentThought(
                 id=id,
                 task_id=state["task_id"],
@@ -230,7 +259,11 @@ class FunctionCallAgent(BaseAgent):
                 total_price=total_price,
                 latency=(time.perf_counter() - start_at),
             ))
-            return {"messages": [gathered], "iteration_count": state["iteration_count"] + 1}
+            return {
+                "messages": [gathered],
+                "iteration_count": state["iteration_count"] + 1,
+                "pending_skill_prompts": [],
+            }
 
         for content in buffered_text_chunks:
             self.agent_queue_manager.publish(state["task_id"], AgentThought(
@@ -244,6 +277,15 @@ class FunctionCallAgent(BaseAgent):
             ))
 
         if buffered_text_chunks:
+            if pending_skill_prompts:
+                logger.info(
+                    "技能 prompt 租约已回收: lease_ids=%s",
+                    [
+                        str(item.get("lease_id") or item.get("skill_id") or item.get("source_key") or "")
+                        for item in pending_skill_prompts
+                        if isinstance(item, dict)
+                    ],
+                )
             # 12.如果LLM直接生成answer则表示已经拿到了最终答案，推送一条空内容用于计算总token+总成本,则停止监听
             self.agent_queue_manager.publish(state["task_id"], AgentThought(
                 id=id,
@@ -271,7 +313,11 @@ class FunctionCallAgent(BaseAgent):
                 event=QueueEvent.AGENT_END.value,
             ))
 
-        return {"messages": [gathered], "iteration_count": state["iteration_count"] + 1}
+        return {
+            "messages": [gathered],
+            "iteration_count": state["iteration_count"] + 1,
+            "pending_skill_prompts": [],
+        }
 
     def _tools_node(self, state: AgentState) -> AgentState:
         """工具执行节点"""
@@ -288,6 +334,12 @@ class FunctionCallAgent(BaseAgent):
 
         # 3.循环执行工具组装工具消息
         messages = []
+        pending_skill_prompts = self._deduplicate_pending_skill_prompts(state.get("pending_skill_prompts") or [])
+        pending_prompt_keys = {
+            self._prompt_only_skill_identity_key(item)
+            for item in pending_skill_prompts
+            if isinstance(item, dict)
+        }
         for tool_call in tool_calls:
             # 4.创建智能体动作事件id并记录开始时间
             id = uuid.uuid4()
@@ -311,10 +363,26 @@ class FunctionCallAgent(BaseAgent):
                 # 6.添加错误工具信息
                 tool_result = f"工具执行出错: {str(e)}"
 
+            public_tool_result = tool_result
+            prompt_lease = None
+            if self._is_prompt_only_skill_loader_tool(tool_call["name"]):
+                public_tool_result, prompt_lease = self._build_prompt_only_skill_loader_result(tool_result)
+                if prompt_lease:
+                    prompt_key = self._prompt_only_skill_identity_key(prompt_lease)
+                    if prompt_key and prompt_key not in pending_prompt_keys:
+                        pending_skill_prompts.append(prompt_lease)
+                        pending_prompt_keys.add(prompt_key)
+
+            serialized_tool_result = (
+                public_tool_result
+                if isinstance(public_tool_result, str)
+                else json.dumps(public_tool_result, ensure_ascii=False, default=str)
+            )
+
             # 7.将工具消息添加到消息列表中
             messages.append(ToolMessage(
                 tool_call_id=tool_call["id"],
-                content=json.dumps(tool_result),
+                content=serialized_tool_result,
                 name=tool_call["name"],
             ))
 
@@ -328,13 +396,16 @@ class FunctionCallAgent(BaseAgent):
                 id=id,
                 task_id=state["task_id"],
                 event=event,
-                observation=json.dumps(tool_result),
+                observation=serialized_tool_result,
                 tool=tool_call["name"],
                 tool_input=tool_call["args"],
                 latency=(time.perf_counter() - start_at),
             ))
 
-        return {"messages": messages}
+        return {
+            "messages": messages,
+            "pending_skill_prompts": pending_skill_prompts,
+        }
 
     @staticmethod
     def _build_tool_not_found_result(tool_call_name: str, tools_by_name: dict[str, Any]) -> str:
@@ -391,6 +462,133 @@ class FunctionCallAgent(BaseAgent):
         return normalized.replace("-", "_").replace(" ", "_")
 
     @classmethod
+    def _is_prompt_only_skill_loader_tool(cls, tool_name: str | None) -> bool:
+        return str(tool_name or "").startswith(cls._PROMPT_ONLY_SKILL_LOADER_PREFIX)
+
+    @staticmethod
+    def _build_prompt_only_skill_loader_result(tool_result: Any) -> tuple[Any, dict[str, Any] | None]:
+        """把 prompt-only 技能全文加载结果拆成公开结果与待注入全文。"""
+        if not isinstance(tool_result, dict):
+            return tool_result, None
+
+        prompt_text = str(tool_result.get("prompt") or tool_result.get("readme") or "").strip()
+        if not prompt_text:
+            return tool_result, None
+
+        public_result = {
+            "skill_id": str(tool_result.get("skill_id") or "").strip(),
+            "source_key": str(tool_result.get("source_key") or "").strip(),
+            "name": str(tool_result.get("name") or "").strip(),
+            "label": str(tool_result.get("label") or "").strip(),
+            "description": str(tool_result.get("description") or "").strip(),
+            "category": str(tool_result.get("category") or "").strip(),
+            "executor_type": str(tool_result.get("executor_type") or "").strip(),
+            "prompt_length": len(prompt_text),
+            "lease_id": str(tool_result.get("lease_id") or "").strip(),
+            "ephemeral": True,
+            "loaded": True,
+        }
+        pending_skill_prompt = {
+            "lease_id": public_result["lease_id"],
+            "skill_id": public_result["skill_id"],
+            "source_key": public_result["source_key"],
+            "name": public_result["name"],
+            "label": public_result["label"],
+            "description": public_result["description"],
+            "category": public_result["category"],
+            "executor_type": public_result["executor_type"],
+            "prompt": prompt_text,
+        }
+        return public_result, pending_skill_prompt
+
+    @staticmethod
+    def _prompt_only_skill_identity_key(skill_payload: dict[str, Any]) -> str:
+        return str(
+            skill_payload.get("skill_id")
+            or skill_payload.get("source_key")
+            or skill_payload.get("lease_id")
+            or ""
+        ).strip()
+
+    @classmethod
+    def _deduplicate_pending_skill_prompts(
+        cls,
+        pending_skill_prompts: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        if not isinstance(pending_skill_prompts, list):
+            return []
+
+        deduplicated: list[dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        for prompt_item in pending_skill_prompts:
+            if not isinstance(prompt_item, dict):
+                continue
+            prompt_key = cls._prompt_only_skill_identity_key(prompt_item)
+            if not prompt_key or prompt_key in seen_keys:
+                continue
+            prompt_text = str(prompt_item.get("prompt") or "").strip()
+            if not prompt_text:
+                continue
+            deduplicated.append(prompt_item)
+            seen_keys.add(prompt_key)
+        return deduplicated
+
+    @classmethod
+    def _build_pending_skill_prompt_messages(
+        cls,
+        pending_skill_prompts: list[dict[str, Any]] | None,
+    ) -> list[SystemMessage]:
+        """把待注入的 prompt-only 技能全文合并成仅供当前轮次使用的系统消息。"""
+        deduplicated = cls._deduplicate_pending_skill_prompts(pending_skill_prompts)
+        if not deduplicated:
+            return []
+
+        sections: list[str] = [
+            "## 按需加载的 Prompt-only Skills",
+            "",
+            "以下内容仅在当前轮次有效，当前轮次结束后会自动回收。不要把它当作长期上下文，也不要在后续轮次继续假设它仍然存在。",
+            "",
+        ]
+        for prompt_item in deduplicated:
+            title = str(prompt_item.get("label") or prompt_item.get("name") or prompt_item.get("source_key") or "Skill").strip()
+            source_key = str(prompt_item.get("source_key") or "").strip()
+            prompt_text = str(prompt_item.get("prompt") or "").strip()
+            if not prompt_text:
+                continue
+            header = f"### {title}"
+            if source_key:
+                header += f" (`{source_key}`)"
+            sections.extend([header, prompt_text, ""])
+
+        content = "\n".join(sections).strip()
+        if not content:
+            return []
+        return [SystemMessage(content=content)]
+
+    @classmethod
+    def _inject_pending_skill_prompts(
+        cls,
+        messages: list[Any],
+        pending_skill_prompts: list[dict[str, Any]] | None,
+    ) -> list[Any]:
+        if not isinstance(messages, list):
+            return []
+
+        injected_messages = list(messages)
+        prompt_messages = cls._build_pending_skill_prompt_messages(pending_skill_prompts)
+        if not prompt_messages:
+            return injected_messages
+
+        insert_at = 0
+        while insert_at < len(injected_messages) and isinstance(injected_messages[insert_at], SystemMessage):
+            insert_at += 1
+
+        for index, prompt_message in enumerate(prompt_messages):
+            injected_messages.insert(insert_at + index, prompt_message)
+
+        return injected_messages
+
+    @classmethod
     def _tools_condition(cls, state: AgentState) -> Literal["tools", "__end__"]:
         """检测下一个节点是执行tools节点，还是直接结束"""
         # 1.提取状态中的最后一条消息(AI消息)
@@ -415,10 +613,16 @@ class FunctionCallAgent(BaseAgent):
 
         return "long_term_memory_recall"
 
-    def _calculate_usage(self, state: AgentState, gathered) -> tuple[int, int, int, float, float, float, float]:
+    def _calculate_usage(
+        self,
+        state: AgentState,
+        gathered,
+        *,
+        messages: list[Any] | None = None,
+    ) -> tuple[int, int, int, float, float, float, float]:
         """计算输入输出token以及价格"""
         encoding = tiktoken.get_encoding("cl100k_base")
-        input_token_count = len(encoding.encode(normalize_usage_text(state["messages"])))
+        input_token_count = len(encoding.encode(normalize_usage_text(messages or state["messages"])))
         output_token_count = len(encoding.encode(normalize_usage_text(gathered)))
         input_price, output_price, unit = self.llm.get_pricing()
         total_token_count = input_token_count + output_token_count

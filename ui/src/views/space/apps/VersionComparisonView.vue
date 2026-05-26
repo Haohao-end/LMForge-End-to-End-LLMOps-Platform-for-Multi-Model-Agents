@@ -71,6 +71,7 @@ const comparisonSections = computed(() => [
   createSection('preset_prompt', '人设与回复逻辑', (version) => version?.config.preset_prompt),
   createSection('tools', '扩展插件', (version) => version?.config.tools),
   createSection('mcp_bindings', 'MCP', (version) => version?.config.mcp_bindings),
+  createSection('agent_bindings', 'Agent 子应用', (version) => version?.config.agent_bindings),
   createSection('workflows', '工作流', (version) => version?.config.workflows),
   createSection('datasets', '知识库', (version) => version?.config.datasets),
   createSection('retrieval_config', '检索配置', (version) => version?.config.retrieval_config),
@@ -125,7 +126,7 @@ const getVersionTagLabel = (version: Record<string, any> | null) => {
 
 const getVersionCollectionCount = (
   version: Record<string, any> | null,
-  key: 'tools' | 'mcp_bindings' | 'workflows' | 'datasets',
+  key: 'tools' | 'mcp_bindings' | 'agent_bindings' | 'workflows' | 'datasets',
 ) => {
   const value = version?.config?.[key]
   return Array.isArray(value) ? value.length : 0
@@ -212,7 +213,8 @@ onMounted(async () => {
                   <div class="text-gray-500">
                     扩展插件 {{ getVersionCollectionCount(leftVersion, 'tools') }} 个 · 工作流
                     {{ getVersionCollectionCount(leftVersion, 'workflows') }} 个 · MCP
-                    {{ getVersionCollectionCount(leftVersion, 'mcp_bindings') || 0 }} 个 · 知识库
+                    {{ getVersionCollectionCount(leftVersion, 'mcp_bindings') || 0 }} 个 · Agent
+                    {{ getVersionCollectionCount(leftVersion, 'agent_bindings') || 0 }} 个 · 知识库
                     {{ getVersionCollectionCount(leftVersion, 'datasets') }} 个
                   </div>
                 </div>
@@ -236,7 +238,8 @@ onMounted(async () => {
                   <div class="text-gray-500">
                     扩展插件 {{ getVersionCollectionCount(rightVersion, 'tools') }} 个 · 工作流
                     {{ getVersionCollectionCount(rightVersion, 'workflows') }} 个 · MCP
-                    {{ getVersionCollectionCount(rightVersion, 'mcp_bindings') || 0 }} 个 · 知识库
+                    {{ getVersionCollectionCount(rightVersion, 'mcp_bindings') || 0 }} 个 · Agent
+                    {{ getVersionCollectionCount(rightVersion, 'agent_bindings') || 0 }} 个 · 知识库
                     {{ getVersionCollectionCount(rightVersion, 'datasets') }} 个
                   </div>
                 </div>

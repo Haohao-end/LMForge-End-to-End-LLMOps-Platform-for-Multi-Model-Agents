@@ -1,0 +1,43 @@
+name: atlascloud_hailuo_2_3_i2v_standard
+label: Hailuo 2.3 图生视频标准
+description: 使用 Atlas Cloud 的 Hailuo 2.3 Standard 以单张参考图生成 1080p 视频，支持 6 秒或 10 秒时长
+params:
+  - name: prompt
+    label: 视频描述
+    type: string
+    required: true
+  - name: images
+    label: 参考图片URL
+    type: string
+    required: true
+  - name: width
+    label: 输出宽度
+    type: number
+    default: 512
+    min: 1
+    max: 4096
+    required: false
+  - name: height
+    label: 输出高度
+    type: number
+    default: 512
+    min: 1
+    max: 4096
+    required: false
+  - name: duration
+    label: 视频时长
+    type: select
+    default: 6
+    required: false
+    options:
+      - value: 6
+        label: 6秒
+      - value: 10
+        label: 10秒
+  - name: fps
+    label: 视频帧率
+    type: number
+    default: 24
+    min: 1
+    max: 60
+    required: false

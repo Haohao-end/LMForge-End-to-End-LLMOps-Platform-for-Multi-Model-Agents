@@ -358,6 +358,7 @@ export const useGetDraftAppConfig = () => {
         mcp_bindings: data.mcp_bindings || [],
         mcp_tool_snapshots: data.mcp_tool_snapshots || [],
         skills: data.skills,
+        agent_bindings: data.agent_bindings || [],
         workflows: data.workflows,
         speech_to_text: data.speech_to_text,
         text_to_speech: data.text_to_speech,

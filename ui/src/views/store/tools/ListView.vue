@@ -29,8 +29,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <a-spin :loading="getBuiltinToolsLoading" class="block h-full w-full">
-    <div class="p-6 flex flex-col h-full">
+  <a-spin :loading="getBuiltinToolsLoading" class="block h-full w-full overflow-hidden">
+    <div class="p-6 flex flex-col h-full min-h-0 overflow-hidden">
       <!-- 顶层标题+创建按钮 -->
       <div class="flex items-center justify-between mb-6">
         <!-- 左侧标题 -->
@@ -73,57 +73,59 @@ onMounted(() => {
         />
       </div>
       <!-- 底部插件列表 -->
-      <a-row :gutter="[20, 20]" class="flex-1">
-        <!-- 有数据的UI状态 -->
-        <a-col v-for="(builtinTool, idx) in filterBuiltinTools" :key="builtinTool.name" :span="6">
-          <a-card hoverable class="cursor-pointer rounded-lg" @click="showIdx = idx">
-            <!-- 顶部提供商名称 -->
-            <div class="flex items-center gap-3 mb-3">
-              <!-- 左侧图标 -->
-              <a-avatar
-                :size="40"
-                shape="square"
-                class="shrink-0"
-                :style="{ backgroundColor: builtinTool.background }"
-              >
-                <img
-                  :src="`${apiPrefix}/builtin-tools/${builtinTool.name}/icon`"
-                  :alt="builtinTool.name"
-                  class="w-full h-full object-contain"
-                />
-              </a-avatar>
-              <!-- 右侧工具信息 -->
-              <div class="flex flex-col">
-                <div class="text-base text-gray-900 font-bold">{{ builtinTool.label }}</div>
-                <div class="text-xs text-gray-500 line-clamp-1">
-                  提供商 {{ builtinTool.name }} · {{ builtinTool.tools.length }} 插件
+      <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-w-none">
+        <a-row :gutter="[20, 20]">
+          <!-- 有数据的UI状态 -->
+          <a-col v-for="(builtinTool, idx) in filterBuiltinTools" :key="builtinTool.name" :span="6">
+            <a-card hoverable class="cursor-pointer rounded-lg" @click="showIdx = idx">
+              <!-- 顶部提供商名称 -->
+              <div class="flex items-center gap-3 mb-3">
+                <!-- 左侧图标 -->
+                <a-avatar
+                  :size="40"
+                  shape="square"
+                  class="shrink-0"
+                  :style="{ backgroundColor: builtinTool.background }"
+                >
+                  <img
+                    :src="`${apiPrefix}/builtin-tools/${builtinTool.name}/icon`"
+                    :alt="builtinTool.name"
+                    class="w-full h-full object-contain"
+                  />
+                </a-avatar>
+                <!-- 右侧工具信息 -->
+                <div class="flex flex-col">
+                  <div class="text-base text-gray-900 font-bold">{{ builtinTool.label }}</div>
+                  <div class="text-xs text-gray-500 line-clamp-1">
+                    提供商 {{ builtinTool.name }} · {{ builtinTool.tools.length }} 插件
+                  </div>
                 </div>
               </div>
-            </div>
-            <!-- 提供商的描述信息 -->
-            <div class="leading-[18px] text-gray-500 h-[72px] line-clamp-4 mb-2">
-              {{ builtinTool.description }}
-            </div>
-            <!-- 提供商的发布信息 -->
-            <div class="flex items-center gap-1.5">
-              <a-avatar :size="18" class="bg-blue-700">
-                <icon-user />
-              </a-avatar>
-              <div class="text-xs text-gray-400">
-                发布时间
-                {{ formatTimestampShort(builtinTool.created_at) }}
+              <!-- 提供商的描述信息 -->
+              <div class="leading-[18px] text-gray-500 h-[72px] line-clamp-4 mb-2">
+                {{ builtinTool.description }}
               </div>
-            </div>
-          </a-card>
-        </a-col>
-        <!-- 没数据的UI状态 -->
-        <a-col v-if="filterBuiltinTools.length === 0" :span="24">
-          <a-empty
-            description="没有可用的内置插件"
-            class="h-[400px] flex flex-col items-center justify-center"
-          />
-        </a-col>
-      </a-row>
+              <!-- 提供商的发布信息 -->
+              <div class="flex items-center gap-1.5">
+                <a-avatar :size="18" class="bg-blue-700">
+                  <icon-user />
+                </a-avatar>
+                <div class="text-xs text-gray-400">
+                  发布时间
+                  {{ formatTimestampShort(builtinTool.created_at) }}
+                </div>
+              </div>
+            </a-card>
+          </a-col>
+          <!-- 没数据的UI状态 -->
+          <a-col v-if="filterBuiltinTools.length === 0" :span="24">
+            <a-empty
+              description="没有可用的内置插件"
+              class="h-[400px] flex flex-col items-center justify-center"
+            />
+          </a-col>
+        </a-row>
+      </div>
       <!-- 卡片抽屉 -->
       <a-drawer
         :visible="showIdx != -1"

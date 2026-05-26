@@ -16,8 +16,6 @@ const unauthDescription = computed(() => {
   if (route.path.startsWith('/space/workflows')) return '请你登录查看你的工作流！'
   if (route.path.startsWith('/space/mcp')) return '请你登录查看你的MCP！'
   if (route.path.startsWith('/space/datasets')) return '请你登录查看你的知识库！'
-  if (route.path.startsWith('/space/likes')) return '请你登录查看你的点赞内容！'
-  if (route.path.startsWith('/space/favorites')) return '请你登录查看你的收藏内容！'
   return '请你登录查看你的个人空间内容！'
 })
 const createType = ref<string>('')
@@ -190,20 +188,6 @@ watch(
             active-class="bg-gray-100"
           >
             知识库
-          </router-link>
-          <router-link
-            to="/space/likes"
-            class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
-            active-class="bg-gray-100"
-          >
-            我的点赞
-          </router-link>
-          <router-link
-            to="/space/favorites"
-            class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
-            active-class="bg-gray-100"
-          >
-            我的收藏
           </router-link>
         </div>
         <!-- 右侧搜索 -->

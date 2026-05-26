@@ -1,37 +1,114 @@
+from __future__ import annotations
+
 import json
+
+import pytest
+import requests
 
 from internal.core.tools.mcp_tools.providers.mcp_tool_factory import McpToolFactory
 
 
 class _FakeResponse:
-    def __init__(self, payload: dict):
-        self.text = json.dumps(payload, ensure_ascii=False)
+    def __init__(self, payload=None, *, status_code: int = 200, headers: dict | None = None, text: str | None = None):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.reason = "OK" if status_code < 400 else "Bad Request"
+        if text is not None:
+            self.text = text
+        elif payload is None:
+            self.text = ""
+        else:
+            self.text = json.dumps(payload, ensure_ascii=False)
 
     def raise_for_status(self):
-        return None
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code} response")
 
 
 class _FakeSession:
     def __init__(self, handler):
         self.handler = handler
-        self.trust_env = True
+        self.trust_env = False
 
     def post(self, url, json, headers, timeout):
         return self.handler(url, json, headers, timeout)
 
 
-def test_mcp_tool_factory_should_list_remote_tools_and_call_selected_tool(monkeypatch):
+@pytest.fixture(autouse=True)
+def _clear_mcp_tool_factory_caches():
+    McpToolFactory._get_session.cache_clear()
+    McpToolFactory._STREAMABLE_HTTP_SESSION_CACHE.clear()
+    yield
+    McpToolFactory._get_session.cache_clear()
+    McpToolFactory._STREAMABLE_HTTP_SESSION_CACHE.clear()
+
+
+def test_mcp_tool_factory_should_respect_proxy_env(monkeypatch):
+    fake_session = _FakeSession(lambda *_args, **_kwargs: _FakeResponse())
+    monkeypatch.setattr(
+        "internal.core.tools.mcp_tools.providers.mcp_tool_factory.requests.Session",
+        lambda: fake_session,
+    )
+
+    factory = McpToolFactory()
+    session = factory._get_session()
+
+    assert session is fake_session
+    assert session.trust_env is True
+
+
+def test_mcp_tool_factory_should_initialize_streamable_http_session_and_call_selected_tool(monkeypatch):
     calls = []
 
     def _fake_post(url, json, headers, timeout):
-        calls.append({
-            "url": url,
-            "json": json,
-            "headers": headers,
-            "timeout": timeout,
-        })
+        calls.append(
+            {
+                "url": url,
+                "json": json,
+                "headers": headers,
+                "timeout": timeout,
+            }
+        )
 
-        if json["method"] == "tools/list":
+        method = json["method"]
+        if method == "initialize":
+            assert "Mcp-Session-Id" not in headers
+            assert headers["Accept"] == "application/json, text/event-stream"
+            assert json["params"]["protocolVersion"] == "2024-11-05"
+            return _FakeResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": json["id"],
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "experimental": {},
+                            "resources": {
+                                "subscribe": False,
+                                "listChanged": False,
+                            },
+                            "tools": {
+                                "listChanged": False,
+                            },
+                        },
+                        "serverInfo": {
+                            "name": "12306-mcp",
+                            "version": "1.9.4",
+                        },
+                    },
+                },
+                headers={"Mcp-Session-Id": "session-1"},
+            )
+
+        if method == "notifications/initialized":
+            assert "id" not in json
+            assert headers["Mcp-Session-Id"] == "session-1"
+            assert json["params"] == {}
+            return _FakeResponse(status_code=202)
+
+        if method == "tools/list":
+            assert "params" not in json
+            assert headers["Mcp-Session-Id"] == "session-1"
             return _FakeResponse(
                 {
                     "jsonrpc": "2.0",
@@ -65,7 +142,8 @@ def test_mcp_tool_factory_should_list_remote_tools_and_call_selected_tool(monkey
                 }
             )
 
-        if json["method"] == "tools/call":
+        if method == "tools/call":
+            assert headers["Mcp-Session-Id"] == "session-1"
             assert json["params"]["name"] == "weather"
             assert json["params"]["arguments"] == {"city": "杭州", "days": 1}
             return _FakeResponse(
@@ -78,11 +156,12 @@ def test_mcp_tool_factory_should_list_remote_tools_and_call_selected_tool(monkey
                 }
             )
 
-        raise AssertionError(f"unexpected method: {json['method']}")
+        raise AssertionError(f"unexpected method: {method}")
 
+    fake_session = _FakeSession(_fake_post)
     monkeypatch.setattr(
         "internal.core.tools.mcp_tools.providers.mcp_tool_factory.requests.Session",
-        lambda: _FakeSession(_fake_post),
+        lambda: fake_session,
     )
 
     factory = McpToolFactory()
@@ -108,14 +187,17 @@ def test_mcp_tool_factory_should_list_remote_tools_and_call_selected_tool(monkey
     assert len(tools) == 1
     tool = tools[0]
     assert tool.name == "mcp__weather_gateway__weather"
+    assert factory._get_session().trust_env is True
 
     result = tool.invoke({"city": "杭州"})
     result_text = result.content if hasattr(result, "content") else result
 
     assert result_text == "杭州今天晴"
-    assert [call["json"]["method"] for call in calls] == ["tools/list", "tools/call"]
+    assert [call["json"]["method"] for call in calls] == ["initialize", "notifications/initialized", "tools/list", "tools/call"]
     assert calls[0]["timeout"] == 15
     assert calls[0]["headers"]["Authorization"] == "Bearer token"
+    assert calls[2]["headers"]["Mcp-Session-Id"] == "session-1"
+    assert calls[3]["headers"]["Mcp-Session-Id"] == "session-1"
 
 
 def test_mcp_tool_factory_should_compile_complex_json_schema_and_keep_metadata(monkeypatch):
@@ -171,11 +253,13 @@ def test_mcp_tool_factory_should_compile_complex_json_schema_and_keep_metadata(m
     captured_calls = []
 
     def _fake_call_remote_tool(binding, tool_name, arguments):
-        captured_calls.append({
-            "binding": binding,
-            "tool_name": tool_name,
-            "arguments": arguments,
-        })
+        captured_calls.append(
+            {
+                "binding": binding,
+                "tool_name": tool_name,
+                "arguments": arguments,
+            }
+        )
         assert tool_name == "complex_tool"
         assert arguments["request"]["mode"] == "fast"
         assert arguments["request"]["extra_flag"] == "keep"
@@ -293,6 +377,77 @@ def test_mcp_tool_factory_should_prepare_and_refresh_binding_snapshots(monkeypat
     assert refreshed[0]["tool_count"] == 1
     assert refreshed[0]["retry_count"] == 0
     assert refreshed[0]["binding_identity"] == factory.build_binding_identity(binding)
+
+
+def test_mcp_tool_factory_should_mark_permanent_refresh_failures_as_non_retryable(monkeypatch):
+    factory = McpToolFactory()
+    binding = {
+        "name": "weather_gateway",
+        "description": "weather",
+        "transport": "streamable_http",
+        "url": "https://mcp.example.com",
+        "enabled": True,
+        "headers": [],
+        "tool_names": ["weather"],
+        "timeout_seconds": 15,
+        "args": [],
+        "env": {},
+    }
+
+    prepared = factory.prepare_binding_snapshots([binding])
+    monkeypatch.setattr(factory, "_list_remote_tools", lambda _binding: (_ for _ in ()).throw(RuntimeError("record not found")))
+
+    refreshed = factory.refresh_binding_snapshots([binding], prepared)
+
+    assert len(refreshed) == 1
+    assert refreshed[0]["status"] == "failed"
+    assert refreshed[0]["retryable"] is False
+    assert refreshed[0]["last_error"] == "record not found"
+    assert refreshed[0]["retry_count"] == 1
+
+
+def test_mcp_tool_factory_should_keep_cached_tools_when_refresh_fails_permanently(monkeypatch):
+    factory = McpToolFactory()
+    binding = {
+        "name": "weather_gateway",
+        "description": "weather",
+        "transport": "streamable_http",
+        "url": "https://mcp.example.com",
+        "enabled": True,
+        "headers": [],
+        "tool_names": ["weather"],
+        "timeout_seconds": 15,
+        "args": [],
+        "env": {},
+    }
+
+    existing_snapshot = factory.prepare_binding_snapshots([binding])[0]
+    existing_snapshot.update(
+        {
+            "status": "stale",
+            "tool_definitions": [
+                {
+                    "name": "weather",
+                    "title": "天气查询",
+                    "description": "查询天气",
+                    "inputSchema": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+                }
+            ],
+            "tool_names": ["weather"],
+            "tool_count": 1,
+            "schema_hash": "schema-hash",
+            "last_success_at": 1710000000,
+        }
+    )
+    monkeypatch.setattr(factory, "_list_remote_tools", lambda _binding: (_ for _ in ()).throw(RuntimeError("record not found")))
+
+    refreshed = factory.refresh_binding_snapshots([binding], [existing_snapshot])
+
+    assert len(refreshed) == 1
+    assert refreshed[0]["status"] == "stale"
+    assert refreshed[0]["retryable"] is False
+    assert refreshed[0]["tool_count"] == 1
+    assert refreshed[0]["tool_names"] == ["weather"]
 
 
 def test_mcp_tool_factory_should_build_tools_from_snapshots_without_live_discovery(monkeypatch):

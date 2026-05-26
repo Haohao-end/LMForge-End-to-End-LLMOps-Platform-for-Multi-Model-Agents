@@ -1,9 +1,11 @@
 model: deepseek-v3-0324
-label: deepseek-ai/DeepSeek-V3-0324
+label: deepseek-v3-0324
 model_type: chat
-features: []
-context_window: 65536
-max_output_tokens: 8192
+features:
+- tool_call
+- agent_thought
+context_window: 131072
+max_output_tokens: 32768
 attributes:
   model: deepseek-ai/DeepSeek-V3-0324
 parameters:
@@ -13,9 +15,24 @@ parameters:
 - name: top_p
   use_template: top_p
   default: 1
+- name: presence_penalty
+  use_template: presence_penalty
+  default: 0.0
+- name: frequency_penalty
+  use_template: frequency_penalty
+  default: 0.0
 - name: max_tokens
   use_template: max_tokens
-  default: 2048
-  max: 8192
+  default: 1024
+  max: 32768
 metadata:
-  pricing_source: atlascloud_docs
+  pricing:
+    input: 0.001846
+    output: 0.007522
+    unit: 0.001
+    currency: RMB
+  pricing_cache_hit:
+    input: 0.000479
+    output: 0.007522
+    unit: 0.001
+    currency: RMB

@@ -151,6 +151,7 @@ def test_get_apps_with_page_resp_should_select_config_by_status(status, expected
         icon="https://img.example.com/app.png",
         description="desc",
         status=status,
+        is_public=True,
         account=ns(name="app-owner", avatar="https://img.example.com/app-owner.png"),
         app_config=ns(
             preset_prompt="published-prompt",
@@ -358,18 +359,22 @@ def test_conversation_schema_should_promote_artifacts_into_multimodal_output():
         {"type": "text", "text": "已生成图表"},
         {
             "type": "image",
-            "url": "https://cos.example.com/chart.png",
-            "name": "chart.png",
-            "mime_type": "image/png",
-            "extension": "png",
-        },
-    ]
+                "url": "https://cos.example.com/chart.png",
+                "name": "chart.png",
+                "mime_type": "image/png",
+                "extension": "png",
+                "group_id": str(payload["agent_thoughts"][0]["id"]),
+                "group_name": "生成图片",
+            },
+        ]
     assert payload["artifacts"] == [
         {
             "name": "chart.png",
             "url": "https://cos.example.com/chart.png",
             "mime_type": "image/png",
             "extension": "png",
+            "group_id": str(payload["agent_thoughts"][0]["id"]),
+            "group_name": "生成图片",
         }
     ]
 

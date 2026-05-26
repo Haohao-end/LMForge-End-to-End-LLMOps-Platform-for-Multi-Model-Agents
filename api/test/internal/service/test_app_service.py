@@ -66,7 +66,13 @@ def _build_service() -> AppService:
         redis_client=SimpleNamespace(),
         cos_service=SimpleNamespace(),
         retrieval_service=SimpleNamespace(),
-        app_config_service=SimpleNamespace(),
+        app_config_service=SimpleNamespace(
+            _build_agent_runtime_tool_name=lambda target_app_id: f"agent_app_{str(target_app_id).replace('-', '')}",
+            get_langchain_tools_by_tools_config=lambda *_args, **_kwargs: [],
+            get_langchain_tools_by_mcp_bindings=lambda *_args, **_kwargs: [],
+            get_langchain_tools_by_workflow_ids=lambda *_args, **_kwargs: [],
+            get_version_display_config=lambda *_args, **_kwargs: {},
+        ),
         api_provider_manager=SimpleNamespace(),
         conversation_service=SimpleNamespace(),
         language_model_manager=SimpleNamespace(),
@@ -685,6 +691,23 @@ class TestAppService:
 
         assert result["capabilities"] == capabilities
 
+    def test_get_debug_conversation_summary_should_read_draft_config_without_persisting_changes(self, monkeypatch):
+        service = _build_service()
+        app = SimpleNamespace(id=uuid4(), debug_conversation=SimpleNamespace(summary="summary"))
+        capture = {}
+        monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
+        monkeypatch.setattr(
+            service,
+            "get_draft_app_config",
+            lambda app_id, account, persist_changes=True: capture.update({"persist_changes": persist_changes})
+            or {"long_term_memory": {"enable": True}},
+        )
+
+        result = service.get_debug_conversation_summary(app.id, SimpleNamespace(id=uuid4()))
+
+        assert result == "summary"
+        assert capture["persist_changes"] is False
+
     def test_build_runtime_tools_for_config_should_merge_mcp_bindings(self):
         service = _build_service()
         service.app_config_service = SimpleNamespace(
@@ -710,6 +733,36 @@ class TestAppService:
 
         assert tools == ["tool-a", "mcp-a", "wf-a"]
 
+    def test_build_runtime_tools_for_config_should_merge_prompt_only_skill_loaders(self):
+        service = _build_service()
+        service.app_config_service = SimpleNamespace(
+            get_langchain_tools_by_tools_config=lambda tools: ["tool-a"] if tools == [{"type": "builtin_tool"}] else [],
+            get_langchain_tools_by_mcp_bindings=lambda mcp_bindings, mcp_tool_snapshots=None: [],
+            get_langchain_tools_by_workflow_ids=lambda workflow_ids: [],
+        )
+        service.retrieval_service = SimpleNamespace()
+        service_skill = SimpleNamespace(
+            get_langchain_tools_by_skill_bindings=lambda skill_bindings, runtime_context=None: ["skill-tool"],
+            get_langchain_prompt_loaders_by_skill_bindings=lambda skill_bindings, runtime_context=None: ["prompt-loader"],
+        )
+
+        tools = AppService._build_runtime_tools_for_config(
+            app_config_service=service.app_config_service,
+            retrieval_service=service.retrieval_service,
+            skill_service=service_skill,
+            account=SimpleNamespace(id=uuid4()),
+            app_id=uuid4(),
+            draft_app_config={
+                "skills": [{"skill_id": str(uuid4())}],
+                "tools": [{"type": "builtin_tool"}],
+                "mcp_bindings": [],
+                "workflows": [],
+                "datasets": [],
+            },
+        )
+
+        assert tools == ["tool-a", "skill-tool", "prompt-loader"]
+
     def test_create_runtime_agent_should_select_deep_thinking_agent_and_forward_runtime_context(
         self, monkeypatch
     ):
@@ -722,6 +775,7 @@ class TestAppService:
             "skills": [
                 {
                     "label": "网页研究",
+                    "description": "面向网页检索、内容提炼和资料对比的技能包。",
                     "readme": "# Web Research\nUse browser tools for research.",
                     "executor_type": "scf",
                 }
@@ -760,7 +814,9 @@ class TestAppService:
         assert capture["agent_config"].invoke_from == InvokeFrom.WEB_APP.value
         assert capture["agent_config"].tools == ["tool-a"]
         assert "已绑定 Skills" in capture["agent_config"].preset_prompt
-        assert "Web Research" in capture["agent_config"].preset_prompt
+        assert "网页研究" in capture["agent_config"].preset_prompt
+        assert "面向网页检索、内容提炼和资料对比的技能包。" in capture["agent_config"].preset_prompt
+        assert "Use browser tools for research." not in capture["agent_config"].preset_prompt
 
     def test_create_runtime_agent_should_append_mcp_prompt(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())
@@ -1036,7 +1092,7 @@ class TestAppService:
         monkeypatch.setattr(
             service,
             "_validate_draft_app_config",
-            lambda draft_config, _account: {"model_config": draft_config["model_config"]},
+            lambda draft_config, _account, *_args: {"model_config": draft_config["model_config"]},
         )
         updates = []
         monkeypatch.setattr(
@@ -1062,6 +1118,31 @@ class TestAppService:
         assert "updated_at" in updates[0][1]
         assert updates[0][1]["model_config"]["model"] == "gpt-4o-mini"
         assert enqueued == [(app.id, AppConfigType.DRAFT.value)]
+
+    def test_prewarm_assistant_mcp_tool_snapshots_should_refresh_and_store_runtime_config(self, monkeypatch):
+        service = _build_service()
+        bindings = [{"name": "global-mcp", "transport": "streamable_http", "url": "https://mcp.example.com", "enabled": True}]
+        snapshots = [{"binding_identity": "cached", "tool_definitions": []}]
+        refresh_calls = []
+        service.app_config_service = SimpleNamespace(
+            refresh_mcp_tool_snapshots=lambda _bindings, existing_snapshots=None: refresh_calls.append(
+                (_bindings, existing_snapshots)
+            )
+            or [{"binding_identity": "refreshed", "tool_definitions": [{"name": "weather"}]}]
+        )
+
+        from flask import Flask
+
+        app = Flask(__name__)
+        app.config["ASSISTANT_MCP_BINDINGS"] = bindings
+        app.config["ASSISTANT_MCP_TOOL_SNAPSHOTS"] = snapshots
+
+        with app.app_context():
+            result = service.prewarm_assistant_mcp_tool_snapshots()
+
+        assert refresh_calls == [(bindings, snapshots)]
+        assert result == [{"binding_identity": "refreshed", "tool_definitions": [{"name": "weather"}]}]
+        assert app.config["ASSISTANT_MCP_TOOL_SNAPSHOTS"] == result
 
     def test_publish_draft_app_config_should_create_runtime_config_and_history(self, monkeypatch):
         class _DeleteQuery:
@@ -1126,6 +1207,8 @@ class TestAppService:
         )
         account = SimpleNamespace(id=uuid4())
         app_id = uuid4()
+        public_agent_id = str(uuid4())
+        own_agent_id = str(uuid4())
         mcp_tool_snapshots = [
             {
                 "binding_identity": "streamable_http:https://mcp.example.com:Weather MCP",
@@ -1184,6 +1267,16 @@ class TestAppService:
                 text_to_speech={"enable": False},
                 suggested_after_answer={"enable": True},
                 review_config={"enable": False},
+                agent_bindings=[
+                    {
+                        "app_id": public_agent_id,
+                        "invoke_mode": "a2a",
+                    },
+                    {
+                        "app_id": own_agent_id,
+                        "invoke_mode": "tool",
+                    },
+                ],
                 mcp_bindings=[
                     {
                         "name": "Weather MCP",
@@ -1226,6 +1319,30 @@ class TestAppService:
                 "text_to_speech": {"enable": False},
                 "suggested_after_answer": {"enable": True},
                 "review_config": {"enable": False},
+                "agent_bindings": [
+                    {
+                        "app_id": public_agent_id,
+                        "name": "公开 Agent",
+                        "icon": "/icons/public.png",
+                        "description": "公开说明",
+                        "source_scope": "public",
+                        "invoke_mode": "a2a",
+                        "is_public": True,
+                        "status": AppStatus.PUBLISHED.value,
+                        "tool_name": "agent_app_public",
+                    },
+                    {
+                        "app_id": own_agent_id,
+                        "name": "我的 Agent",
+                        "icon": "/icons/own.png",
+                        "description": "我的说明",
+                        "source_scope": "own",
+                        "invoke_mode": "tool",
+                        "is_public": False,
+                        "status": AppStatus.PUBLISHED.value,
+                        "tool_name": "agent_app_own",
+                    },
+                ],
                 "mcp_bindings": [
                     {
                         "name": "Weather MCP",
@@ -1287,6 +1404,16 @@ class TestAppService:
             }
         ]
         assert app_config_call["mcp_tool_snapshots"] == mcp_tool_snapshots
+        assert app_config_call["agent_bindings"] == [
+            {
+                "app_id": public_agent_id,
+                "invoke_mode": "a2a",
+            },
+            {
+                "app_id": own_agent_id,
+                "invoke_mode": "tool",
+            },
+        ]
         history_call = [payload for model, payload in create_calls if model.__name__ == "AppConfigVersion"][0]
         assert history_call["version"] == 3
         assert history_call["mcp_bindings"] == [
@@ -1303,9 +1430,43 @@ class TestAppService:
                 "env": {},
             }
         ]
+        assert history_call["agent_bindings"] == app.draft_app_config.agent_bindings
         assert history_call["mcp_tool_snapshots"] == mcp_tool_snapshots
         assert synced_app_ids == [str(app_id)]
         assert prewarm_calls == [(app.id, AppConfigType.PUBLISHED.value)]
+
+    def test_get_langchain_tools_by_agent_bindings_should_snapshot_account_for_later_tool_calls(self, monkeypatch):
+        service = _build_service()
+        original_account_id = uuid4()
+        account = SimpleNamespace(id=original_account_id)
+        binding_app_id = str(uuid4())
+        captured = {}
+
+        def _fake_invoke_agent_binding_target(**kwargs):
+            captured["account"] = kwargs["account"]
+            return f"ok:{getattr(kwargs['account'], 'id', None)}"
+
+        monkeypatch.setattr(service, "_invoke_agent_binding_target", _fake_invoke_agent_binding_target)
+
+        tools = service.get_langchain_tools_by_agent_bindings(
+            [
+                {
+                    "app_id": binding_app_id,
+                    "name": "子应用",
+                    "invoke_mode": "a2a",
+                }
+            ],
+            account=account,
+            app_id=uuid4(),
+            runtime_context={"account_id": str(original_account_id)},
+        )
+
+        account.id = None
+
+        result = tools[0].invoke({"query": "今天星期几？"})
+
+        assert result == f"ok:{original_account_id}"
+        assert captured["account"].id == original_account_id
 
     def test_publish_draft_app_config_should_skip_public_and_published_at_when_not_shared_and_already_published(self, monkeypatch):
         class _DeleteQuery:
@@ -1493,9 +1654,25 @@ class TestAppService:
             status=AppStatus.PUBLISHED.value,
             draft_app_config=draft_version,
         )
-        service.app_config_service.get_version_display_config = lambda version: display_configs.setdefault(
+        service.app_config_service.get_version_display_config = lambda version, **_kwargs: display_configs.setdefault(
             version.id,
-            {"id": str(version.id), "tools": [{"provider": {"label": "搜索服务"}, "tool": {"label": "天气查询"}}]},
+            {
+                "id": str(version.id),
+                "tools": [{"provider": {"label": "搜索服务"}, "tool": {"label": "天气查询"}}],
+                "agent_bindings": [
+                    {
+                        "app_id": str(uuid4()),
+                        "name": "Agent 子应用",
+                        "icon": "/icons/agent.png",
+                        "description": "说明",
+                        "source_scope": "public",
+                        "invoke_mode": "a2a",
+                        "is_public": True,
+                        "status": AppStatus.PUBLISHED.value,
+                        "tool_name": "agent_app_demo",
+                    }
+                ],
+            },
         )
         monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
 
@@ -1516,8 +1693,10 @@ class TestAppService:
         assert versions == [draft_version, published_latest, published_history]
         assert draft_version.is_current_published is False
         assert draft_version.display_config == display_configs[draft_version.id]
+        assert draft_version.display_config["agent_bindings"][0]["invoke_mode"] == "a2a"
         assert published_latest.is_current_published is True
         assert published_latest.display_config == display_configs[published_latest.id]
+        assert published_latest.display_config["agent_bindings"][0]["source_scope"] == "public"
         assert published_history.is_current_published is False
         assert published_history.display_config == display_configs[published_history.id]
 
@@ -1550,6 +1729,12 @@ class TestAppService:
             text_to_speech={"enable": False},
             suggested_after_answer={"enable": True},
             review_config={"enable": False},
+            agent_bindings=[
+                {
+                    "app_id": str(uuid4()),
+                    "invoke_mode": "tool",
+                }
+            ],
             mcp_bindings=[
                 {
                     "name": "Weather MCP",
@@ -1568,7 +1753,7 @@ class TestAppService:
         )
         monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
         monkeypatch.setattr(service, "get", lambda *_args, **_kwargs: history)
-        monkeypatch.setattr(service, "_validate_draft_app_config", lambda payload, _account: payload)
+        monkeypatch.setattr(service, "_validate_draft_app_config", lambda payload, _account, *_args: payload)
         updates = []
         monkeypatch.setattr(
             service,
@@ -1588,6 +1773,7 @@ class TestAppService:
         assert updates[0][0] is draft_record
         assert "updated_at" in updates[0][1]
         assert updates[0][1]["preset_prompt"] == "prompt"
+        assert updates[0][1]["agent_bindings"] == history.agent_bindings
         assert prewarm_calls == [(app.id, AppConfigType.DRAFT.value)]
 
     def test_fallback_history_to_draft_should_raise_when_history_not_found(self, monkeypatch):

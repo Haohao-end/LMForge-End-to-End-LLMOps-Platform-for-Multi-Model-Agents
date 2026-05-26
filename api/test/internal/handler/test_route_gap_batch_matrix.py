@@ -292,30 +292,6 @@ BATCH_B_SUCCESS_CASES = [
         ],
     },
     {
-        "name": "public_app_analysis_success",
-        "method": "get",
-        "url": f"/public/apps/{PUBLIC_STRING_APP_ID}/analysis",
-        "kwargs": {},
-        "patches": [
-            (
-                "internal.service.public_app_service.PublicAppService.get_public_app_analysis",
-                {"view_count": 10, "like_count": 2},
-            )
-        ],
-    },
-    {
-        "name": "public_app_my_favorites_success",
-        "method": "get",
-        "url": "/public/apps/my-favorites",
-        "kwargs": {},
-        "patches": [
-            (
-                "internal.service.public_app_service.PublicAppService.get_my_favorites",
-                [],
-            )
-        ],
-    },
-    {
         "name": "public_workflow_detail_success",
         "method": "get",
         "url": f"/public/workflows/{WORKFLOW_ID}",
@@ -412,42 +388,6 @@ BATCH_B_SUCCESS_CASES = [
         ],
     },
     {
-        "name": "public_app_favorite_success",
-        "method": "post",
-        "url": f"/public/apps/{APP_ID}/favorite",
-        "kwargs": {"json": {}},
-        "patches": [
-            (
-                "internal.service.public_app_service.PublicAppService.favorite_app",
-                {"is_favorited": True},
-            )
-        ],
-    },
-    {
-        "name": "public_app_like_success",
-        "method": "post",
-        "url": f"/public/apps/{APP_ID}/like",
-        "kwargs": {"json": {}},
-        "patches": [
-            (
-                "internal.service.public_app_service.PublicAppService.like_app",
-                {"is_liked": True, "like_count": 1},
-            )
-        ],
-    },
-    {
-        "name": "public_workflow_favorite_success",
-        "method": "post",
-        "url": f"/public/workflows/{WORKFLOW_ID}/favorite",
-        "kwargs": {"json": {}},
-        "patches": [
-            (
-                "internal.service.public_workflow_service.PublicWorkflowService.favorite_workflow",
-                {"is_favorited": True, "favorite_count": 1},
-            )
-        ],
-    },
-    {
         "name": "workflow_share_to_square_success",
         "method": "post",
         "url": f"/workflows/{WORKFLOW_ID}/share-to-square",
@@ -468,18 +408,6 @@ BATCH_B_SUCCESS_CASES = [
             (
                 "internal.service.public_workflow_service.PublicWorkflowService.fork_public_workflow",
                 SimpleNamespace(id=WORKFLOW_ID, name="forked-workflow"),
-            )
-        ],
-    },
-    {
-        "name": "public_workflow_like_success",
-        "method": "post",
-        "url": f"/public/workflows/{WORKFLOW_ID}/like",
-        "kwargs": {"json": {}},
-        "patches": [
-            (
-                "internal.service.public_workflow_service.PublicWorkflowService.like_workflow",
-                {"is_liked": True, "like_count": 2},
             )
         ],
     },

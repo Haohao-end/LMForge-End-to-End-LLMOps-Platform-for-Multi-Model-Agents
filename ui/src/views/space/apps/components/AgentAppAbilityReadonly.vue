@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { apiPrefix } from '@/config'
+import type { McpBinding } from '@/models/app'
 import { resolveMcpBindingStatus } from './abilities/mcp-status'
 
 // 只读版本的应用能力组件
@@ -12,6 +13,7 @@ const defaultActivateKeys = [
   'tools',
   'mcp_bindings',
   'skills',
+  'agent_bindings',
   'workflows',
   'datasets',
   'long_term_memory',
@@ -27,6 +29,7 @@ const toolsCount = computed(() => props.draft_app_config?.tools?.length || 0)
 const mcpBindingsCount = computed(() => props.draft_app_config?.mcp_bindings?.length || 0)
 const mcpToolSnapshots = computed(() => props.draft_app_config?.mcp_tool_snapshots || [])
 const skillsCount = computed(() => props.draft_app_config?.skills?.length || 0)
+const agentBindingsCount = computed(() => props.draft_app_config?.agent_bindings?.length || 0)
 const workflowsCount = computed(() => props.draft_app_config?.workflows?.length || 0)
 const datasetsCount = computed(() => props.draft_app_config?.datasets?.length || 0)
 const longTermMemoryEnabled = computed(() => props.draft_app_config?.long_term_memory?.enable || false)
@@ -37,8 +40,11 @@ const speechToTextEnabled = computed(() => props.draft_app_config?.speech_to_tex
 const textToSpeechEnabled = computed(() => props.draft_app_config?.text_to_speech?.enable || false)
 const reviewConfigEnabled = computed(() => props.draft_app_config?.review_config?.enable || false)
 
-const getMcpBindingStatus = (binding: Record<string, any>) => {
-  return resolveMcpBindingStatus(binding, mcpToolSnapshots.value)
+const getMcpBindingStatus = (binding: Partial<McpBinding>) => {
+  return resolveMcpBindingStatus(binding as Pick<
+    McpBinding,
+    'name' | 'url' | 'transport' | 'command' | 'provider_key' | 'enabled'
+  >, mcpToolSnapshots.value)
 }
 
 // 统一处理图标地址，兼容绝对地址、相对地址以及 /api 路径
@@ -64,18 +70,61 @@ const normalizeIconUrl = (icon: string = '') => {
 
   return `${apiUrl.origin}${path}`
 }
+
+const avatarPalettes = [
+  ['#334155', '#0f172a'],
+  ['#0369a1', '#1d4ed8'],
+  ['#047857', '#0f766e'],
+  ['#c2410c', '#d97706'],
+  ['#be123c', '#e11d48'],
+  ['#0f766e', '#14b8a6'],
+]
+
+const hashString = (value: string) => {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 33 + value.charCodeAt(i)) >>> 0
+  }
+  return hash
+}
+
+const getBindingAvatarText = (binding: Pick<McpBinding, 'label' | 'name' | 'provider_key'>) => {
+  const source = (binding.label || binding.name || binding.provider_key || 'M').trim()
+  const latinParts = source.match(/[A-Za-z0-9]+/g)
+  if (latinParts && latinParts.length > 0) {
+    return latinParts
+      .slice(0, 2)
+      .map((item) => item[0]?.toUpperCase())
+      .join('')
+  }
+
+  const chineseParts = source.match(/[\u4e00-\u9fff]/g)
+  if (chineseParts && chineseParts.length > 0) {
+    return chineseParts.slice(0, 2).join('')
+  }
+
+  return source.slice(0, 2).toUpperCase()
+}
+
+const getBindingAvatarStyle = (binding: Pick<McpBinding, 'provider_key' | 'category' | 'label'>) => {
+  const palette = avatarPalettes[hashString(`${String(binding.provider_key || '').trim()}:${String(binding.category || '').trim()}:${String(binding.label || '').trim()}`) % avatarPalettes.length]
+  return {
+    background: `linear-gradient(135deg, ${palette[0]} 0%, ${palette[1]} 100%)`,
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+  }
+}
 </script>
 
 <template>
-  <div class="flex flex-col h-[calc(100vh-141px)]">
+  <div class="flex flex-col h-[calc(100vh-141px)] min-w-0 w-full overflow-hidden">
     <!-- 应用能力标题 -->
     <div class="p-4 flex items-center justify-between">
       <div class="text-gray-700 font-bold">应用能力</div>
       <a-tag color="orange" size="small">预览模式</a-tag>
     </div>
     <!-- 应用能力列表 -->
-    <div class="flex-1 overflow-scroll scrollbar-w-none">
-      <a-collapse :bordered="false" :default-active-key="defaultActivateKeys" class="app-ability-readonly">
+    <div class="flex-1 min-w-0 overflow-y-auto overflow-x-hidden scrollbar-w-none">
+      <a-collapse :bordered="false" :default-active-key="defaultActivateKeys" class="app-ability-readonly w-full min-w-0">
         <template #expand-icon="{ active }">
           <icon-down v-if="active" />
           <icon-right v-else />
@@ -114,8 +163,24 @@ const normalizeIconUrl = (icon: string = '') => {
               :key="index"
               class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
             >
-            <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-gray-700 truncate">
+              <a-avatar
+                :size="34"
+                shape="square"
+                class="shrink-0 overflow-hidden"
+                :style="binding.icon ? { backgroundColor: '#f3f4f6' } : getBindingAvatarStyle(binding)"
+              >
+                <img
+                  v-if="binding.icon"
+                  :src="normalizeIconUrl(binding.icon)"
+                  :alt="binding.label || binding.name"
+                  class="w-full h-full object-cover"
+                />
+                <span v-else class="text-white font-semibold text-[12px] tracking-wide">
+                  {{ getBindingAvatarText(binding) }}
+                </span>
+              </a-avatar>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-gray-700 truncate">
                   {{ binding.name || '未命名 MCP 绑定' }}
                 </div>
                 <div class="text-xs text-gray-500 truncate">
@@ -170,6 +235,41 @@ const normalizeIconUrl = (icon: string = '') => {
             </div>
           </div>
           <div v-else class="text-gray-400 text-sm">未配置 Skills</div>
+        </a-collapse-item>
+
+        <!-- Agent 子应用 -->
+        <a-collapse-item key="agent_bindings" header="Agent 子应用" class="app-ability-item">
+          <div v-if="agentBindingsCount > 0" class="space-y-2">
+            <div
+              v-for="(binding, index) in props.draft_app_config.agent_bindings"
+              :key="index"
+              class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+            >
+              <a-avatar :size="32" shape="square" class="rounded-lg flex-shrink-0">
+                <img v-if="binding.icon" :src="normalizeIconUrl(binding.icon)" />
+                <icon-apps v-else />
+              </a-avatar>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="text-sm font-medium text-gray-700 truncate">
+                    {{ binding.name || '未命名 Agent' }}
+                  </div>
+                  <a-tag :color="binding.invoke_mode === 'a2a' ? 'arcoblue' : 'orange'" size="small">
+                    {{ binding.invoke_mode === 'a2a' ? 'A2A' : 'Tool' }}
+                  </a-tag>
+                </div>
+                <div class="text-xs text-gray-500 truncate">
+                  {{ binding.source_scope === 'public' ? '应用广场' : '我的应用' }}
+                  <template v-if="binding.is_public"> · 公开应用</template>
+                  <template v-else> · 私有应用</template>
+                </div>
+                <div class="text-xs text-gray-400 truncate">
+                  {{ binding.description || '无描述' }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-gray-400 text-sm">未配置 Agent 子应用</div>
         </a-collapse-item>
 
         <!-- 工作流 -->
@@ -296,6 +396,9 @@ const normalizeIconUrl = (icon: string = '') => {
 
 <style>
 .app-ability-readonly .app-ability-item {
+  width: 100%;
+  min-width: 0;
+
   .arco-collapse-item-header {
     background-color: transparent;
     border: none;

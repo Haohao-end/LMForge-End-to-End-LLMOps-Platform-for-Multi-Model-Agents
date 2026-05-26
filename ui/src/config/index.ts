@@ -142,6 +142,8 @@ export const typeMap: { [key: string]: string } = {
   bool: '布尔值',
 }
 
+export const AI_SURFACE_BACKGROUND_GRADIENT = 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 25%, #f3e8ff 50%, #fce7f3 75%, #f0f9ff 100%)'
+
 // 智能体事件类型
 export const QueueEvent = {
   longTermMemoryRecall: 'long_term_memory_recall',

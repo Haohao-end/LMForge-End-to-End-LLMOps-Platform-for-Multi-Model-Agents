@@ -3,6 +3,9 @@ from __future__ import annotations
 import logging
 import json as json_module
 
+import pytest
+
+from internal.exception import FailException
 from internal.core.skills.skill_executor import SkillSandboxExecutor, SkillScfClient
 
 
@@ -65,35 +68,13 @@ def test_skill_scf_client_should_post_sync_and_execute_payloads(monkeypatch, cap
     assert caplog.text.count("技能工具 SCF success") == 2
 
 
-def test_skill_sandbox_executor_should_execute_locally_when_unconfigured(monkeypatch):
+def test_skill_sandbox_executor_should_fail_when_unconfigured(monkeypatch):
     monkeypatch.delenv("E2B_API_KEY", raising=False)
     monkeypatch.delenv("E2B_DOMAIN", raising=False)
 
     executor = SkillSandboxExecutor()
-    result = executor.execute_skill(
-        {
-            "bundle": {
-                "skill.py": (
-                    "from __future__ import annotations\n\n"
-                    "def run(params):\n"
-                    "    return {'echo': params.get('value')}\n"
-                )
-            },
-            "entrypoint": "run",
-            "input": {"value": "hello"},
-        }
-    )
-
-    assert result == {"echo": "hello"}
-
-
-def test_skill_sandbox_executor_should_log_local_success(monkeypatch, caplog):
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_DOMAIN", raising=False)
-
-    executor = SkillSandboxExecutor()
-    with caplog.at_level(logging.INFO):
-        result = executor.execute_skill(
+    with pytest.raises(FailException, match="沙箱执行失败"):
+        executor.execute_skill(
             {
                 "bundle": {
                     "skill.py": (
@@ -106,9 +87,6 @@ def test_skill_sandbox_executor_should_log_local_success(monkeypatch, caplog):
                 "input": {"value": "hello"},
             }
         )
-
-    assert result == {"echo": "hello"}
-    assert "技能工具 sandbox local success" in caplog.text
 
 
 def test_skill_sandbox_executor_should_log_remote_success(monkeypatch, caplog):
@@ -172,3 +150,47 @@ def test_skill_sandbox_executor_should_log_remote_success(monkeypatch, caplog):
 
     assert result == {"echo": "hello"}
     assert "技能工具 sandbox remote success" in caplog.text
+
+
+def test_skill_sandbox_executor_should_fail_when_remote_backend_errors(monkeypatch):
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("E2B_DOMAIN", "test-domain")
+
+    class _FakeUploadResponse:
+        def __init__(self, path: str, error: str | None = None):
+            self.path = path
+            self.error = error
+
+    class _FakeBackend:
+        def __init__(self, *_, **__):
+            self.id = "sandbox-test-1"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, command: str, *, timeout=None):
+            raise RuntimeError("sandbox crashed")
+
+        def upload_files(self, files):
+            return [_FakeUploadResponse(path) for path, _content in files]
+
+    monkeypatch.setattr("internal.core.skills.skill_executor.BaiduCfcSandboxBackend", _FakeBackend)
+
+    executor = SkillSandboxExecutor()
+    with pytest.raises(FailException, match="sandbox crashed"):
+        executor.execute_skill(
+            {
+                "bundle": {
+                    "skill.py": (
+                        "from __future__ import annotations\n\n"
+                        "def run(params):\n"
+                        "    return {'echo': params.get('value')}\n"
+                    )
+                },
+                "entrypoint": "run",
+                "input": {"value": "hello"},
+            }
+        )

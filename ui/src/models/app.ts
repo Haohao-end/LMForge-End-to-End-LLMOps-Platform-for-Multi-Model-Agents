@@ -3,6 +3,7 @@ import {
   type BasePaginatorResponse,
   type BaseResponse,
 } from '@/models/base' // 获取应用信息响应结构
+import type { ChatConversationMessage } from '@/models/chat'
 import type { SkillBinding, SkillBindingRequest } from '@/models/skill'
 
 // 应用版本类型
@@ -56,6 +57,22 @@ export type McpToolSnapshot = {
   retryable: boolean
 }
 
+export type AgentBinding = {
+  app_id: string
+  invoke_mode: 'a2a' | 'tool'
+  name: string
+  icon: string
+  description: string
+  source_scope: 'public' | 'own'
+  is_public?: boolean
+  status?: string
+  tool_name?: string
+}
+
+export type AgentBindingRequest = {
+  app_id: string
+}
+
 // 获取应用信息响应结构
 export type GetAppResponse = BaseResponse<{
   id: string
@@ -78,7 +95,10 @@ export type CreateAppRequest = { name: string; icon: string; description: string
 export type UpdateAppRequest = { name: string; icon: string; description: string }
 
 // 获取应用分页列表数据请求
-export type GetAppsWithPageRequest = BasePaginatorRequest & { search_word: string }
+export type GetAppsWithPageRequest = BasePaginatorRequest & {
+  search_word: string
+  published_only?: boolean
+}
 
 // 获取应用分页列表数据响应
 export type GetAppsWithPageResponse = BasePaginatorResponse<{
@@ -92,6 +112,7 @@ export type GetAppsWithPageResponse = BasePaginatorResponse<{
     model: string
   }
   status: string
+  is_public: boolean
   creator_name: string
   creator_avatar: string
   draft_updated_at: number
@@ -138,6 +159,7 @@ export type GetDraftAppConfigResponse = BaseResponse<{
   mcp_bindings: McpBinding[]
   mcp_tool_snapshots: McpToolSnapshot[]
   skills: SkillBinding[]
+  agent_bindings: AgentBinding[]
   workflows: { id: string; name: string; icon: string; description: string }[]
   datasets: { id: string; name: string; icon: string; description: string }[]
   retrieval_config: { retrieval_strategy: string; k: number; score: number }
@@ -165,6 +187,7 @@ export type UpdateDraftAppConfigRequest = {
   tools?: { type: string; provider_id: string; tool_id: string; params: Record<string, any> }[]
   mcp_bindings?: McpBinding[]
   skills?: SkillBindingRequest[]
+  agent_bindings?: AgentBindingRequest[]
   workflows?: string[]
   datasets?: string[]
   retrieval_config?: { retrieval_strategy: string; k: number; score: number }
@@ -196,31 +219,7 @@ export type PromptCompareChatRequest = {
 }
 
 // 获取应用的调试会话消息列表响应结构
-export type GetDebugConversationMessagesWithPageResponse = BasePaginatorResponse<{
-  id: string
-  conversation_id: string
-  query: string
-  image_urls: string[]
-  input_parts: Array<Record<string, any>>
-  answer: string
-  answer_parts: Array<Record<string, any>>
-  artifacts: Array<Record<string, any>>
-  total_token_count: number
-  latency: number
-  agent_thoughts: {
-    id: string
-    position: number
-    event: string
-    thought: string
-    observation: string
-    tool: string
-    tool_input: Record<string, any>
-    latency: number
-    created_at: number
-  }[]
-  suggested_questions: string[]
-  created_at: number
-}>
+export type GetDebugConversationMessagesWithPageResponse = BasePaginatorResponse<ChatConversationMessage>
 
 // 获取应用的发布历史配置列表分页响应结构
 export type GetPublishHistoriesWithPageResponse = BasePaginatorResponse<{

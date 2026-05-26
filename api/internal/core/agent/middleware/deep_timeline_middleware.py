@@ -29,6 +29,85 @@ def _stringify(value: Any, default: str = "") -> str:
         return str(value)
 
 
+_TODO_STATUS_ALIASES: dict[str, str] = {
+    "completed": "completed",
+    "complete": "completed",
+    "done": "completed",
+    "success": "completed",
+    "succeeded": "completed",
+    "finished": "completed",
+    "error": "error",
+    "failed": "error",
+    "fail": "error",
+    "failure": "error",
+    "in_progress": "in_progress",
+    "progress": "in_progress",
+    "running": "in_progress",
+    "working": "in_progress",
+    "doing": "in_progress",
+    "start": "in_progress",
+    "pending": "pending",
+    "todo": "pending",
+    "to_do": "pending",
+    "wait": "pending",
+    "waiting": "pending",
+    "not_started": "pending",
+}
+
+
+def _normalize_todo_status(status: Any) -> str:
+    normalized = re.sub(r"[\s-]+", "_", _stringify(status, "").strip().lower())
+    if not normalized:
+        return "pending"
+    return _TODO_STATUS_ALIASES.get(normalized, "pending")
+
+
+def _normalize_todo_item(item: Any, *, position: int) -> dict[str, Any]:
+    if isinstance(item, dict):
+        normalized_item = dict(item)
+        raw_content = (
+            item.get("content")
+            or item.get("text")
+            or item.get("description")
+            or item.get("title")
+            or item.get("name")
+        )
+        raw_title = item.get("title") or item.get("name") or raw_content
+        content = _stringify(raw_content, "").strip()
+        title = _stringify(raw_title, "").strip()
+        if not content:
+            content = title
+        if not title:
+            title = content
+        normalized_item["content"] = content
+        normalized_item["title"] = title
+        raw_status = item.get("status")
+        normalized_item["status"] = _normalize_todo_status(raw_status)
+        if raw_status is not None and _stringify(raw_status, "").strip():
+            normalized_item["raw_status"] = _stringify(raw_status, "").strip()
+        normalized_item["position"] = position
+        return normalized_item
+
+    text = _stringify(item, "").strip()
+    return {
+        "content": text,
+        "title": text,
+        "status": "pending",
+        "position": position,
+    }
+
+
+def _normalize_todo_list(todos: Any) -> list[dict[str, Any]]:
+    if not isinstance(todos, list):
+        return []
+    normalized = [_normalize_todo_item(item, position=index) for index, item in enumerate(todos)]
+    return [
+        item
+        for item in normalized
+        if str(item.get("content", "")).strip() or str(item.get("title", "")).strip()
+    ]
+
+
 class DeepTimelineMiddleware(AgentMiddleware):
     """将 deepagents 的内置工具调用转成可直接渲染的时间线事件。"""
 
@@ -63,6 +142,12 @@ class DeepTimelineMiddleware(AgentMiddleware):
         latency: float = 0,
     ) -> None:
         payload = dict(tool_input or {})
+        if tool == "write_todos":
+            normalized_todos = _normalize_todo_list(payload.get("todos", []))
+            payload["todos"] = normalized_todos
+        else:
+            normalized_todos = []
+
         payload["timeline"] = {
             "step_type": step_type,
             "status": status,
@@ -70,6 +155,16 @@ class DeepTimelineMiddleware(AgentMiddleware):
             "detail": detail,
             "technical_detail": technical_detail,
         }
+        if tool == "write_todos":
+            payload["timeline"]["todos"] = normalized_todos
+            payload["timeline"]["todo_count"] = len(normalized_todos)
+            if status == "start" and normalized_todos and not technical_detail:
+                technical_detail = json.dumps(
+                    normalized_todos,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                payload["timeline"]["technical_detail"] = technical_detail
         self.publisher(
             self.task_id,
             AgentThought(
@@ -202,15 +297,9 @@ class DeepTimelineMiddleware(AgentMiddleware):
     @staticmethod
     def _build_start_detail(tool_name: str, args: dict[str, Any]) -> str:
         if tool_name == "write_todos":
-            todos = args.get("todos", [])
-            if isinstance(todos, list) and todos:
-                titles = [
-                    str(item.get("title", "")).strip()
-                    for item in todos
-                    if isinstance(item, dict) and str(item.get("title", "")).strip()
-                ]
-                if titles:
-                    return "已规划任务：" + " / ".join(titles[:8])
+            todos = _normalize_todo_list(args.get("todos", []))
+            if todos:
+                return f"共 {len(todos)} 项待办"
             return "正在拆解任务并制定执行计划"
 
         if tool_name == "execute":

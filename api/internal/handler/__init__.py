@@ -7,9 +7,7 @@ from .auth_handler import AuthHandler
 from .builtin_tool_handler import BuiltinToolHandler
 from .dataset_handler import DatasetHandler
 from .document_handler import DocumentHandler
-from .favorite_handler import FavoriteHandler
 from .home_handler import HomeHandler
-from .like_handler import LikeHandler
 from .notification_handler import NotificationHandler
 from .oauth_handler import OAuthHandler
 from .openapi_handler import OpenAPIHandler
@@ -38,7 +36,6 @@ __all__ = [
     "UploadFileHandler",
     "DatasetHandler",
     "DocumentHandler",
-    "FavoriteHandler",
     "SegmentHandler",
     "TagHandler",
     "OAuthHandler",
@@ -61,6 +58,5 @@ __all__ = [
     "McpHandler",
     "SkillHandler",
     "HomeHandler",
-    "LikeHandler",
     "NotificationHandler",
 ]

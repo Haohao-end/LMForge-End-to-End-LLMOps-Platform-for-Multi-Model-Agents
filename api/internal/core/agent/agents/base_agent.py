@@ -1,7 +1,9 @@
 import uuid
 from abc import abstractmethod
+from contextlib import nullcontext
 from threading import Thread
 from typing import Optional, Any, Iterator
+from flask import has_app_context
 from internal.core.language_model.entities.model_entity import BaseLanguageModel
 from langchain_core.load import Serializable
 from pydantic import ConfigDict, PrivateAttr
@@ -120,12 +122,19 @@ class BaseAgent(Serializable, Runnable):
         input["task_id"] = input.get("task_id", uuid.uuid4())
         input["history"] = input.get("history", [])
         input["iteration_count"] = input.get("iteration_count", 0)
+        input["pending_skill_prompts"] = input.get("pending_skill_prompts", [])
 
-        # 3.创建子线程并执行
-        thread = Thread(
-            target=self._agent.invoke,
-            args=(input,)
-        )
+        # 3.创建子线程并执行；子线程不会继承 Flask app context，因此需要在运行时显式补上下文
+        runtime_flask_app = getattr(self.agent_config, "runtime_flask_app", None)
+
+        def _invoke_agent() -> None:
+            app_context = nullcontext()
+            if runtime_flask_app is not None and not has_app_context():
+                app_context = runtime_flask_app.app_context()
+            with app_context:
+                self._agent.invoke(input)
+
+        thread = Thread(target=_invoke_agent)
         thread.start()
 
         # 4.调用队列管理器监听数据并返回迭代器

@@ -392,8 +392,10 @@ class TestWechatService:
             raise AssertionError(f"unexpected model: {model}")
 
         monkeypatch.setattr(service, "create", _create)
+        capture = {}
         service.app_config_service = SimpleNamespace(
-            get_app_config=lambda _app: {
+            get_app_config=lambda _app, persist_changes=True: capture.update({"persist_changes": persist_changes})
+            or {
                 "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
                 "dialog_round": 2,
                 "tools": [],
@@ -621,8 +623,10 @@ class TestWechatService:
             raise AssertionError(f"unexpected model: {model}")
 
         monkeypatch.setattr(service, "create", _create)
+        capture = {}
         service.app_config_service = SimpleNamespace(
-            get_app_config=lambda _app: {
+            get_app_config=lambda _app, persist_changes=True: capture.update({"persist_changes": persist_changes})
+            or {
                 "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
                 "dialog_round": 2,
                 "tools": [],
@@ -703,8 +707,10 @@ class TestWechatService:
             raise AssertionError(f"unexpected model: {model}")
 
         monkeypatch.setattr(service, "create", _create)
+        capture = {}
         service.app_config_service = SimpleNamespace(
-            get_app_config=lambda _app: {
+            get_app_config=lambda _app, persist_changes=True: capture.update({"persist_changes": persist_changes})
+            or {
                 "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
                 "dialog_round": 2,
                 "tools": [],
@@ -746,6 +752,7 @@ class TestWechatService:
         assert thread_capture["kwargs"]["conversation_id"] == conversation.id
         assert thread_capture["kwargs"]["message_id"] == created_message.id
         assert thread_capture["kwargs"]["query"] == "你好"
+        assert capture["persist_changes"] is False
 
     def test_thread_chat_should_build_tools_and_persist_agent_thoughts(self, monkeypatch):
         service = _build_service()

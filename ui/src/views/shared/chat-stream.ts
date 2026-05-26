@@ -1,10 +1,9 @@
 import { QueueEvent } from '@/config'
+import type { ChatConversationMessage } from '@/models/chat'
 import {
   buildChatOutputParts,
   extractInlineImageUrls,
   mergeChatArtifacts,
-  type ChatArtifact,
-  type ChatOutputPart,
 } from './chat-output'
 
 type StreamEventData = {
@@ -35,21 +34,15 @@ export type ChatThought = {
   thought: string
   observation: string
   tool: string
-  tool_input: unknown
+  tool_input: Record<string, unknown>
   latency: number
   created_at: number
 }
 
-export type StreamMessage = {
-  id: string
-  conversation_id: string
-  answer: string
-  answer_parts: ChatOutputPart[]
-  artifacts: ChatArtifact[]
-  latency: number
-  total_token_count: number
-  agent_thoughts: ChatThought[]
-}
+export type StreamMessage = Pick<
+  ChatConversationMessage,
+  'id' | 'conversation_id' | 'answer' | 'answer_parts' | 'artifacts' | 'latency' | 'total_token_count' | 'agent_thoughts'
+>
 
 export type StreamState = {
   position: number
@@ -73,6 +66,13 @@ const toNonNegativeNumber = (value: unknown) => {
   return Number.isFinite(normalized) && normalized >= 0 ? normalized : 0
 }
 
+const normalizeToolInput = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  return value as Record<string, unknown>
+}
+
 const buildThought = (data: StreamEventData, position: number): ChatThought => {
   return {
     id: String(data.id ?? ''),
@@ -81,7 +81,7 @@ const buildThought = (data: StreamEventData, position: number): ChatThought => {
     thought: String(data.thought ?? ''),
     observation: String(data.observation ?? ''),
     tool: String(data.tool ?? ''),
-    tool_input: data.tool_input ?? {},
+    tool_input: normalizeToolInput(data.tool_input),
     latency: toPositiveNumber(data.latency),
     created_at: 0,
   }
@@ -113,7 +113,9 @@ const upsertThought = (
       : String(data.thought ?? previous.thought ?? ''),
     observation: String(data.observation ?? previous.observation ?? ''),
     tool: String(data.tool ?? previous.tool ?? ''),
-    tool_input: data.tool_input ?? previous.tool_input ?? {},
+    tool_input: data.tool_input === undefined
+      ? previous.tool_input
+      : normalizeToolInput(data.tool_input),
     latency: toPositiveNumber(data.latency) || previous.latency,
   }
 }
@@ -149,7 +151,7 @@ export const applyChatStreamEvent = (
   } else if (event === QueueEvent.agentAction) {
     upsertThought(thoughts, data, nextState, { appendThought: false })
     const observation = String(data.observation ?? '')
-    const existingUrls = message.artifacts.map(artifact => String(artifact.url || '').trim())
+    const existingUrls = mergeChatArtifacts([], message.artifacts).map(artifact => artifact.url)
     const inlineImageUrls = extractInlineImageUrls(observation, existingUrls)
     if (inlineImageUrls.length > 0) {
       const extractedArtifacts = inlineImageUrls.map((url, index) => ({
@@ -168,10 +170,9 @@ export const applyChatStreamEvent = (
     upsertThought(thoughts, data, nextState, { appendThought: false })
   } else if (event === QueueEvent.deepArtifactCreated) {
     upsertThought(thoughts, data, nextState, { appendThought: false })
-    const toolInput = (data.tool_input && typeof data.tool_input === 'object')
-      ? data.tool_input as Record<string, unknown>
-      : {}
-    message.artifacts = mergeChatArtifacts(message.artifacts, [toolInput.artifact || null])
+    const toolInput = normalizeToolInput(data.tool_input)
+    const artifactValue = (toolInput as { artifact?: unknown }).artifact ?? null
+    message.artifacts = mergeChatArtifacts(message.artifacts, [artifactValue])
     shouldRefreshOutputParts = true
   } else if (event === QueueEvent.error) {
     message.answer = String(data.observation ?? '')
@@ -200,7 +201,7 @@ export const applyChatStreamEvent = (
 
   message.agent_thoughts = thoughts
   if (shouldRefreshOutputParts) {
-    message.answer_parts = buildChatOutputParts(message.answer, message.artifacts)
+    message.answer_parts = buildChatOutputParts(message.answer, mergeChatArtifacts([], message.artifacts))
   }
   return { state: nextState, didUpdate: true }
 }

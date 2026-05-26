@@ -10,6 +10,10 @@
   </p>
 
   <p align="center">
+    <strong>本项目由 <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> 赞助</strong>
+  </p>
+
+  <p align="center">
     <a href="https://openllm.cloud">访问官网</a>
     ·
     <a href="https://s.apifox.cn/c76bd530-fd50-429c-94cc-f0e41c2675d1/api-305434417">API 文档</a>
@@ -72,7 +76,17 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
 - 后端：Python、Flask、SQLAlchemy、Celery、Flask-SocketIO、Redis、PostgreSQL
 - 前端：Vue 3、JavaScript / TypeScript、Vite、TailwindCSS、Pinia、Vue Flow、Arco Design
 - 基础设施与交付：Docker Compose、Nginx、OpenAPI、SSE
-- 模型接入：OpenAI、DeepSeek、Grok、Google、Moonshot、Tongyi、Wenxin、Ollama、Zhipu
+- 模型接入：OpenAI、Atlas Cloud、DeepSeek、Grok、Google、Moonshot、Tongyi、Wenxin、Ollama、Zhipu
+
+### 供应商生态
+
+<p align="center">
+  <img src="ui/public/atlas-cloud-logo.png" alt="Atlas Cloud" width="520" />
+</p>
+
+- Atlas Cloud 现已作为 OpenAI 兼容提供商可用，可通过 `ATLASCLOUD_API_KEY` 和 `ATLASCLOUD_API_BASE` 接入。
+- 官方网站：[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent)
+- 接入文档：[https://www.atlascloud.ai/docs](https://www.atlascloud.ai/docs)
 
 <p align="right">(<a href="#readme-top">返回顶部</a>)</p>
 
@@ -107,7 +121,7 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
    - `REDIS_PASSWORD`
    - `WEAVIATE_API_KEY`
    - `VITE_API_PREFIX`
-   - 至少一个模型提供商 Key，例如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY` 或 `DASHSCOPE_API_KEY`
+   - 至少一个模型提供商 Key，例如 `OPENAI_API_KEY`、`ATLASCLOUD_API_KEY`、`DEEPSEEK_API_KEY` 或 `DASHSCOPE_API_KEY`
 
 4. 启动 Docker 编排。
 
@@ -169,11 +183,19 @@ npm run test:unit -- --run
 
 首页可以作为默认的 AI 助手入口，通过 A2A 将用户问题路由到应用广场里最相关的已发布公共 Agent，也可以把自然语言需求转成新的 AI Agent / 应用创建流程。同一个入口还支持多轮对话、推荐问题、图片上传和语音输入。
 
-### 2. 应用工作台
+### 2. 应用工作台与 Deep Research
 
-<img width="2560" height="1418" alt="OpenAgent Apps Workspace" src="https://github.com/user-attachments/assets/ec6f6bdb-70d6-4803-8b53-e60185b23da0" />
+<img width="1920" height="1080" alt="OpenAgent App Workspace Deep Research" src="https://github.com/user-attachments/assets/2dd4dc3e-f216-4c8d-96e4-7a2f81e138ae" />
 
-在应用工作台中可以管理草稿、发布版本、分析页、提示词对比、复制应用以及发布相关操作。
+应用工作台是 AI 应用的主工作区，不是单独的配置页。左侧负责模型、提示词和能力绑定，右侧负责调试对话、执行轨迹和结果检查。截图中的 `Deep Research`，对应代码中的深度思考模式 `enable_deep_thinking`。
+
+主要功能：
+
+- 配置与版本管理：集中处理模型切换、人设与回复逻辑、草稿、发布、版本对比、提示词对比和应用复制。
+- 能力接入：统一绑定插件、MCP、Skills、Agent 子应用、工作流和知识库，扩展应用的可调用能力。
+- 复杂任务执行：开启 `Deep Research` 后，应用可以拆解任务并调度已绑定能力完成多步骤处理。
+- 沙箱与产物输出：支持脚本执行、代码处理、文件生成和附件导出，适合需要实际产出的任务。
+- 调试与结果验证：右侧调试区用于发起真实对话，查看深入思考轨迹、任务状态、生成产物和最终结果。
 
 ### 3. 可视化工作流编辑器
 
@@ -232,6 +254,7 @@ npm run test:unit -- --run
 
 ## 鸣谢
 
+- 感谢 Atlas Cloud 为 OpenAgent 提供支持。
 - 感谢 Rui Yang 和 Haoyu Wang（Johns Hopkins University）以负责任披露的方式报告了内置工具图标 URL 构造中的 Host Header poisoning 问题，帮助项目进一步改进安全性。
 
 <p align="right">(<a href="#readme-top">返回顶部</a>)</p>

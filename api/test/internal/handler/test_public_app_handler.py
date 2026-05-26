@@ -14,7 +14,6 @@ class TestPublicAppHandler:
         )
         handler = PublicAppHandler(
             public_app_service=SimpleNamespace(),
-            analysis_service=SimpleNamespace(),
             public_agent_a2a_service=service,
         )
 

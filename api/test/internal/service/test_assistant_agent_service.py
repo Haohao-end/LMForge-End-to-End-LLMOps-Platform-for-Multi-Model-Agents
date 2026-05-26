@@ -520,6 +520,35 @@ class TestAssistantAgentService:
                 "env": {},
             }
         ]
+        expected_snapshots = [
+            {
+                "binding_identity": "streamable_http:https://mcp.example.com:Global MCP",
+                "binding_hash": "snapshot-hash",
+                "binding": expected_bindings[0],
+                "status": "ready",
+                "tool_definitions": [
+                    {
+                        "name": "weather",
+                        "description": "天气查询",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "city": {"type": "string", "description": "城市"}
+                            },
+                            "required": ["city"],
+                        },
+                    }
+                ],
+                "tool_names": ["weather"],
+                "tool_count": 1,
+                "schema_hash": "schema-hash",
+                "last_attempt_at": 0,
+                "last_success_at": 0,
+                "last_error": "",
+                "retry_count": 0,
+                "retryable": False,
+            }
+        ]
         captured = {}
         service.public_agent_registry_service = SimpleNamespace(
             convert_public_agent_search_to_tool=lambda: "search-tool"
@@ -528,7 +557,10 @@ class TestAssistantAgentService:
             convert_public_agent_route_to_tool=lambda _account_id: f"route:{_account_id}"
         )
         service.app_config_service = SimpleNamespace(
-            get_langchain_tools_by_mcp_bindings=lambda bindings: captured.update({"bindings": bindings}) or ["mcp-tool"]
+            get_langchain_tools_by_mcp_bindings=lambda bindings, snapshots=None: captured.update(
+                {"bindings": bindings, "snapshots": snapshots}
+            )
+            or ["mcp-tool"]
         )
         monkeypatch.setattr(
             service,
@@ -538,6 +570,7 @@ class TestAssistantAgentService:
 
         flask_app = Flask(__name__)
         flask_app.config["ASSISTANT_MCP_BINDINGS"] = expected_bindings
+        flask_app.config["ASSISTANT_MCP_TOOL_SNAPSHOTS"] = expected_snapshots
 
         with flask_app.app_context():
             tools = service._build_assistant_runtime_tools(account_id)
@@ -549,6 +582,7 @@ class TestAssistantAgentService:
             "mcp-tool",
         ]
         assert captured["bindings"] == expected_bindings
+        assert captured["snapshots"] == expected_snapshots
 
     def test_get_conversation_messages_with_page_should_delegate_query_and_paginate(
         self, monkeypatch

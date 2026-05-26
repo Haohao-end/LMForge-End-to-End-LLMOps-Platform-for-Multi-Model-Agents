@@ -308,25 +308,33 @@ watch(
     :visible="props.visible"
     hide-title
     :footer="false"
-    :width="760"
-    modal-class="rounded-xl"
+    :width="1080"
+    class="tools-modal mcp-create-modal"
+    modal-class="mcp-create-modal-shell"
     @cancel="hideModal"
   >
-    <div class="flex items-center justify-between mb-6">
-      <div class="text-xl font-bold text-gray-800">
-        {{ isEditMode ? '编辑 MCP' : '创建 MCP' }}
-      </div>
-      <a-button type="text" class="!text-gray-500 hover:!text-gray-700" size="small" @click="hideModal">
-        <template #icon>
-          <icon-close :size="20" />
-        </template>
-      </a-button>
-    </div>
+    <a-spin :loading="loadingProvider" class="block h-full w-full">
+      <div class="flex h-full w-full flex-col overflow-hidden lg:flex-row">
+        <aside
+          class="flex flex-col gap-4 border-b border-gray-200 bg-gray-50 p-4 lg:w-[330px] lg:border-b-0 lg:border-r lg:overflow-y-auto scrollbar-w-none"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-xl font-bold text-gray-800">
+                {{ isEditMode ? '编辑 MCP' : '创建 MCP' }}
+              </div>
+              <div class="mt-1 text-xs leading-5 text-gray-500">
+                左侧负责图标和 AI 辅助生成，右侧负责具体表单字段，整体会更紧凑。
+              </div>
+            </div>
+            <a-button type="text" class="!text-gray-500 hover:!text-gray-700" size="small" @click="hideModal">
+              <template #icon>
+                <icon-close :size="20" />
+              </template>
+            </a-button>
+          </div>
 
-    <a-spin :loading="loadingProvider" class="block">
-      <a-form ref="formRef" :model="form" layout="vertical" @submit="handleSubmit">
-        <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
-          <a-form-item field="icon" hide-label class="lg:sticky lg:top-0 self-start">
+          <div class="mb-0">
             <IconUploadGenerator
               :name="form.name"
               :description="form.description"
@@ -339,41 +347,55 @@ watch(
               @update:icon="(val) => (form.icon = val)"
               @update:fileList="(val) => (form.fileList = val)"
             />
-          </a-form-item>
+          </div>
 
-          <div class="space-y-4">
-            <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div class="flex items-center justify-between gap-2 mb-3">
-                <div class="text-sm font-semibold text-gray-800">AI 生成 MCP 配置</div>
-                <a-button type="primary" size="small" :loading="aiLoading" @click="handleGenerateByAI">
-                  AI 生成
-                </a-button>
-              </div>
-              <a-textarea
-                v-model="aiQuestion"
-                :auto-size="{ minRows: 4, maxRows: 6 }"
-                placeholder="例如：创建一个天气 MCP，支持查询当前天气和三天天气预报，使用 HTTP 方式，提供 get_current_weather 和 get_forecast 两个工具。"
-              />
+          <div class="rounded-lg border border-gray-200 bg-white p-4">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div class="text-sm font-semibold text-gray-800">AI 生成 MCP 配置</div>
+              <a-button type="primary" size="small" :loading="aiLoading" @click="handleGenerateByAI">
+                AI 生成
+              </a-button>
             </div>
+            <a-textarea
+              v-model="aiQuestion"
+              :auto-size="{ minRows: 4, maxRows: 6 }"
+              placeholder="例如：创建一个天气 MCP，支持查询当前天气和三天天气预报，使用 HTTP 方式，提供 get_current_weather 和 get_forecast 两个工具。"
+            />
+          </div>
 
-            <a-form-item
-              field="name"
-              label="MCP 名称"
-              asterisk-position="end"
-              :rules="[{ required: true, message: 'MCP 名称不能为空' }]"
-            >
-              <a-input v-model:model-value="form.name" placeholder="请输入 MCP 名称" />
-            </a-form-item>
+          <div class="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">
+            <div class="font-semibold text-blue-900 mb-1">填写提示</div>
+            <div>HTTP / SSE / Streamable HTTP 填地址，stdio 模式填命令。高级配置按需填写即可。</div>
+          </div>
+        </aside>
 
-            <a-form-item field="description" label="MCP 描述" asterisk-position="end" :rules="[{ required: true, message: 'MCP 描述不能为空' }]">
-              <a-textarea
-                v-model:model-value="form.description"
-                :auto-size="{ minRows: 3, maxRows: 5 }"
-                placeholder="请输入该 MCP 的能力描述"
-              />
-            </a-form-item>
+        <section class="flex-1 min-w-0 bg-white p-4 lg:overflow-y-auto scrollbar-w-none">
+          <a-form ref="formRef" :model="form" layout="vertical" @submit="handleSubmit">
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <a-form-item
+                field="name"
+                label="MCP 名称"
+                asterisk-position="end"
+                class="lg:col-span-2"
+                :rules="[{ required: true, message: 'MCP 名称不能为空' }]"
+              >
+                <a-input v-model:model-value="form.name" placeholder="请输入 MCP 名称" />
+              </a-form-item>
 
-            <div class="grid grid-cols-2 gap-3">
+              <a-form-item
+                field="description"
+                label="MCP 描述"
+                asterisk-position="end"
+                class="lg:col-span-2"
+                :rules="[{ required: true, message: 'MCP 描述不能为空' }]"
+              >
+                <a-textarea
+                  v-model:model-value="form.description"
+                  :auto-size="{ minRows: 3, maxRows: 4 }"
+                  placeholder="请输入该 MCP 的能力描述"
+                />
+              </a-form-item>
+
               <a-form-item field="category" label="分类">
                 <a-select v-model:model-value="form.category" placeholder="请选择分类">
                   <a-option v-for="category in categories" :key="category.id" :value="category.id">
@@ -381,6 +403,7 @@ watch(
                   </a-option>
                 </a-select>
               </a-form-item>
+
               <a-form-item field="transport" label="Transport">
                 <a-select v-model:model-value="form.transport" placeholder="请选择 transport">
                   <a-option value="streamable_http">streamable_http</a-option>
@@ -389,49 +412,51 @@ watch(
                   <a-option value="stdio">stdio</a-option>
                 </a-select>
               </a-form-item>
-            </div>
 
-            <div class="grid grid-cols-2 gap-3">
               <a-form-item field="timeout_seconds" label="超时秒数">
                 <a-input-number v-model:model-value="form.timeout_seconds" :min="1" :max="600" />
               </a-form-item>
-              <div />
+
+              <div class="hidden rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-xs leading-5 text-gray-500 lg:block">
+                <div class="font-semibold text-gray-800 mb-1">高级说明</div>
+                <div>tool_names、args、headers 和 env 都是可选项。若是 stdio 模式，优先填写命令。</div>
+              </div>
+
+              <a-form-item field="url" label="MCP 地址" class="lg:col-span-2">
+                <a-input v-model:model-value="form.url" placeholder="HTTP / SSE / Streamable HTTP 地址" />
+              </a-form-item>
+
+              <a-form-item field="command" label="stdio 命令" class="lg:col-span-2">
+                <a-input v-model:model-value="form.command" placeholder="stdio 模式命令，例如 uvx" />
+              </a-form-item>
+
+              <a-form-item field="tool_names_text" label="工具白名单">
+                <a-input v-model:model-value="form.tool_names_text" placeholder="英文逗号分隔，可选" />
+              </a-form-item>
+
+              <a-form-item field="args_text" label="stdio args">
+                <a-input v-model:model-value="form.args_text" placeholder="英文逗号分隔，可选" />
+              </a-form-item>
+
+              <a-form-item field="headers_text" label="请求头 JSON" class="lg:col-span-2">
+                <a-textarea
+                  v-model:model-value="form.headers_text"
+                  :auto-size="{ minRows: 3, maxRows: 5 }"
+                  placeholder='例如 [{"key":"Authorization","value":"Bearer xxx"}]'
+                />
+              </a-form-item>
+
+              <a-form-item field="env_text" label="stdio env JSON" class="lg:col-span-2">
+                <a-textarea
+                  v-model:model-value="form.env_text"
+                  :auto-size="{ minRows: 3, maxRows: 5 }"
+                  placeholder='例如 {"API_KEY":"xxx"}'
+                />
+              </a-form-item>
             </div>
 
-            <a-form-item field="url" label="MCP 地址">
-              <a-input v-model:model-value="form.url" placeholder="HTTP / SSE / Streamable HTTP 地址" />
-            </a-form-item>
-
-            <a-form-item field="command" label="stdio 命令">
-              <a-input v-model:model-value="form.command" placeholder="stdio 模式命令，例如 uvx" />
-            </a-form-item>
-
-            <a-form-item field="tool_names_text" label="工具白名单">
-              <a-input v-model:model-value="form.tool_names_text" placeholder="英文逗号分隔，可选" />
-            </a-form-item>
-
-            <a-form-item field="args_text" label="stdio args">
-              <a-input v-model:model-value="form.args_text" placeholder="英文逗号分隔，可选" />
-            </a-form-item>
-
-            <a-form-item field="headers_text" label="请求头 JSON">
-              <a-textarea
-                v-model:model-value="form.headers_text"
-                :auto-size="{ minRows: 4, maxRows: 8 }"
-                placeholder='例如 [{"key":"Authorization","value":"Bearer xxx"}]'
-              />
-            </a-form-item>
-
-            <a-form-item field="env_text" label="stdio env JSON">
-              <a-textarea
-                v-model:model-value="form.env_text"
-                :auto-size="{ minRows: 4, maxRows: 8 }"
-                placeholder='例如 {"API_KEY":"xxx"}'
-              />
-            </a-form-item>
-
-            <div class="flex items-center justify-end gap-3 pt-2">
-              <a-button size="large" class="rounded-lg px-6" @click="hideModal">取消</a-button>
+            <div class="flex items-center justify-end gap-3 pt-4">
+              <a-button html-type="button" size="large" class="rounded-lg px-6" @click="hideModal">取消</a-button>
               <a-button
                 :loading="submitLoading"
                 type="primary"
@@ -442,11 +467,32 @@ watch(
                 保存
               </a-button>
             </div>
-          </div>
-        </div>
-      </a-form>
+          </a-form>
+        </section>
+      </div>
     </a-spin>
   </a-modal>
 </template>
 
-<style scoped></style>
+<style>
+.mcp-create-modal-shell {
+  height: calc(100dvh - 32px);
+  max-height: calc(100dvh - 32px);
+  width: min(96vw, 1080px);
+}
+
+.mcp-create-modal .arco-modal-wrapper {
+  @apply text-right;
+}
+
+.mcp-create-modal .arco-modal-body {
+  @apply h-full w-full rounded-xl p-0 overflow-hidden;
+}
+
+@supports not (height: 100dvh) {
+  .mcp-create-modal-shell {
+    height: calc(100vh - 32px);
+    max-height: calc(100vh - 32px);
+  }
+}
+</style>

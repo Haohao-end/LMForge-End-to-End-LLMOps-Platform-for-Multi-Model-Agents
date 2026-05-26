@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -6,6 +7,7 @@ import queue as py_queue
 from langchain_core.messages import HumanMessage
 from langchain_core.outputs import LLMResult
 from pydantic import PrivateAttr
+from unittest.mock import MagicMock
 
 from internal.core.agent.agents.agent_queue_manager import AgentQueueManager
 from internal.core.agent.agents.base_agent import BaseAgent
@@ -217,7 +219,7 @@ def test_base_agent_stream_should_prepare_state_and_delegate_to_queue(monkeypatc
             yield AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.AGENT_MESSAGE, answer="A")
 
     class _FakeThread:
-        def __init__(self, target, args):
+        def __init__(self, target, args=()):
             self.target = target
             self.args = args
 
@@ -238,6 +240,44 @@ def test_base_agent_stream_should_prepare_state_and_delegate_to_queue(monkeypatc
     assert input_state["iteration_count"] == 0
     assert agent._invoke_payloads[0]["task_id"] == input_state["task_id"]
     assert agent.agent_queue_manager.listen_calls == [input_state["task_id"]]
+
+
+def test_base_agent_stream_should_enter_runtime_flask_app_context_in_worker_thread(monkeypatch):
+    class _FakeQueueManager:
+        def __init__(self, user_id, invoke_from):
+            self.user_id = user_id
+            self.invoke_from = invoke_from
+            self.listen_calls = []
+
+        def listen(self, task_id):
+            self.listen_calls.append(task_id)
+            yield AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.AGENT_MESSAGE, answer="A")
+
+    class _FakeThread:
+        def __init__(self, target, args=()):
+            self.target = target
+            self.args = args
+
+        def start(self):
+            self.target(*self.args)
+
+    monkeypatch.setattr("internal.core.agent.agents.base_agent.AgentQueueManager", _FakeQueueManager)
+    monkeypatch.setattr("internal.core.agent.agents.base_agent.Thread", _FakeThread)
+    monkeypatch.setattr("internal.core.agent.agents.base_agent.has_app_context", lambda: False)
+
+    runtime_flask_app = MagicMock()
+    runtime_flask_app.app_context.return_value = nullcontext()
+
+    config = AgentConfig(user_id=uuid4(), invoke_from=InvokeFrom.WEB_APP, runtime_flask_app=runtime_flask_app)
+    agent = _DummyAgent(llm=_DummyLLM(features=[]), agent_config=config)
+    input_state = {"messages": [HumanMessage(content="hi")]}
+
+    thoughts = list(agent.stream(input_state))
+
+    assert len(thoughts) == 1
+    assert agent._invoke_payloads[0]["task_id"] == input_state["task_id"]
+    assert agent.agent_queue_manager.listen_calls == [input_state["task_id"]]
+    runtime_flask_app.app_context.assert_called_once()
 
 
 def test_base_agent_stream_should_raise_when_agent_missing(monkeypatch):

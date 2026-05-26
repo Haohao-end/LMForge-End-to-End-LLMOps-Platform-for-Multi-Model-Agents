@@ -60,6 +60,19 @@ class TestBuiltinToolHandler:
         assert resp.status_code == 302
         assert resp.headers["Location"].startswith("https://")
 
+    @pytest.mark.parametrize("provider_name", ["atlascloud_image", "atlascloud_video"])
+    def test_get_provider_icon_should_return_local_svg_for_atlascloud_providers(
+        self,
+        provider_name,
+        http_client,
+    ):
+        """测试 Atlas Cloud provider 图标应从本地资源返回"""
+        resp = http_client.get(f"/builtin-tools/{provider_name}/icon")
+
+        assert resp.status_code == 200
+        assert resp.mimetype == "image/svg+xml"
+        assert resp.data.startswith(b"<svg")
+
     def test_get_provider_icon_should_return_empty_bytes_when_icon_is_none(self, http_client, monkeypatch):
         monkeypatch.setattr(
             "internal.service.builtin_tool_service.BuiltinToolService.get_provider_icon",

@@ -78,6 +78,7 @@ export const resolveMcpBindingStatus = (
   const toolDefinitions = (snapshot as Record<string, unknown> | undefined)?.tool_definitions
   const hasToolDefinitions = Array.isArray(toolDefinitions) && toolDefinitions.length > 0
   const hasTools = toolCount > 0 || hasToolDefinitions
+  const isRetryable = Boolean((snapshot as Record<string, unknown> | undefined)?.retryable)
 
   if (!isEnabled) {
     return {
@@ -114,7 +115,9 @@ export const resolveMcpBindingStatus = (
       key: 'ready',
       label: '已可用',
       color: 'green',
-      tooltip: '当前使用的是上次成功同步的工具快照，后台正在刷新。',
+      tooltip: isRetryable
+        ? '当前使用的是上次成功同步的工具快照，后台正在刷新。'
+        : '当前使用的是上次成功同步的工具快照，远端 MCP 已失效，请更新 URL 或重新部署。',
       show_help: true,
     }
   }
@@ -124,7 +127,19 @@ export const resolveMcpBindingStatus = (
       key: 'ready',
       label: '已可用',
       color: 'green',
-      tooltip: '远端 MCP 暂时不可达，当前使用上次成功同步的工具快照，后台会继续重试。',
+      tooltip: isRetryable
+        ? '远端 MCP 暂时不可达，当前使用上次成功同步的工具快照，后台会继续重试。'
+        : '远端 MCP 已失效，当前使用上次成功同步的工具快照，请更新 URL 或重新部署。',
+      show_help: true,
+    }
+  }
+
+  if (snapshotStatus === 'failed' && !hasTools && !isRetryable) {
+    return {
+      key: 'failed',
+      label: '已失效',
+      color: 'gray',
+      tooltip: '远端 MCP 已失效或已删除，请更新 URL 或重新部署。',
       show_help: true,
     }
   }
@@ -165,8 +180,10 @@ export const resolveMcpBindingStatus = (
       key: 'warming',
       label: '预热中',
       color: 'orange',
-      tooltip: snapshotStatus === 'failed'
+      tooltip: snapshotStatus === 'failed' && isRetryable
         ? '工具列表预热失败，后台会自动重试。'
+        : snapshotStatus === 'failed'
+          ? '远端 MCP 暂时不可达，后台不会继续重试。'
         : '请稍等，系统正在从远端预热 MCP 工具列表。',
       show_help: true,
     }

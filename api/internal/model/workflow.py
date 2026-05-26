@@ -45,9 +45,6 @@ class Workflow(db.Model):
     status = Column(String(255), nullable=False, server_default=text("''::character varying"))  # 工作流状态
     is_public = Column(Boolean, nullable=False, server_default=text("false"))  # 是否公开到广场
     tags = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 工作流标签列表
-    view_count = Column(Integer, nullable=False, server_default=text("0"))  # 浏览次数
-    like_count = Column(Integer, nullable=False, server_default=text("0"))  # 点赞数
-    fork_count = Column(Integer, nullable=False, server_default=text("0"))  # 被Fork次数
     original_workflow_id = Column(UUID, nullable=True)  # 原始工作流ID（用于Fork追踪）
     published_at = Column(DateTime, nullable=True)  # 发布时间
     updated_at = Column(
@@ -88,34 +85,4 @@ class WorkflowResult(db.Model):
         server_onupdate=text("CURRENT_TIMESTAMP(0)"),
         default=_utcnow_naive,
     )
-    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP(0)"))
-
-
-class WorkflowLike(db.Model):
-    """用户点赞工作流关联表"""
-    __tablename__ = "workflow_like"
-    __table_args__ = (
-        PrimaryKeyConstraint("id", name="pk_workflow_like_id"),
-        Index("workflow_like_workflow_id_idx", "workflow_id"),
-        Index("workflow_like_account_id_idx", "account_id"),
-    )
-
-    id = Column(UUID, nullable=False, server_default=text("uuid_generate_v4()"))
-    workflow_id = Column(UUID, nullable=False)
-    account_id = Column(UUID, nullable=False)
-    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP(0)"))
-
-
-class WorkflowFavorite(db.Model):
-    """用户收藏工作流关联表"""
-    __tablename__ = "workflow_favorite"
-    __table_args__ = (
-        PrimaryKeyConstraint("id", name="pk_workflow_favorite_id"),
-        Index("workflow_favorite_workflow_id_idx", "workflow_id"),
-        Index("workflow_favorite_account_id_idx", "account_id"),
-    )
-
-    id = Column(UUID, nullable=False, server_default=text("uuid_generate_v4()"))
-    workflow_id = Column(UUID, nullable=False)
-    account_id = Column(UUID, nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP(0)"))

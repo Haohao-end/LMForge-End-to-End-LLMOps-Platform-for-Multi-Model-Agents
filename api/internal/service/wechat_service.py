@@ -24,6 +24,7 @@ from internal.exception import FailException
 from internal.model import App, WechatEndUser, EndUser, Message, WechatMessage, Conversation
 from pkg.sqlalchemy import SQLAlchemy
 from .app_config_service import AppConfigService
+from .app_config_service import call_config_loader
 from .app_service import AppService
 from .base_service import BaseService
 from .conversation_service import ConversationService
@@ -40,6 +41,7 @@ class WechatService(BaseService):
     app_config_service: AppConfigService
     conversation_service: ConversationService
     language_model_service: LanguageModelService
+    app_service: AppService | None = None
 
     def wechat(self, app_id: UUID):
         """微信公众号(订阅号/服务号)校验与消息推送, 运行逻辑参考`Agent对接微信公众号思路.drawio`"""
@@ -138,7 +140,11 @@ class WechatService(BaseService):
                         return reply.render()
 
             # 19.消息不存在或者已推送，则将`1`作为普通输入，获取校验后的Agent运行时配置
-            app_config = self.app_config_service.get_app_config(app)
+            app_config = call_config_loader(
+                self.app_config_service.get_app_config,
+                app,
+                persist_changes=False,
+            )
 
             # 20.创建一条消息记录与微信消息推送记录
             conversation = wechat_end_user.conversation
@@ -205,9 +211,15 @@ class WechatService(BaseService):
             tools = AppService._build_runtime_tools_for_config(
                 app_config_service=self.app_config_service,
                 retrieval_service=self.retrieval_service,
+                app_service=self.app_service,
                 account=SimpleNamespace(id=app.account_id),
                 draft_app_config=app_config,
                 flask_app=flask_app._get_current_object(),
+                runtime_context={
+                    "root_app_id": str(app.id),
+                    "call_stack": [str(app.id)],
+                    "account_id": str(app.account_id),
+                },
             )
 
             # 4.根据LLM是否支持tool_call决定使用不同的Agent

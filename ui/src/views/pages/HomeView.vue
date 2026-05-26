@@ -4,7 +4,7 @@ import AiMessage from '@/components/AiMessage.vue'
 import ChatComposer from '@/components/ChatComposer.vue'
 import HumanMessage from '@/components/HumanMessage.vue'
 import ChatConversationSkeleton from '@/components/skeletons/ChatConversationSkeleton.vue'
-import { QueueEvent } from '@/config'
+import { AI_SURFACE_BACKGROUND_GRADIENT, QueueEvent } from '@/config'
 import { useGenerateSuggestedQuestions } from '@/hooks/use-ai'
 import { useGetHomeIntent } from '@/hooks/use-home'
 import { useChatImageUpload } from '@/hooks/use-chat-image-upload'
@@ -1291,16 +1291,7 @@ onUnmounted(() => {
     ref="homePageRef"
     class="relative flex h-full min-h-0 w-full flex-col overflow-hidden"
     @wheel="handleHomePageWheel"
-    style="
-      background: linear-gradient(
-        135deg,
-        #f0f9ff 0%,
-        #e0f2fe 25%,
-        #f3e8ff 50%,
-        #fce7f3 75%,
-        #f0f9ff 100%
-      );
-    "
+    :style="{ background: AI_SURFACE_BACKGROUND_GRADIENT }"
   >
     <!-- AI 动态背景层 -->
     <div class="absolute inset-0 z-0 pointer-events-none">

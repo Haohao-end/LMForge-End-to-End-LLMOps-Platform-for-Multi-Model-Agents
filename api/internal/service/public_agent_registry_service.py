@@ -290,10 +290,10 @@ class PublicAgentRegistryService(BaseService):
         """拼接可用于数据库兜底匹配的文本。"""
         app_config = app.app_config
         tags = " ".join(app.tags or [])
-        opening_statement = app_config.opening_statement if app_config else ""
-        tools_summary = self._build_tools_summary(app_config.tools if app_config else [])
-        mcp_summary = self._build_mcp_summary(app_config.mcp_bindings if app_config else [])
-        workflows_summary = self._build_workflows_summary(app_config.workflows if app_config else [])
+        opening_statement = getattr(app_config, "opening_statement", "") if app_config else ""
+        tools_summary = self._build_tools_summary(getattr(app_config, "tools", []) if app_config else [])
+        mcp_summary = self._build_mcp_summary(getattr(app_config, "mcp_bindings", []) if app_config else [])
+        workflows_summary = self._build_workflows_summary(getattr(app_config, "workflows", []) if app_config else [])
         return " ".join(
             [
                 str(app.name or ""),
@@ -347,10 +347,10 @@ class PublicAgentRegistryService(BaseService):
 
     def build_page_content(self, app: App, app_config: Any) -> str:
         """构建用于Embedding的公共Agent文本。"""
-        tools_summary = self._build_tools_summary(app_config.tools if app_config else [])
-        mcp_summary = self._build_mcp_summary(app_config.mcp_bindings if app_config else [])
-        workflows_summary = self._build_workflows_summary(app_config.workflows if app_config else [])
-        opening_statement = app_config.opening_statement if app_config else ""
+        tools_summary = self._build_tools_summary(getattr(app_config, "tools", []) if app_config else [])
+        mcp_summary = self._build_mcp_summary(getattr(app_config, "mcp_bindings", []) if app_config else [])
+        workflows_summary = self._build_workflows_summary(getattr(app_config, "workflows", []) if app_config else [])
+        opening_statement = getattr(app_config, "opening_statement", "") if app_config else ""
         tags = ", ".join(app.tags or [])
 
         lines = [

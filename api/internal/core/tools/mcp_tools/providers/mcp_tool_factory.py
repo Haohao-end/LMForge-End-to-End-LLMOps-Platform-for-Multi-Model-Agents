@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass, field
 from functools import lru_cache
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 import requests
@@ -113,12 +113,20 @@ def _utc_timestamp() -> int:
     return int(datetime.now(UTC).timestamp())
 
 
+@dataclass(slots=True)
+class _StreamableHttpSessionState:
+    binding_hash: str
+    session_id: str
+    initialized_at: int
+
+
 @dataclass
 class McpToolFactory:
     """将 MCP Server 绑定动态展开为 LangChain 工具。"""
 
     timeout_seconds: int = DEFAULT_MCP_TOOL_TIMEOUT_SECONDS
     schema_compiler: McpSchemaCompiler = field(default_factory=McpSchemaCompiler)
+    _STREAMABLE_HTTP_SESSION_CACHE: ClassVar[dict[str, _StreamableHttpSessionState]] = {}
 
     @staticmethod
     def build_binding_identity(binding: dict[str, Any] | None) -> str:
@@ -175,6 +183,259 @@ class McpToolFactory:
         except Exception:
             payload = json.dumps([], ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _build_request_headers(self, binding: dict[str, Any], session_id: str | None = None) -> dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
+        headers.update(_normalize_headers(binding.get("headers")))
+        if session_id:
+            headers["Mcp-Session-Id"] = session_id
+        return headers
+
+    def _build_request_timeout(self, binding: dict[str, Any]) -> int:
+        timeout_seconds = binding.get("timeout_seconds") or self.timeout_seconds
+        try:
+            timeout_value = int(timeout_seconds)
+        except Exception:
+            timeout_value = self.timeout_seconds
+        return timeout_value if timeout_value > 0 else self.timeout_seconds
+
+    def _get_streamable_http_session_state(self, binding: dict[str, Any]) -> _StreamableHttpSessionState | None:
+        binding_identity = self.build_binding_identity(binding)
+        if not binding_identity:
+            return None
+
+        session_state = type(self)._STREAMABLE_HTTP_SESSION_CACHE.get(binding_identity)
+        if not session_state:
+            return None
+
+        current_binding_hash = self._binding_hash(binding)
+        if session_state.binding_hash != current_binding_hash:
+            type(self)._STREAMABLE_HTTP_SESSION_CACHE.pop(binding_identity, None)
+            return None
+
+        return session_state
+
+    def _set_streamable_http_session_state(self, binding: dict[str, Any], session_id: str) -> None:
+        binding_identity = self.build_binding_identity(binding)
+        if not binding_identity:
+            return
+        type(self)._STREAMABLE_HTTP_SESSION_CACHE[binding_identity] = _StreamableHttpSessionState(
+            binding_hash=self._binding_hash(binding),
+            session_id=session_id,
+            initialized_at=_utc_timestamp(),
+        )
+
+    def _clear_streamable_http_session_state(self, binding: dict[str, Any]) -> None:
+        binding_identity = self.build_binding_identity(binding)
+        if not binding_identity:
+            return
+        type(self)._STREAMABLE_HTTP_SESSION_CACHE.pop(binding_identity, None)
+
+    def _post_jsonrpc_payload(
+        self,
+        binding: dict[str, Any],
+        payload: dict[str, Any],
+        *,
+        session_id: str | None = None,
+    ) -> tuple[requests.Response, Any]:
+        response = self._get_session().post(
+            _normalize_text(binding.get("url")),
+            json=payload,
+            headers=self._build_request_headers(binding, session_id=session_id),
+            timeout=self._build_request_timeout(binding),
+        )
+        decoded = _parse_json_payload(response.text)
+        return response, decoded
+
+    @staticmethod
+    def _extract_error_message(response: requests.Response, decoded: Any) -> str:
+        if isinstance(decoded, dict):
+            error = decoded.get("error")
+            if isinstance(error, dict):
+                for key in ("message", "Message", "detail", "error_description"):
+                    message = _normalize_text(error.get(key))
+                    if message:
+                        return message
+            elif error:
+                message = _normalize_text(error)
+                if message:
+                    return message
+
+            for key in ("message", "Message", "detail", "error_description", "error"):
+                message = _normalize_text(decoded.get(key))
+                if message:
+                    return message
+
+        if isinstance(decoded, str):
+            message = _normalize_text(decoded)
+            if message:
+                return message
+
+        message = _normalize_text(response.reason)
+        if message:
+            return message
+        return "MCP 请求失败"
+
+    @staticmethod
+    def _is_permanent_refresh_failure(exc: Exception) -> bool:
+        """判断 MCP 快照刷新失败是否属于永久性错误。"""
+        normalized_message = _normalize_text(exc).lower()
+        if not normalized_message:
+            return False
+
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code in {404, 410}:
+            return True
+
+        permanent_markers = (
+            "record not found",
+            "resource not found",
+            "not found",
+            "does not exist",
+            "doesn't exist",
+            "no such",
+            "gone",
+        )
+        return any(marker in normalized_message for marker in permanent_markers)
+
+    @staticmethod
+    def _should_refresh_streamable_http_session(response: requests.Response, decoded: Any) -> bool:
+        if response.status_code == 401:
+            return True
+
+        if isinstance(decoded, dict):
+            code = _normalize_text(decoded.get("Code") or decoded.get("code")).lower()
+            message = _normalize_text(decoded.get("Message") or decoded.get("message")).lower()
+            if code in {"sessionexpired", "session_expired"}:
+                return True
+            if "session expired" in message:
+                return True
+
+        body = _normalize_text(response.text).lower()
+        if "mcp-session-id" in body and "initialize request" in body:
+            return True
+        return False
+
+    def _initialize_streamable_http_session(self, binding: dict[str, Any]) -> str:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": str(uuid4()),
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "roots": {
+                        "listChanged": False,
+                    },
+                    "sampling": {},
+                },
+                "clientInfo": {
+                    "name": "llmops-mcp-tool-factory",
+                    "version": "1.0",
+                },
+            },
+        }
+        response, decoded = self._post_jsonrpc_payload(binding, payload)
+        if response.status_code >= 400:
+            raise RuntimeError(self._extract_error_message(response, decoded))
+        if isinstance(decoded, dict) and decoded.get("error"):
+            raise RuntimeError(self._extract_error_message(response, decoded))
+
+        session_id = ""
+        for header_name in ("Mcp-Session-Id", "mcp-session-id", "MCP-SESSION-ID"):
+            session_id = _normalize_text(response.headers.get(header_name))
+            if session_id:
+                break
+        if not session_id:
+            raise RuntimeError("MCP 初始化响应未返回会话 ID")
+
+        self._send_streamable_http_initialized_notification(binding, session_id)
+        self._set_streamable_http_session_state(binding, session_id)
+        return session_id
+
+    def _send_streamable_http_initialized_notification(self, binding: dict[str, Any], session_id: str) -> None:
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {},
+        }
+        response, decoded = self._post_jsonrpc_payload(binding, payload, session_id=session_id)
+        if response.status_code >= 400:
+            raise RuntimeError(self._extract_error_message(response, decoded))
+        if isinstance(decoded, dict) and decoded.get("error"):
+            raise RuntimeError(self._extract_error_message(response, decoded))
+
+    def _streamable_http_jsonrpc_request(
+        self,
+        binding: dict[str, Any],
+        method: str,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        session_state = self._get_streamable_http_session_state(binding)
+        session_id = session_state.session_id if session_state else self._initialize_streamable_http_session(binding)
+
+        def _execute(current_session_id: str) -> tuple[requests.Response, Any]:
+            payload: dict[str, Any] = {
+                "jsonrpc": "2.0",
+                "id": str(uuid4()),
+                "method": method,
+            }
+            if params is not None:
+                payload["params"] = params
+            return self._post_jsonrpc_payload(binding, payload, session_id=current_session_id)
+
+        response, decoded = _execute(session_id)
+        if self._should_refresh_streamable_http_session(response, decoded):
+            self._clear_streamable_http_session_state(binding)
+            session_id = self._initialize_streamable_http_session(binding)
+            response, decoded = _execute(session_id)
+
+        if response.status_code >= 400:
+            raise RuntimeError(self._extract_error_message(response, decoded))
+
+        if isinstance(decoded, dict):
+            if "error" in decoded and decoded["error"]:
+                raise RuntimeError(self._extract_error_message(response, decoded))
+            if "result" in decoded:
+                return decoded["result"]
+            return decoded
+
+        return decoded
+
+    def _legacy_jsonrpc_request(
+        self,
+        binding: dict[str, Any],
+        method: str,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        payload: dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "id": str(uuid4()),
+            "method": method,
+        }
+        if params is not None:
+            payload["params"] = params
+
+        response, decoded = self._post_jsonrpc_payload(binding, payload)
+        response.raise_for_status()
+
+        if isinstance(decoded, dict):
+            if "error" in decoded and decoded["error"]:
+                error = decoded["error"]
+                message = ""
+                if isinstance(error, dict):
+                    message = _normalize_text(error.get("message"))
+                if not message:
+                    message = "MCP 请求失败"
+                raise RuntimeError(message)
+            if "result" in decoded:
+                return decoded["result"]
+            return decoded
+        return decoded
 
     def _build_snapshot_payload(
         self,
@@ -404,6 +665,7 @@ class McpToolFactory:
                 existing_tool_definitions = existing_snapshot.get("tool_definitions") if isinstance(existing_snapshot, dict) else []
                 has_existing_tools = isinstance(existing_tool_definitions, list) and bool(existing_tool_definitions)
                 retry_count = int(existing_snapshot.get("retry_count") or 0) + 1 if isinstance(existing_snapshot, dict) else 1
+                retryable = not self._is_permanent_refresh_failure(exc)
                 snapshots.append(
                     self._build_snapshot_payload(
                         binding=binding,
@@ -412,7 +674,7 @@ class McpToolFactory:
                         existing_snapshot=existing_snapshot,
                         last_error=str(exc),
                         retry_count=retry_count,
-                        retryable=True,
+                        retryable=retryable,
                     )
                 )
 
@@ -651,7 +913,7 @@ class McpToolFactory:
         )
 
     def _list_remote_tools(self, binding: dict[str, Any]) -> list[dict[str, Any]]:
-        payload = self._jsonrpc_request(binding, "tools/list", params={})
+        payload = self._jsonrpc_request(binding, "tools/list")
         if isinstance(payload, dict):
             tools = payload.get("tools")
             if isinstance(tools, list):
@@ -703,48 +965,14 @@ class McpToolFactory:
         method: str,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        }
-        headers.update(_normalize_headers(binding.get("headers")))
-
-        url = _normalize_text(binding.get("url"))
-        payload: dict[str, Any] = {
-            "jsonrpc": "2.0",
-            "id": str(uuid4()),
-            "method": method,
-        }
-        if params is not None:
-            payload["params"] = params
-
-        response = self._get_session().post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=int(binding.get("timeout_seconds") or self.timeout_seconds),
-        )
-        response.raise_for_status()
-
-        decoded = _parse_json_payload(response.text)
-        if isinstance(decoded, dict):
-            if "error" in decoded and decoded["error"]:
-                error = decoded["error"]
-                message = ""
-                if isinstance(error, dict):
-                    message = _normalize_text(error.get("message"))
-                if not message:
-                    message = "MCP 请求失败"
-                raise RuntimeError(message)
-            if "result" in decoded:
-                return decoded["result"]
-            return decoded
-        return decoded
+        transport = self._normalize_transport(binding.get("transport"))
+        if transport == "streamable_http":
+            return self._streamable_http_jsonrpc_request(binding, method, params=params)
+        return self._legacy_jsonrpc_request(binding, method, params=params)
 
     @staticmethod
     @lru_cache(maxsize=1)
     def _get_session() -> requests.Session:
         session = requests.Session()
-        # MCP 远端服务应直接访问公网地址，不继承当前进程里可能存在的错误代理配置。
-        session.trust_env = False
+        session.trust_env = True
         return session
