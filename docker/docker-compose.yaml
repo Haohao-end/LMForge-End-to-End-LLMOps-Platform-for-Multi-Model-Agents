@@ -29,6 +29,7 @@ services:
       GUNICORN_TIMEOUT: 120
       SQLALCHEMY_ECHO: 'false'
       MODE: api
+      SKILL_CATALOG_SYNC_ENABLED: 'true'
       MIGRATION_ENABLED: 'true'
       POSTGRES_HOST: llmops-db
       POSTGRES_PORT: 5432

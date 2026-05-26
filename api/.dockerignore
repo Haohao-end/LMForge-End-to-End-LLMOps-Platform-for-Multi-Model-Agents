@@ -64,3 +64,4 @@
 **/*.md
 !README.md
 !**/README.md
+!internal/core/skills/catalog/**/*.md
