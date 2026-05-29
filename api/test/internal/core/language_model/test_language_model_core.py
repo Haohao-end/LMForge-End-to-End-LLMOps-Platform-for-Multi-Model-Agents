@@ -238,8 +238,8 @@ def test_provider_pricing_should_match_documented_currency_per_provider():
         (providers_root / "atlascloud/deepseek-v3-0324.yaml").read_text(encoding="utf-8")
     )
     assert atlascloud_v3["metadata"]["pricing"]["currency"] == "RMB"
-    assert atlascloud_v3["metadata"]["pricing"]["input"] == pytest.approx(0.001846)
-    assert atlascloud_v3["metadata"]["pricing"]["output"] == pytest.approx(0.007522)
+    assert atlascloud_v3["metadata"]["pricing"]["input"] == pytest.approx(0.216)
+    assert atlascloud_v3["metadata"]["pricing"]["output"] == pytest.approx(0.88)
     assert atlascloud_v3["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
     assert atlascloud_v3["context_window"] == 131_072
     assert atlascloud_v3["max_output_tokens"] == 32_768
@@ -249,12 +249,80 @@ def test_provider_pricing_should_match_documented_currency_per_provider():
         (providers_root / "atlascloud/deepseek-v4-pro.yaml").read_text(encoding="utf-8")
     )
     assert atlascloud_v4["metadata"]["pricing"]["currency"] == "RMB"
-    assert atlascloud_v4["metadata"]["pricing"]["input"] == pytest.approx(0.000992)
-    assert atlascloud_v4["metadata"]["pricing"]["output"] == pytest.approx(0.00595)
+    assert atlascloud_v4["metadata"]["pricing"]["input"] == pytest.approx(1.68)
+    assert atlascloud_v4["metadata"]["pricing"]["output"] == pytest.approx(3.38)
     assert atlascloud_v4["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
     assert atlascloud_v4["context_window"] == 1_048_576
     assert atlascloud_v4["max_output_tokens"] == 393_216
     assert atlascloud_v4["features"] == ["tool_call", "agent_thought"]
+
+    atlascloud_v4_flash = yaml.safe_load(
+        (providers_root / "atlascloud/deepseek-v4-flash.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_v4_flash["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_v4_flash["metadata"]["pricing"]["input"] == pytest.approx(0.14)
+    assert atlascloud_v4_flash["metadata"]["pricing"]["output"] == pytest.approx(0.28)
+    assert atlascloud_v4_flash["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
+    assert atlascloud_v4_flash["context_window"] == 1_048_576
+    assert atlascloud_v4_flash["max_output_tokens"] == 393_216
+    assert atlascloud_v4_flash["features"] == ["tool_call", "agent_thought"]
+
+    atlascloud_kimi = yaml.safe_load(
+        (providers_root / "atlascloud/kimi-k2.6.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_kimi["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_kimi["metadata"]["pricing"]["input"] == pytest.approx(0.95)
+    assert atlascloud_kimi["metadata"]["pricing"]["output"] == pytest.approx(4.0)
+    assert atlascloud_kimi["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
+    assert atlascloud_kimi["context_window"] == 262_144
+    assert atlascloud_kimi["max_output_tokens"] == 262_144
+    assert atlascloud_kimi["features"] == ["tool_call", "agent_thought"]
+
+    atlascloud_qwen_plus = yaml.safe_load(
+        (providers_root / "atlascloud/qwen3.6-plus.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_qwen_plus["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_qwen_plus["metadata"]["pricing"]["input"] == pytest.approx(0.5)
+    assert atlascloud_qwen_plus["metadata"]["pricing"]["output"] == pytest.approx(3.0)
+    assert atlascloud_qwen_plus["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
+    assert atlascloud_qwen_plus["metadata"]["pricing_cache_hit"]["currency"] == "RMB"
+    assert atlascloud_qwen_plus["metadata"]["pricing_cache_hit"]["input"] == pytest.approx(
+        0.325
+    )
+    assert atlascloud_qwen_plus["metadata"]["pricing_cache_hit"]["output"] == pytest.approx(
+        1.95
+    )
+
+    atlascloud_qwen_coder = yaml.safe_load(
+        (providers_root / "atlascloud/qwen3-coder-next.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_qwen_coder["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_qwen_coder["metadata"]["pricing"]["input"] == pytest.approx(0.18)
+    assert atlascloud_qwen_coder["metadata"]["pricing"]["output"] == pytest.approx(1.35)
+    assert atlascloud_qwen_coder["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
+
+    atlascloud_glm_51 = yaml.safe_load(
+        (providers_root / "atlascloud/glm-5.1.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_glm_51["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_glm_51["metadata"]["pricing"]["input"] == pytest.approx(1.4)
+    assert atlascloud_glm_51["metadata"]["pricing"]["output"] == pytest.approx(4.4)
+    assert atlascloud_glm_51["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
+    assert atlascloud_glm_51["metadata"]["pricing_cache_hit"]["currency"] == "RMB"
+    assert atlascloud_glm_51["metadata"]["pricing_cache_hit"]["input"] == pytest.approx(
+        1.26
+    )
+    assert atlascloud_glm_51["metadata"]["pricing_cache_hit"]["output"] == pytest.approx(
+        3.96
+    )
+
+    atlascloud_minimax = yaml.safe_load(
+        (providers_root / "atlascloud/minimax-m2.7.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_minimax["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_minimax["metadata"]["pricing"]["input"] == pytest.approx(0.3)
+    assert atlascloud_minimax["metadata"]["pricing"]["output"] == pytest.approx(1.2)
+    assert atlascloud_minimax["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
 
     deepseek_v4_pro = yaml.safe_load(
         (providers_root / "deepseek/deepseek-v4-pro.yaml").read_text(encoding="utf-8")

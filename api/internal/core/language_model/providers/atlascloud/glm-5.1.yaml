@@ -20,4 +20,13 @@ parameters:
   default: 4096
   max: 202752
 metadata:
-  pricing_source: atlascloud_docs
+  pricing:
+    input: 1.4
+    output: 4.4
+    unit: 0.001
+    currency: RMB
+  pricing_cache_hit:
+    input: 1.26
+    output: 3.96
+    unit: 0.001
+    currency: RMB
