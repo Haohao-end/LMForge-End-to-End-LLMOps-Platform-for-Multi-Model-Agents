@@ -1,13 +1,13 @@
-model: deepseek-v3-0324
-label: deepseek-v3-0324
+model: deepseek-v4-pro
+label: deepseek-v4-pro
 model_type: chat
 features:
 - tool_call
 - agent_thought
-context_window: 131072
-max_output_tokens: 32768
+context_window: 1048576
+max_output_tokens: 393216
 attributes:
-  model: deepseek-ai/DeepSeek-V3-0324
+  model: deepseek-ai/deepseek-v4-pro
 parameters:
 - name: temperature
   use_template: temperature
@@ -24,15 +24,15 @@ parameters:
 - name: max_tokens
   use_template: max_tokens
   default: 1024
-  max: 32768
+  max: 393216
 metadata:
   pricing:
-    input: 0.001846
-    output: 0.007522
+    input: 0.000992
+    output: 0.00595
     unit: 0.001
     currency: RMB
   pricing_cache_hit:
-    input: 0.000479
-    output: 0.007522
+    input: 0.000248
+    output: 0.00595
     unit: 0.001
     currency: RMB
