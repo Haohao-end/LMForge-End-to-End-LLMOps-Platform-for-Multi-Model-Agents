@@ -151,6 +151,7 @@ def test_get_apps_with_page_resp_should_select_config_by_status(status, expected
         icon="https://img.example.com/app.png",
         description="desc",
         status=status,
+        is_public=True,
         account=ns(name="app-owner", avatar="https://img.example.com/app-owner.png"),
         app_config=ns(
             preset_prompt="published-prompt",

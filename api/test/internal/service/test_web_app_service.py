@@ -106,9 +106,13 @@ class TestWebAppService:
             "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
         }
         llm = SimpleNamespace(features=["tool_call", "agent_thought"])
+        capture = {}
 
         monkeypatch.setattr(service, "get_web_app", lambda _token: app)
-        service.app_config_service = SimpleNamespace(get_app_config=lambda _app: app_config)
+        service.app_config_service = SimpleNamespace(
+            get_app_config=lambda _app, persist_changes=True: capture.update({"persist_changes": persist_changes})
+            or app_config
+        )
         service.language_model_service = SimpleNamespace(load_language_model=lambda _model_config: llm)
 
         result = service.get_web_app_info("token")
@@ -118,6 +122,49 @@ class TestWebAppService:
         assert result["app_config"]["opening_statement"] == "hello"
         assert result["app_config"]["opening_questions"] == ["q1", "q2"]
         assert result["app_config"]["features"] == ["tool_call", "agent_thought"]
+        assert capture["persist_changes"] is False
+
+    def test_get_web_app_info_should_include_runtime_capabilities_when_available(
+        self, monkeypatch
+    ):
+        service = _build_service()
+        app = SimpleNamespace(
+            id=uuid4(),
+            icon="https://a.com/icon.png",
+            name="WebApp",
+            description="desc",
+        )
+        app_config = {
+            "opening_statement": "hello",
+            "opening_questions": ["q1"],
+            "suggested_after_answer": {"enable": True},
+            "text_to_speech": {"enable": True},
+            "speech_to_text": {"enable": True},
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+        }
+        capture = {}
+        capabilities = {
+            "features": ["tool_call", "image_input"],
+            "image_input": {"enabled": True, "via_fallback": False},
+        }
+
+        monkeypatch.setattr(service, "get_web_app", lambda _token: app)
+        service.app_config_service = SimpleNamespace(get_app_config=lambda _app: app_config)
+        service.language_model_service = SimpleNamespace(
+            describe_runtime_capabilities=lambda model_config, entrypoint: capture.update(
+                {"model_config": model_config, "entrypoint": entrypoint}
+            )
+            or capabilities
+        )
+
+        result = service.get_web_app_info("token")
+
+        assert result["app_config"]["features"] == ["tool_call", "image_input"]
+        assert result["app_config"]["capabilities"] == capabilities
+        assert capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "entrypoint": "web_app",
+        }
 
     def test_get_web_app_info_should_include_runtime_capabilities_when_available(
         self, monkeypatch

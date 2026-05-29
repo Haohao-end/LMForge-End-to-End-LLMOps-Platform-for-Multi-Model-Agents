@@ -23,7 +23,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import selectinload
 from pkg.sqlalchemy import SQLAlchemy
 
-from .app_config_service import AppConfigService
+from .app_config_service import AppConfigService, call_config_loader
 from .app_service import AppService
 from .base_service import BaseService
 from .conversation_service import ConversationService
@@ -472,7 +472,11 @@ class PublicAgentA2AService(BaseService):
     def get_agent_card(self, app_id: UUID | str) -> dict[str, Any]:
         """返回公开Agent的A2A Agent Card。"""
         app = self._get_public_app(app_id)
-        app_config = self.app_config_service.get_app_config(app)
+        app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            app,
+            persist_changes=False,
+        )
         message_url = self.public_agent_registry_service.build_agent_message_url(app.id)
         card_url = self.public_agent_registry_service.build_agent_card_url(app.id)
 
@@ -500,7 +504,7 @@ class PublicAgentA2AService(BaseService):
                     "id": str(app.id),
                     "name": app.name,
                     "description": app.description or app_config.get("opening_statement", ""),
-                    "tags": app.tags or [],
+                    "tags": getattr(app, "tags", []) or [],
                     "examples": app_config.get("opening_questions", [])[:3],
                     "inputModes": ["text/plain"],
                     "outputModes": ["text/plain", "image/*", "application/octet-stream"],
@@ -605,6 +609,7 @@ class PublicAgentA2AService(BaseService):
             context_id=context_id,
             flask_app=flask_app,
             request_payload=request_payload,
+            runtime_context=runtime_context,
         )
 
     def _stream_public_agent_events(
@@ -614,6 +619,7 @@ class PublicAgentA2AService(BaseService):
         context_id: str,
         request_payload: dict[str, Any],
         flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> Generator[str, None, None]:
         """流式输出公开Agent事件。"""
         app_config = self.app_config_service.get_app_config(app)
@@ -632,6 +638,14 @@ class PublicAgentA2AService(BaseService):
             app.id,
             owner_account,
             app_config,
+            flask_app=flask_app,
+            runtime_context=runtime_context,
+        )
+        agent = self.app_service._create_runtime_agent(
+            llm,
+            owner_account,
+            app_config,
+            tools,
             flask_app=flask_app,
         )
         agent = self.app_service._create_runtime_agent(
@@ -723,6 +737,7 @@ class PublicAgentA2AService(BaseService):
         app: App,
         query: str,
         flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ):
         """以内存方式调用公开Agent，不落库。"""
         app_config = self.app_config_service.get_app_config(app)
@@ -741,6 +756,14 @@ class PublicAgentA2AService(BaseService):
             app.id,
             owner_account,
             app_config,
+            flask_app=flask_app,
+            runtime_context=runtime_context,
+        )
+        agent = self.app_service._create_runtime_agent(
+            llm,
+            owner_account,
+            app_config,
+            tools,
             flask_app=flask_app,
         )
         agent = self.app_service._create_runtime_agent(

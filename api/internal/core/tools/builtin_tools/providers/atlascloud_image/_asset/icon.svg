@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="atlascloudImageBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="atlascloudImageCloud" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="28" fill="url(#atlascloudImageBg)" />
+  <circle cx="58" cy="54" r="16" fill="#fde68a" />
+  <circle cx="77" cy="102" r="22" fill="url(#atlascloudImageCloud)" />
+  <circle cx="108" cy="86" r="30" fill="url(#atlascloudImageCloud)" />
+  <circle cx="138" cy="102" r="20" fill="url(#atlascloudImageCloud)" />
+  <rect x="56" y="100" width="92" height="40" rx="20" fill="url(#atlascloudImageCloud)" />
+  <rect x="72" y="82" width="66" height="44" rx="8" fill="none" stroke="#ffffff" stroke-width="7" />
+  <circle cx="88" cy="94" r="5" fill="#ffffff" />
+  <path
+    d="M80 118l12-14 8 9 7-8 11 13"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

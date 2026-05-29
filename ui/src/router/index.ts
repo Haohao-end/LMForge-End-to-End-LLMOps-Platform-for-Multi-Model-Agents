@@ -48,16 +48,6 @@ const router = createRouter({
               name: 'space-datasets-list',
               component: () => import('@/views/space/datasets/ListView.vue'),
             },
-            {
-              path: 'likes',
-              name: 'space-likes-list',
-              component: () => import('@/views/space/likes/ListView.vue'),
-            },
-            {
-              path: 'favorites',
-              name: 'space-favorites-list',
-              component: () => import('@/views/space/favorites/ListView.vue'),
-            },
           ],
         },
         {
@@ -88,11 +78,6 @@ const router = createRouter({
               path: 'preview',
               name: 'store-public-apps-preview',
               component: () => import('@/views/store/public-apps/AppPreviewDetailView.vue'),
-            },
-            {
-              path: 'analysis',
-              name: 'store-public-apps-analysis',
-              component: () => import('@/views/store/public-apps/AppPreviewAnalysisView.vue'),
             },
           ],
         },
@@ -228,7 +213,6 @@ const PUBLIC_ROUTE_NAMES = new Set([
   'web-apps-index',
   'store-public-apps-list',
   'store-public-apps-preview',
-  'store-public-apps-analysis',
   'store-tools-list',
   'store-skills-list',
   'store-mcp-list',
@@ -249,8 +233,6 @@ const ANONYMOUS_PROMPT_ROUTE_NAMES = new Set([
   'space-workflows-list',
   'space-mcp-list',
   'space-datasets-list',
-  'space-likes-list',
-  'space-favorites-list',
   'openapi-api-keys-list',
 ])
 

@@ -242,7 +242,7 @@ class TestPublicAgentA2AService:
         monkeypatch.setattr(
             service,
             "_invoke_public_agent",
-            lambda _app, query, flask_app=None: SimpleNamespace(
+            lambda _app, query, flask_app=None, runtime_context=None: SimpleNamespace(
                 answer=f"已处理: {query}",
                 status="success",
                 error="",

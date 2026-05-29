@@ -6,14 +6,10 @@ import WorkflowsListView from '@/views/store/workflows/ListView.vue'
 const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(),
   getPublicApps: vi.fn(),
-  getAppCategories: vi.fn(),
+  getAppTags: vi.fn(),
   forkPublicApp: vi.fn(),
-  likeApp: vi.fn(),
-  favoriteApp: vi.fn(),
   getPublicWorkflows: vi.fn(),
   forkPublicWorkflow: vi.fn(),
-  likeWorkflow: vi.fn(),
-  favoriteWorkflow: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -24,17 +20,13 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/services/public-app', () => ({
   getPublicApps: mocks.getPublicApps,
-  getAppCategories: mocks.getAppCategories,
+  getAppTags: mocks.getAppTags,
   forkPublicApp: mocks.forkPublicApp,
-  likeApp: mocks.likeApp,
-  favoriteApp: mocks.favoriteApp,
 }))
 
 vi.mock('@/services/public-workflow', () => ({
   getPublicWorkflows: mocks.getPublicWorkflows,
   forkPublicWorkflow: mocks.forkPublicWorkflow,
-  likeWorkflow: mocks.likeWorkflow,
-  favoriteWorkflow: mocks.favoriteWorkflow,
 }))
 
 const slotStub = {
@@ -48,6 +40,8 @@ const globalStubs = {
     template: '<input />',
   },
   'a-tag': slotStub,
+  'a-tooltip': slotStub,
+  'a-space': slotStub,
   'a-button': {
     template: '<button><slot /></button>',
   },
@@ -67,9 +61,9 @@ describe('store list navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mocks.getAppCategories.mockResolvedValue({
+    mocks.getAppTags.mockResolvedValue({
       data: {
-        categories: [{ value: 'assistant', label: '助手' }],
+        tags: [{ id: 'assistant', name: '助手', priority: 1 }],
       },
     })
 
@@ -81,16 +75,12 @@ describe('store list navigation', () => {
             name: '应用一',
             icon: '',
             description: '应用描述',
-            category: 'assistant',
-            view_count: 0,
-            like_count: 1,
-            fork_count: 2,
-            favorite_count: 3,
+            tags: [],
             creator_name: 'tester',
+            creator_avatar: '',
             published_at: 1700000000,
             created_at: 1700000000,
-            is_liked: false,
-            is_favorited: false,
+            is_forked: false,
           },
         ],
         paginator: {
@@ -107,16 +97,12 @@ describe('store list navigation', () => {
             name: '工作流一',
             icon: '',
             description: '工作流描述',
-            category: 'assistant',
-            view_count: 0,
-            like_count: 1,
-            fork_count: 2,
-            favorite_count: 3,
+            tags: [],
             published_at: 1700000000,
             created_at: 1700000000,
-            is_liked: false,
-            is_favorited: false,
             account_name: 'tester',
+            account_avatar: '',
+            is_forked: false,
           },
         ],
         paginator: {
@@ -164,5 +150,25 @@ describe('store list navigation', () => {
       name: 'store-workflows-preview',
       params: { workflow_id: 'workflow-1' },
     })
+  })
+
+  it('renders fork actions without copy text', async () => {
+    const appWrapper = shallowMount(PublicAppsListView, {
+      global: {
+        stubs: globalStubs,
+      },
+    })
+    await flushPromises()
+    expect(appWrapper.text()).not.toContain('复制')
+    expect(appWrapper.text()).not.toContain('已复制')
+
+    const workflowWrapper = shallowMount(WorkflowsListView, {
+      global: {
+        stubs: globalStubs,
+      },
+    })
+    await flushPromises()
+    expect(workflowWrapper.text()).not.toContain('复制')
+    expect(workflowWrapper.text()).not.toContain('已复制')
   })
 })

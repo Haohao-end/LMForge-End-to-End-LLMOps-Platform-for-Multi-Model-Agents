@@ -1,5 +1,5 @@
 import os
-from langchain_core.tools import Tool
+from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from internal.lib.helper import add_attribute
 
@@ -28,13 +28,16 @@ def _translate_text(text: str, target_lang: str = "zh-CN", source_lang: str = "a
 
 
 @add_attribute("args_schema", GoogleTranslateArgsSchema)
-def google_translate(**kwargs) -> Tool:
+def google_translate(**kwargs) -> StructuredTool:
     """Google翻译工具"""
-    return Tool(
+    return StructuredTool.from_function(
         name="google_translate",
         description="使用Google翻译API进行文本翻译，支持自动检测源语言。",
-        func=lambda text, target_lang="zh-CN", source_lang="auto": _translate_text(
-            text, target_lang, source_lang, **kwargs
-        ),
-        args_schema=GoogleTranslateArgsSchema
+        func=lambda text, target_lang="zh-CN", source_lang="auto": _translate_text(**{
+            **kwargs,
+            "text": text,
+            "target_lang": target_lang,
+            "source_lang": source_lang,
+        }),
+        args_schema=GoogleTranslateArgsSchema,
     )

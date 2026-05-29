@@ -6,13 +6,14 @@ from uuid import uuid4
 import json
 
 import pytest
+from flask import Flask
 from werkzeug.datastructures import FileStorage
 
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
-from internal.entity.app_entity import DEFAULT_APP_CONFIG
+from internal.entity.app_entity import DEFAULT_APP_CONFIG, AppStatus
 from internal.entity.conversation_entity import InvokeFrom
 from internal.entity.workflow_entity import WorkflowStatus
-from internal.exception import FailException, NotFoundException
+from internal.exception import FailException, NotFoundException, ValidateErrorException
 from internal.model import ApiTool, AppDatasetJoin, Dataset, Message, Workflow
 from internal.service.app_config_service import AppConfigService
 from internal.service.assistant_agent_service import AssistantAgentService
@@ -37,6 +38,36 @@ class _QueryStub:
 
     def all(self):
         return self._all_result
+
+
+class _AgentBindingQuery:
+    def __init__(self, records):
+        self._records = records
+        self._filters = []
+
+    def filter(self, *args, **_kwargs):
+        self._filters.extend(args)
+        return self
+
+    def all(self):
+        return list(self._records.values())
+
+    def one_or_none(self):
+        for expression in self._filters:
+            if getattr(getattr(expression, "left", None), "key", None) != "id":
+                continue
+            target_id = str(getattr(getattr(expression, "right", None), "value", "")).strip()
+            if target_id:
+                return self._records.get(target_id)
+        return None
+
+
+class _AgentBindingSession:
+    def __init__(self, records):
+        self._records = records
+
+    def query(self, _model):
+        return _AgentBindingQuery(self._records)
 
 
 class TestAppConfigService:
@@ -223,6 +254,127 @@ class TestAppConfigService:
         assert workflow_configs[0].name == "wf_weather_lookup"
         assert workflow_configs[0].description == "查询天气工作流"
 
+    def test_process_and_validate_agent_bindings_should_enrich_public_and_own_targets(self):
+        owner_id = uuid4()
+        current_app_id = uuid4()
+        public_app_id = uuid4()
+        own_app_id = uuid4()
+        foreign_private_app_id = uuid4()
+
+        public_app = SimpleNamespace(
+            id=public_app_id,
+            name="公开 Agent",
+            icon="/icons/public.png",
+            description="公开说明",
+            status=AppStatus.PUBLISHED.value,
+            is_public=True,
+            account_id=uuid4(),
+            app_config=SimpleNamespace(agent_bindings=[]),
+        )
+        own_app = SimpleNamespace(
+            id=own_app_id,
+            name="我的 Agent",
+            icon="/icons/own.png",
+            description="我的说明",
+            status=AppStatus.PUBLISHED.value,
+            is_public=False,
+            account_id=owner_id,
+            app_config=SimpleNamespace(agent_bindings=[]),
+        )
+        foreign_private_app = SimpleNamespace(
+            id=foreign_private_app_id,
+            name="他人的私有 Agent",
+            icon="/icons/private.png",
+            description="私有说明",
+            status=AppStatus.PUBLISHED.value,
+            is_public=False,
+            account_id=uuid4(),
+            app_config=SimpleNamespace(agent_bindings=[]),
+        )
+        service = self._build_service(
+            session=_AgentBindingSession(
+                {
+                    str(public_app_id): public_app,
+                    str(own_app_id): own_app,
+                    str(foreign_private_app_id): foreign_private_app,
+                }
+            )
+        )
+
+        display_bindings, validate_bindings = service.process_and_validate_agent_bindings(
+            [
+                {"app_id": str(public_app_id)},
+                {"app_id": str(own_app_id)},
+                {"app_id": str(foreign_private_app_id)},
+                {"app_id": "not-a-uuid"},
+                {"app_id": str(own_app_id)},
+            ],
+            current_account_id=owner_id,
+            current_app_id=current_app_id,
+        )
+
+        assert len(display_bindings) == 2
+        assert len(validate_bindings) == 2
+        assert validate_bindings == [
+            {"app_id": str(public_app_id), "invoke_mode": "a2a"},
+            {"app_id": str(own_app_id), "invoke_mode": "tool"},
+        ]
+        assert display_bindings[0]["name"] == "公开 Agent"
+        assert display_bindings[0]["source_scope"] == "public"
+        assert display_bindings[0]["invoke_mode"] == "a2a"
+        assert display_bindings[0]["tool_name"] == service._build_agent_runtime_tool_name(public_app_id)
+        assert display_bindings[1]["name"] == "我的 Agent"
+        assert display_bindings[1]["source_scope"] == "own"
+        assert display_bindings[1]["invoke_mode"] == "tool"
+        assert display_bindings[1]["tool_name"] == service._build_agent_runtime_tool_name(own_app_id)
+
+    def test_has_agent_binding_path_should_detect_recursive_cycle(self):
+        owner_id = uuid4()
+        source_app_id = uuid4()
+        middle_app_id = uuid4()
+        target_app_id = uuid4()
+
+        middle_app = SimpleNamespace(
+            id=middle_app_id,
+            status=AppStatus.PUBLISHED.value,
+            is_public=False,
+            account_id=owner_id,
+            app_config=SimpleNamespace(
+                agent_bindings=[{"app_id": str(target_app_id), "invoke_mode": "tool"}],
+            ),
+        )
+        target_app = SimpleNamespace(
+            id=target_app_id,
+            status=AppStatus.PUBLISHED.value,
+            is_public=False,
+            account_id=owner_id,
+            app_config=SimpleNamespace(
+                agent_bindings=[{"app_id": str(source_app_id), "invoke_mode": "tool"}],
+            ),
+        )
+        service = self._build_service(
+            session=_AgentBindingSession(
+                {
+                    str(middle_app_id): middle_app,
+                    str(target_app_id): target_app,
+                }
+            )
+        )
+
+        assert service._has_agent_binding_path(source_app_id, middle_app_id, current_account_id=owner_id) is True
+
+    def test_process_and_validate_agent_bindings_should_reject_self_binding_when_strict(self):
+        service = self._build_service(session=_AgentBindingSession({}))
+        app_id = uuid4()
+
+        with pytest.raises(ValidateErrorException):
+            service.process_and_validate_agent_bindings(
+                [{"app_id": str(app_id)}],
+                current_account_id=uuid4(),
+                current_app_id=app_id,
+                strict=True,
+            )
+
     def test_get_app_config_should_sync_invalid_refs_and_return_transformed_payload(self, monkeypatch):
         """覆盖 get_app_config 的关键分支:
         1. model/tools/workflows 与校验结果不一致时会触发 update
@@ -338,6 +490,189 @@ class TestAppConfigService:
         assert result["workflows"][0]["id"] == "wf-new"
         assert result["datasets"][0]["id"] == str(keep_dataset_id)
 
+    def test_get_app_config_should_not_persist_when_disabled(self, monkeypatch):
+        keep_dataset_id = uuid4()
+        remove_dataset_id = uuid4()
+
+        class _DeleteQuery:
+            def __init__(self):
+                self.deleted = False
+
+            def filter(self, *_args, **_kwargs):
+                return self
+
+            def delete(self):
+                self.deleted = True
+
+        delete_query = _DeleteQuery()
+
+        class _Session:
+            def query(self, model):
+                if model is AppDatasetJoin:
+                    return delete_query
+                return _QueryStub(all_result=[])
+
+        auto_commit_calls = []
+
+        @contextmanager
+        def _auto_commit():
+            auto_commit_calls.append(True)
+            yield
+
+        service = AppConfigService(
+            db=SimpleNamespace(session=_Session(), auto_commit=_auto_commit),
+            api_provider_manager=SimpleNamespace(get_tool=lambda _entity: "api-tool-instance"),
+            language_model_manager=SimpleNamespace(get_provider=lambda _provider: None),
+            builtin_provider_manager=SimpleNamespace(get_tool=lambda _pid, _name: None),
+        )
+
+        app_config = SimpleNamespace(
+            id=uuid4(),
+            model_config={"provider": "legacy"},
+            tools=[{"type": "api_tool", "tool_id": "legacy"}],
+            app_dataset_joins=[
+                SimpleNamespace(dataset_id=keep_dataset_id),
+                SimpleNamespace(dataset_id=remove_dataset_id),
+            ],
+            workflows=["wf-legacy"],
+            dialog_round=3,
+            preset_prompt="prompt",
+            retrieval_config={"strategy": "semantic"},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=["q1"],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            updated_at=datetime(2024, 1, 1, 0, 0, 0),
+            created_at=datetime(2024, 1, 1, 0, 0, 0),
+        )
+        app = SimpleNamespace(app_config=app_config)
+
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_model_config",
+            lambda _config: {"provider": "openai", "model": "gpt-4o-mini", "parameters": {}},
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_tools",
+            lambda _tools: (
+                [{"type": "builtin_tool", "tool": {"name": "web_search"}}],
+                [{"type": "builtin_tool", "provider_id": "search", "tool_id": "web_search", "params": {}}],
+            ),
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_datasets",
+            lambda _dataset_ids: (
+                [{"id": str(keep_dataset_id), "name": "知识库A", "icon": "", "description": ""}],
+                [str(keep_dataset_id)],
+            ),
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_workflows",
+            lambda _workflows: (
+                [{"id": "wf-new", "name": "新工作流"}],
+                ["wf-new"],
+            ),
+        )
+
+        updates = []
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: updates.append((target, kwargs)) or target,
+        )
+
+        result = service.get_app_config(app, persist_changes=False)
+
+        assert delete_query.deleted is False
+        assert auto_commit_calls == []
+        assert updates == []
+        assert result["model_config"]["provider"] == "openai"
+        assert result["tools"][0]["type"] == "builtin_tool"
+        assert result["workflows"][0]["id"] == "wf-new"
+        assert result["datasets"][0]["id"] == str(keep_dataset_id)
+
+    def test_get_app_config_should_cache_runtime_result_when_disabled(self, monkeypatch):
+        service = self._build_service()
+        app_config = SimpleNamespace(
+            id=uuid4(),
+            model_config={"provider": "legacy"},
+            tools=[{"type": "api_tool", "tool_id": "legacy"}],
+            app_dataset_joins=[],
+            workflows=[],
+            mcp_bindings=[],
+            mcp_tool_snapshots=[],
+            skills=[],
+            agent_bindings=[],
+            dialog_round=3,
+            preset_prompt="prompt",
+            retrieval_config={"strategy": "semantic"},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=[],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            updated_at=datetime(2024, 1, 1, 0, 0, 0),
+            created_at=datetime(2024, 1, 1, 0, 0, 0),
+        )
+        app = SimpleNamespace(account_id=uuid4(), id=uuid4(), app_config=app_config)
+        call_counts = {"model": 0, "tools": 0, "datasets": 0, "workflows": 0, "skills": 0, "agents": 0}
+
+        def _wrap(key, value):
+            def _handler(*_args, **_kwargs):
+                call_counts[key] += 1
+                return value
+
+            return _handler
+
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_model_config",
+            _wrap("model", {"provider": "openai", "model": "gpt-4o-mini", "parameters": {}}),
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_tools",
+            _wrap("tools", ([{"type": "builtin_tool"}], [{"type": "builtin_tool", "provider_id": "search", "tool_id": "web_search", "params": {}}])),
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_datasets",
+            _wrap("datasets", ([], [])),
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_workflows",
+            _wrap("workflows", ([], [])),
+        )
+        monkeypatch.setattr(
+            service,
+            "skill_service",
+            SimpleNamespace(process_and_validate_skill_bindings=_wrap("skills", ([], []))),
+        )
+        monkeypatch.setattr(
+            service,
+            "process_and_validate_agent_bindings",
+            _wrap("agents", ([], [])),
+        )
+        updates = []
+        monkeypatch.setattr(service, "update", lambda target, **kwargs: updates.append((target, kwargs)) or target)
+
+        with Flask(__name__).app_context():
+            first = service.get_app_config(app, persist_changes=False)
+            second = service.get_app_config(app, persist_changes=False)
+
+        assert first == second
+        assert updates == []
+        assert call_counts == {"model": 1, "tools": 1, "datasets": 1, "workflows": 1, "skills": 1, "agents": 1}
+
     def test_get_draft_app_config_should_sync_invalid_refs_and_return_transformed_payload(self, monkeypatch):
         service = self._build_service()
         keep_dataset_id = uuid4()
@@ -406,6 +741,76 @@ class TestAppConfigService:
         assert any("tools" in payload for _, payload in updates)
         assert any("datasets" in payload for _, payload in updates)
         assert any("workflows" in payload for _, payload in updates)
+        assert result["model_config"]["provider"] == "openai"
+        assert result["tools"][0]["type"] == "builtin_tool"
+        assert result["workflows"][0]["id"] == "wf-new"
+        assert result["datasets"][0]["id"] == str(keep_dataset_id)
+
+    def test_get_draft_app_config_should_not_persist_when_disabled(self, monkeypatch):
+        service = self._build_service()
+        keep_dataset_id = uuid4()
+
+        draft_app_config = SimpleNamespace(
+            id=uuid4(),
+            model_config={"provider": "legacy"},
+            tools=[{"type": "api_tool", "tool_id": "legacy"}],
+            datasets=["to-remove", str(keep_dataset_id)],
+            workflows=["wf-legacy"],
+            dialog_round=3,
+            preset_prompt="prompt",
+            retrieval_config={"strategy": "semantic"},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=["q1"],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            updated_at=datetime(2024, 1, 1, 0, 0, 0),
+            created_at=datetime(2024, 1, 1, 0, 0, 0),
+        )
+        app = SimpleNamespace(draft_app_config=draft_app_config)
+
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_model_config",
+            lambda _config: {"provider": "openai", "model": "gpt-4o-mini", "parameters": {}},
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_tools",
+            lambda _tools: (
+                [{"type": "builtin_tool", "tool": {"name": "web_search"}}],
+                [{"type": "builtin_tool", "provider_id": "search", "tool_id": "web_search", "params": {}}],
+            ),
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_datasets",
+            lambda _dataset_ids: (
+                [{"id": str(keep_dataset_id), "name": "知识库A", "icon": "", "description": ""}],
+                [str(keep_dataset_id)],
+            ),
+        )
+        monkeypatch.setattr(
+            service,
+            "_process_and_validate_workflows",
+            lambda _workflows: (
+                [{"id": "wf-new", "name": "新工作流"}],
+                ["wf-new"],
+            ),
+        )
+
+        updates = []
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: updates.append((target, kwargs)) or target,
+        )
+
+        result = service.get_draft_app_config(app, persist_changes=False)
+
+        assert updates == []
         assert result["model_config"]["provider"] == "openai"
         assert result["tools"][0]["type"] == "builtin_tool"
         assert result["workflows"][0]["id"] == "wf-new"

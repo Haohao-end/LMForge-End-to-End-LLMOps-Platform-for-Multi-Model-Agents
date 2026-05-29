@@ -291,6 +291,19 @@ onUnmounted(() => {
         </span>
       </router-link>
       <router-link
+        to="/store/skills"
+        :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/skills') ? 'bg-gray-100' : ''}`"
+        active-class="bg-gray-100"
+        :title="route.path.startsWith('/store/skills') ? 'Skills广场' : ''"
+      >
+        <icon-storage-full
+          v-if="route.path.startsWith('/store/skills')"
+          class="flex-shrink-0 w-4 h-4"
+        />
+        <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
+        <span v-if="!props.collapsed" class="truncate text-sm">Skills广场</span>
+      </router-link>
+      <router-link
         to="/store/tools"
         :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/tools') ? 'bg-gray-100' : ''}`"
         active-class="bg-gray-100"
@@ -319,6 +332,19 @@ onUnmounted(() => {
         <span v-if="!props.collapsed" class="truncate text-sm">
           {{ $t('layout.sidebar.mcpStore') }}
         </span>
+      </router-link>
+      <router-link
+        to="/store/mcp"
+        :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/mcp') ? 'bg-gray-100' : ''}`"
+        active-class="bg-gray-100"
+        :title="route.path.startsWith('/store/mcp') ? 'MCP广场' : ''"
+      >
+        <icon-storage-full
+          v-if="route.path.startsWith('/store/mcp')"
+          class="flex-shrink-0 w-4 h-4"
+        />
+        <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
+        <span v-if="!props.collapsed" class="truncate text-sm">MCP广场</span>
       </router-link>
       <router-link
         to="/openapi"

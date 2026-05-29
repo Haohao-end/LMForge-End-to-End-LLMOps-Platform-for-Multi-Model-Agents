@@ -2,28 +2,24 @@
 import logging
 import math
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
 from injector import inject
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
-from internal.entity.app_category_entity import AppCategory
 from internal.entity.app_entity import AppStatus
 from internal.entity.workflow_entity import WorkflowStatus
 from internal.entity.tag_entity import sort_tags_by_priority
+from internal.lib.helper import utc_now_naive
 from internal.task.app_task import sync_public_app_registry
 from internal.service.tag_assignment_service import TagAssignmentService
 from internal.exception import NotFoundException, ForbiddenException, ValidateErrorException, FailException
-from internal.lib.helper import utc_midnight_naive, utc_now_naive
 from internal.model import (
     App,
     AppConfigVersion,
     AppDatasetJoin,
-    AppLike,
-    AppFavorite,
     Account,
     ApiToolProvider,
     ApiTool,
@@ -53,98 +49,6 @@ class PublicAppService(BaseService):
             sync_public_app_registry.delay(str(app_id))
         except Exception:
             logging.exception("公共Agent索引同步任务入队失败: app_id=%s", app_id)
-
-    def _build_public_app_items_by_ids(
-        self,
-        app_ids: list[UUID],
-        account: Account | None = None,
-    ) -> list[dict[str, Any]]:
-        """按应用 ID 批量构建广场卡片数据。"""
-        if not app_ids:
-            return []
-
-        ordered_app_ids = list(dict.fromkeys(app_ids))
-        favorite_count_subquery = (
-            self.db.session.query(
-                AppFavorite.app_id.label("app_id"),
-                func.count(AppFavorite.id).label("favorite_count"),
-            )
-            .group_by(AppFavorite.app_id)
-            .subquery()
-        )
-
-        app_rows = (
-            self.db.session.query(
-                App,
-                Account.name.label("creator_name"),
-                Account.avatar.label("creator_avatar"),
-                func.coalesce(favorite_count_subquery.c.favorite_count, 0).label("favorite_count"),
-            )
-            .join(Account, Account.id == App.account_id)
-            .outerjoin(favorite_count_subquery, favorite_count_subquery.c.app_id == App.id)
-            .filter(
-                App.id.in_(ordered_app_ids),
-                App.is_public == True,
-                App.status == AppStatus.PUBLISHED.value,
-            )
-            .all()
-        )
-
-        liked_app_ids: set[UUID] = set()
-        favorited_app_ids: set[UUID] = set()
-        forked_app_ids: set[UUID] = set()
-        if account and ordered_app_ids:
-            liked_app_ids = {
-                row[0]
-                for row in self.db.session.query(AppLike.app_id).filter(
-                    AppLike.account_id == account.id,
-                    AppLike.app_id.in_(ordered_app_ids),
-                ).all()
-            }
-            favorited_app_ids = {
-                row[0]
-                for row in self.db.session.query(AppFavorite.app_id).filter(
-                    AppFavorite.account_id == account.id,
-                    AppFavorite.app_id.in_(ordered_app_ids),
-                ).all()
-            }
-            forked_app_ids = {
-                row[0]
-                for row in self.db.session.query(App.original_app_id).filter(
-                    App.account_id == account.id,
-                    App.original_app_id.in_(ordered_app_ids),
-                    App.original_app_id.isnot(None),
-                ).all()
-            }
-
-        items_by_id: dict[str, dict[str, Any]] = {}
-        for app, creator_name, creator_avatar, favorite_count in app_rows:
-            resolved_tags = app.tags if app.tags else TagAssignmentService.auto_assign_tags(app.name, app.description)
-            items_by_id[str(app.id)] = {
-                "id": str(app.id),
-                "name": app.name,
-                "icon": app.icon,
-                "description": app.description,
-                "tags": resolved_tags,
-                "view_count": app.view_count,
-                "like_count": app.like_count,
-                "fork_count": app.fork_count,
-                "favorite_count": favorite_count,
-                "creator_name": creator_name or "未知用户",
-                "creator_avatar": creator_avatar or "",
-                "published_at": int(app.published_at.timestamp()) if app.published_at else 0,
-                "created_at": int(app.created_at.timestamp()),
-                "is_liked": app.id in liked_app_ids if account else False,
-                "is_favorited": app.id in favorited_app_ids if account else False,
-                "is_forked": app.id in forked_app_ids if account else False,
-            }
-
-        results: list[dict[str, Any]] = []
-        for app_id in ordered_app_ids:
-            item = items_by_id.get(str(app_id))
-            if item:
-                results.append(item)
-        return results
 
     @staticmethod
     def _resolve_public_app_tags(app: App) -> list[str]:
@@ -377,73 +281,34 @@ class PublicAppService(BaseService):
                 )
             )
 
-        # 3.执行查询
-        favorite_count_subquery = (
-            self.db.session.query(
-                AppFavorite.app_id.label("app_id"),
-                func.count(AppFavorite.id).label("favorite_count"),
-            )
-            .group_by(AppFavorite.app_id)
-            .subquery()
-        )
         query = (
             self.db.session.query(
                 App,
                 Account.name.label("creator_name"),
                 Account.avatar.label("creator_avatar"),
-                func.coalesce(favorite_count_subquery.c.favorite_count, 0).label("favorite_count"),
             )
             .join(Account, Account.id == App.account_id)
-            .outerjoin(favorite_count_subquery, favorite_count_subquery.c.app_id == App.id)
             .filter(*filters)
+            .order_by(App.published_at.desc(), App.created_at.desc())
         )
 
-        # 4.根据排序规则让数据库优先裁剪用户应用，避免 query.all() 全量加载。
-        sort_field_map = {
-            "latest": App.published_at,
-            "popular": App.view_count,
-            "most_liked": App.like_count,
-            "most_favorited": func.coalesce(favorite_count_subquery.c.favorite_count, 0),
-            "most_forked": App.fork_count,
-        }
-        sort_field = sort_field_map.get(req.sort_by.data, App.published_at)
-        query = query.order_by(sort_field.desc(), App.created_at.desc())
-
+        user_rows = query.all()
         if requested_tags:
-            user_rows = query.all()
             user_rows = [
                 row for row in user_rows
                 if set(requested_tags) & set(self._resolve_public_app_tags(row[0]))
             ]
-        else:
-            user_rows = query.all()
 
         total_user_apps = len(user_rows)
         end = req.current_page.data * req.page_size.data
         user_rows = user_rows[:end]
 
-        liked_app_ids: set[UUID] = set()
-        favorited_app_ids: set[UUID] = set()
         forked_app_ids: set[UUID] = set()
 
         # 先构建所有应用的ID集合（用于批量查询）
-        all_app_ids = [app.id for app, _creator_name, _creator_avatar, _favorite_count in user_rows]
+        all_app_ids = [app.id for app, _creator_name, _creator_avatar in user_rows]
 
         if account and all_app_ids:
-            liked_app_ids = {
-                row[0]
-                for row in self.db.session.query(AppLike.app_id).filter(
-                    AppLike.account_id == account.id,
-                    AppLike.app_id.in_(all_app_ids),
-                ).all()
-            }
-            favorited_app_ids = {
-                row[0]
-                for row in self.db.session.query(AppFavorite.app_id).filter(
-                    AppFavorite.account_id == account.id,
-                    AppFavorite.app_id.in_(all_app_ids),
-                ).all()
-            }
             # 查询用户是否fork过这些应用（包括草稿状态）
             forked_app_ids = {
                 row[0]
@@ -452,11 +317,11 @@ class PublicAppService(BaseService):
                     App.original_app_id.in_(all_app_ids),
                     App.original_app_id.isnot(None),
                 ).all()
-            }
+        }
 
         # 5.构建用户共享应用数据
         user_app_list = []
-        for app, creator_name, creator_avatar, favorite_count in user_rows:
+        for app, creator_name, creator_avatar in user_rows:
             creator_name = creator_name or "未知用户"
             resolved_tags = self._resolve_public_app_tags(app)
 
@@ -466,23 +331,15 @@ class PublicAppService(BaseService):
                 "icon": app.icon,
                 "description": app.description,
                 "tags": resolved_tags,
-                "view_count": app.view_count,
-                "like_count": app.like_count,
-                "fork_count": app.fork_count,
-                "favorite_count": favorite_count,  # 添加收藏数
                 "creator_name": creator_name,  # 添加发布者名称
                 "creator_avatar": creator_avatar or "",  # 添加发布者头像
                 "published_at": int(app.published_at.timestamp()) if app.published_at else 0,
                 "created_at": int(app.created_at.timestamp()),
-                "is_liked": False,
-                "is_favorited": False,
                 "is_forked": False,  # 是否已fork
             }
 
             # 如果用户已登录，使用批量查询结果设置点赞/收藏/fork状态。
             if account:
-                app_dict["is_liked"] = app.id in liked_app_ids
-                app_dict["is_favorited"] = app.id in favorited_app_ids
                 app_dict["is_forked"] = app.id in forked_app_ids
 
             user_app_list.append(app_dict)
@@ -523,15 +380,12 @@ class PublicAppService(BaseService):
         if not public_app:
             raise NotFoundException("公共应用不存在或未公开")
 
-        # 3.增加浏览次数
-        self.update(public_app, view_count=public_app.view_count + 1)
-
-        # 4.获取应用的发布配置
+        # 3.获取应用的发布配置
         app_config = public_app.app_config
         if not app_config:
             raise FailException("应用配置不存在,无法Fork")
 
-        # 5.复制应用基础信息
+        # 4.复制应用基础信息
         app_dict = {
             "account_id": account.id,
             "name": f"{public_app.name} (副本)",
@@ -542,7 +396,7 @@ class PublicAppService(BaseService):
             "original_app_id": public_app.id,  # 记录原始应用ID
         }
 
-        # 6.复制应用配置
+        # 5.复制应用配置
         config_dict = {
             "model_config": app_config.model_config,
             "dialog_round": app_config.dialog_round,
@@ -560,14 +414,14 @@ class PublicAppService(BaseService):
             "review_config": app_config.review_config,
         }
 
-        # 7.开启数据库自动提交上下文
+        # 6.开启数据库自动提交上下文
         with self.db.auto_commit():
-            # 8.创建新应用
+            # 7.创建新应用
             new_app = App(**app_dict)
             self.db.session.add(new_app)
             self.db.session.flush()
 
-            # 9.创建草稿配置
+            # 8.创建草稿配置
             new_draft_config = AppConfigVersion(
                 **config_dict,
                 app_id=new_app.id,
@@ -578,10 +432,10 @@ class PublicAppService(BaseService):
             self.db.session.add(new_draft_config)
             self.db.session.flush()
 
-            # 10.更新应用的草稿配置ID
+            # 9.更新应用的草稿配置ID
             new_app.draft_app_config_id = new_draft_config.id
 
-            # 11.复制知识库关联(如果有)
+            # 10.复制知识库关联(如果有)
             dataset_joins = app_config.app_dataset_joins
             copied_dataset_ids: set[UUID] = set()
             for join in dataset_joins:
@@ -596,89 +450,8 @@ class PublicAppService(BaseService):
                         )
                 )
 
-        # 12.增加原应用的Fork计数
-        self.update(public_app, fork_count=public_app.fork_count + 1)
-
         logging.info(f"应用已Fork: original_app_id={app_id}, new_app_id={new_app.id}, account_id={account.id}")
         return new_app
-
-    def like_app(self, app_id: UUID, account: Account) -> dict[str, Any]:
-        """点赞应用"""
-        # 1.获取应用
-        app = self.db.session.query(App).filter(
-            App.id == app_id,
-            App.is_public == True
-        ).one_or_none()
-
-        if not app:
-            raise NotFoundException("应用不存在或未公开")
-
-        # 2.检查是否已点赞
-        existing_like = self.db.session.query(AppLike).filter(
-            AppLike.app_id == app_id,
-            AppLike.account_id == account.id
-        ).one_or_none()
-
-        if existing_like:
-            # 已点赞,则取消点赞
-            self.db.session.delete(existing_like)
-            self.update(app, like_count=max(0, app.like_count - 1))
-            self.db.session.commit()
-            return {"is_liked": False, "like_count": app.like_count}
-        else:
-            # 未点赞,则添加点赞
-            new_like = AppLike(app_id=app_id, account_id=account.id)
-            self.db.session.add(new_like)
-            self.update(app, like_count=app.like_count + 1)
-            self.db.session.commit()
-            return {"is_liked": True, "like_count": app.like_count}
-
-    def favorite_app(self, app_id: UUID, account: Account) -> dict[str, Any]:
-        """收藏应用"""
-        # 1.获取应用
-        app = self.db.session.query(App).filter(
-            App.id == app_id,
-            App.is_public == True
-        ).one_or_none()
-
-        if not app:
-            raise NotFoundException("应用不存在或未公开")
-
-        # 2.检查是否已收藏
-        existing_favorite = self.db.session.query(AppFavorite).filter(
-            AppFavorite.app_id == app_id,
-            AppFavorite.account_id == account.id
-        ).one_or_none()
-
-        if existing_favorite:
-            # 已收藏,则取消收藏
-            self.db.session.delete(existing_favorite)
-            self.db.session.commit()
-            return {"is_favorited": False}
-        else:
-            # 未收藏,则添加收藏
-            new_favorite = AppFavorite(app_id=app_id, account_id=account.id)
-            self.db.session.add(new_favorite)
-            self.db.session.commit()
-            return {"is_favorited": True}
-
-    def get_my_likes(self, account: Account) -> list[dict[str, Any]]:
-        """获取我的点赞列表。"""
-        likes = self.db.session.query(AppLike).filter(
-            AppLike.account_id == account.id
-        ).order_by(AppLike.created_at.desc()).all()
-
-        app_ids = [like.app_id for like in likes]
-        return self._build_public_app_items_by_ids(app_ids, account)
-
-    def get_my_favorites(self, account: Account) -> list[dict[str, Any]]:
-        """获取我的收藏列表。"""
-        favorites = self.db.session.query(AppFavorite).filter(
-            AppFavorite.account_id == account.id
-        ).order_by(AppFavorite.created_at.desc()).all()
-
-        app_ids = [f.app_id for f in favorites]
-        return self._build_public_app_items_by_ids(app_ids, account)
 
     def get_public_app_detail(self, app_id: str, account: Account = None) -> dict[str, Any]:
         """获取公共应用详情（包括配置信息）"""
@@ -698,20 +471,12 @@ class PublicAppService(BaseService):
         if not app:
             raise NotFoundException("公共应用不存在或未公开")
 
-        # 3.增加浏览次数
-        self.update(app, view_count=app.view_count + 1)
-
-        # 4.获取发布者信息
+        # 3.获取发布者信息
         creator = self.db.session.query(Account).filter(Account.id == app.account_id).one_or_none()
         creator_name = creator.name if creator else "未知用户"
         creator_avatar = getattr(creator, "avatar", "") if creator else ""
 
-        # 5.计算收藏数
-        favorite_count = self.db.session.query(func.count(AppFavorite.id)).filter(
-            AppFavorite.app_id == app.id
-        ).scalar() or 0
-
-        # 6.构建应用详情
+        # 4.构建应用详情
         app_detail = {
             "id": str(app.id),
             "name": app.name,
@@ -720,31 +485,15 @@ class PublicAppService(BaseService):
             "tags": self._resolve_public_app_tags(app),
             "status": app.status,
             "is_public": app.is_public,
-            "view_count": app.view_count,
-            "like_count": app.like_count,
-            "fork_count": app.fork_count,
-            "favorite_count": favorite_count,
             "creator_name": creator_name,
             "creator_avatar": creator_avatar,
             "published_at": int(app.published_at.timestamp()) if app.published_at else 0,
             "created_at": int(app.created_at.timestamp()),
-            "is_liked": False,
-            "is_favorited": False,
             "is_forked": False,  # 是否已fork
         }
 
-        # 7.如果用户已登录，查询用户的点赞、收藏和fork状态
+        # 5.如果用户已登录，查询用户的 fork 状态
         if account:
-            is_liked = self.db.session.query(AppLike).filter(
-                AppLike.app_id == app.id,
-                AppLike.account_id == account.id
-            ).one_or_none() is not None
-
-            is_favorited = self.db.session.query(AppFavorite).filter(
-                AppFavorite.app_id == app.id,
-                AppFavorite.account_id == account.id
-            ).one_or_none() is not None
-
             # 查询用户是否fork过该应用（包括草稿状态）
             is_forked = self.db.session.query(App).filter(
                 App.account_id == account.id,
@@ -752,13 +501,28 @@ class PublicAppService(BaseService):
                 App.original_app_id.isnot(None),
             ).first() is not None
 
-            app_detail["is_liked"] = is_liked
-            app_detail["is_favorited"] = is_favorited
             app_detail["is_forked"] = is_forked
 
-        # 8.获取应用配置信息
+        # 6.获取应用配置信息
         app_config = app.app_config
         if app_config:
+            agent_bindings = []
+            if self.app_config_service is not None:
+                agent_bindings, _ = self.app_config_service.process_and_validate_agent_bindings(
+                    getattr(app_config, "agent_bindings", []),
+                    current_account_id=None,
+                    current_app_id=app.id,
+                )
+            else:
+                agent_bindings = [
+                    {
+                        "app_id": str(binding.get("app_id", "")).strip(),
+                        "invoke_mode": str(binding.get("invoke_mode", "tool")).strip().lower() or "tool",
+                    }
+                    for binding in getattr(app_config, "agent_bindings", [])
+                    if isinstance(binding, dict) and str(binding.get("app_id", "")).strip()
+                ]
+
             app_detail["draft_app_config"] = {
                 "model_config": app_config.model_config,
                 "capabilities": (
@@ -787,74 +551,3 @@ class PublicAppService(BaseService):
             }
 
         return app_detail
-
-    def get_public_app_analysis(self, app_id: str, account: Account | None) -> dict:
-        """获取公共应用的统计分析数据
-
-        Args:
-            app_id: 应用ID
-            account: 账号信息（可选，未登录时为None）
-
-        Returns:
-            统计分析数据字典
-        """
-        from internal.service.analysis_service import AnalysisService
-        from uuid import UUID
-
-        # 1.解析应用ID并查询公共应用（不校验权限）
-        try:
-            app_uuid = UUID(app_id)
-        except ValueError:
-            raise NotFoundException("公共应用不存在")
-
-        app = self.db.session.query(App).filter(
-            App.id == app_uuid,
-            App.is_public == True,
-            App.status == AppStatus.PUBLISHED.value
-        ).one_or_none()
-
-        if not app:
-            raise NotFoundException("公共应用不存在")
-
-        # 2.获取 AnalysisService 实例
-        from app.http.module import injector
-        analysis_service = injector.get(AnalysisService)
-
-        # 3.获取当前时间、午夜时间、7天前时间、14天前的时间
-        now = utc_now_naive()
-        today_midnight = utc_midnight_naive(now)
-        seven_days_ago = today_midnight - timedelta(days=7)
-        fourteen_days_ago = today_midnight - timedelta(days=14)
-
-        # 4.查询消息表最近7天(到当前时间)，以及最近14-7天的数据
-        seven_days_messages = analysis_service.get_messages_by_time_range(app, seven_days_ago, now)
-        fourteen_days_messages = analysis_service.get_messages_by_time_range(app, fourteen_days_ago, seven_days_ago)
-
-        # 5.计算5个概念指标
-        seven_overview_indicators = analysis_service.calculate_overview_indicators_by_messages(seven_days_messages)
-        fourteen_overview_indicators = analysis_service.calculate_overview_indicators_by_messages(fourteen_days_messages)
-
-        # 6.统计环比数据
-        pop = analysis_service.calculate_pop_by_overview_indicators(seven_overview_indicators, fourteen_overview_indicators)
-
-        # 7.计算4个指标对应的趋势
-        trend = analysis_service.calculate_trend_by_messages(today_midnight, 7, seven_days_messages)
-
-        # 8.定义5个指标字段名称
-        fields = [
-            "total_messages", "active_accounts", "avg_of_conversation_messages",
-            "token_output_rate", "cost_consumption",
-        ]
-
-        # 9.构建应用分析字典（与 AnalysisService 返回格式一致）
-        result = {
-            **trend,  # 包含 *_trend 字段
-            **{
-                field: {
-                    "data": seven_overview_indicators.get(field),
-                    "pop": pop.get(field),
-                } for field in fields
-            }
-        }
-
-        return result

@@ -4,7 +4,7 @@ import AiMessage from '@/components/AiMessage.vue'
 import ChatComposer from '@/components/ChatComposer.vue'
 import HumanMessage from '@/components/HumanMessage.vue'
 import ChatConversationSkeleton from '@/components/skeletons/ChatConversationSkeleton.vue'
-import { QueueEvent } from '@/config'
+import { AI_SURFACE_BACKGROUND_GRADIENT, QueueEvent } from '@/config'
 import { useGenerateSuggestedQuestions } from '@/hooks/use-ai'
 import { useGetHomeIntent } from '@/hooks/use-home'
 import { useChatImageUpload } from '@/hooks/use-chat-image-upload'
@@ -1049,6 +1049,10 @@ const handleSubmit = async () => {
     Message.warning(t('home.messages.imageUnsupportedWarning'))
     return
   }
+  if (image_urls.value.length > 0 && !canAssistantImageInput.value) {
+    Message.warning('当前辅助 Agent 不支持图片输入，请移除图片后重试')
+    return
+  }
 
   // 5.3 满足条件，处理正式提问的前置工作，涵盖：清空建议问题、删除消息id、任务id
   suggested_questions.value = []
@@ -1313,16 +1317,7 @@ onUnmounted(() => {
     ref="homePageRef"
     class="relative flex h-full min-h-0 w-full flex-col overflow-hidden"
     @wheel="handleHomePageWheel"
-    style="
-      background: linear-gradient(
-        135deg,
-        #f0f9ff 0%,
-        #e0f2fe 25%,
-        #f3e8ff 50%,
-        #fce7f3 75%,
-        #f0f9ff 100%
-      );
-    "
+    :style="{ background: AI_SURFACE_BACKGROUND_GRADIENT }"
   >
     <!-- AI 动态背景层 -->
     <div class="absolute inset-0 z-0 pointer-events-none">

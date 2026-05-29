@@ -10,14 +10,10 @@ from pkg.response import success_json, success_message, validate_error_json, com
 from internal.schema.public_app_schema import (
     ShareAppToSquareReq,
     GetPublicAppsWithPageReq,
-    PublicAppResp,
     GetAppTagsResp,
-    LikeAppResp,
-    FavoriteAppResp,
     ForkAppResp,
 )
 from internal.service.public_app_service import PublicAppService
-from internal.service.analysis_service import AnalysisService
 from internal.service.public_agent_a2a_service import PublicAgentA2AService
 from pkg.paginator import PageModel
 
@@ -27,7 +23,6 @@ from pkg.paginator import PageModel
 class PublicAppHandler:
     """公共应用Handler"""
     public_app_service: PublicAppService
-    analysis_service: AnalysisService
     public_agent_a2a_service: PublicAgentA2AService | None = None
 
     @login_required
@@ -80,27 +75,6 @@ class PublicAppHandler:
         resp = ForkAppResp()
         return success_json(resp.dump({"id": str(app.id), "name": app.name}))
 
-    @login_required
-    def like_app(self, app_id: UUID):
-        """点赞/取消点赞应用"""
-        result = self.public_app_service.like_app(app_id, current_user)
-        resp = LikeAppResp()
-        return success_json(resp.dump(result))
-
-    @login_required
-    def favorite_app(self, app_id: UUID):
-        """收藏/取消收藏应用"""
-        result = self.public_app_service.favorite_app(app_id, current_user)
-        resp = FavoriteAppResp()
-        return success_json(resp.dump(result))
-
-    @login_required
-    def get_my_favorites(self):
-        """获取我的收藏列表"""
-        apps = self.public_app_service.get_my_favorites(current_user)
-        resp = PublicAppResp(many=True)
-        return success_json(resp.dump(apps))
-
     def get_public_app_detail(self, app_id: str):
         """获取公共应用详情（支持未登录访问）"""
         # 1.判断用户是否登录
@@ -114,20 +88,6 @@ class PublicAppHandler:
 
         # 3.返回响应
         return success_json(app_detail)
-
-    def get_public_app_analysis(self, app_id: str):
-        """获取公共应用的统计分析数据（支持未登录访问）"""
-        # 1.判断用户是否登录
-        try:
-            account = current_user if current_user.is_authenticated else None
-        except:
-            account = None
-
-        # 2.获取应用统计分析数据
-        app_analysis = self.public_app_service.get_public_app_analysis(app_id, account)
-
-        # 3.返回响应
-        return success_json(app_analysis)
 
     def get_public_app_a2a_card(self, app_id: str):
         """获取公共应用的A2A Agent Card。"""

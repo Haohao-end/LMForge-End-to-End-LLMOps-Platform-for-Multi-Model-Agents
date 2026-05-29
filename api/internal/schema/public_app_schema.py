@@ -19,7 +19,6 @@ class ShareAppToSquareReq(FlaskForm):
 class GetPublicAppsWithPageReq(PaginatorReq):
     """获取公共应用列表请求"""
     tags = StringField("tags", default="", validators=[Optional()])
-    sort_by = StringField("sort_by", default="latest", validators=[Optional()])
     search_word = StringField("search_word", default="", validators=[Optional()])
 
 
@@ -31,16 +30,10 @@ class PublicAppResp(Schema):
     icon = fields.String()
     description = fields.String()
     tags = fields.List(fields.String())
-    view_count = fields.Integer()
-    like_count = fields.Integer()
-    fork_count = fields.Integer()
-    favorite_count = fields.Integer()
     creator_name = fields.String()
     creator_avatar = fields.String()  # 新增创建者头像
     published_at = fields.Integer()
     created_at = fields.Integer()
-    is_liked = fields.Boolean()
-    is_favorited = fields.Boolean()
     is_forked = fields.Boolean()  # 是否已fork
 
 
@@ -66,17 +59,6 @@ class GetAppTagsResp(Schema):
     def dump(self, obj, **kwargs):
         """自定义序列化"""
         return {"tags": APP_TAGS}
-
-
-class LikeAppResp(Schema):
-    """点赞应用响应"""
-    is_liked = fields.Boolean()
-    like_count = fields.Integer()
-
-
-class FavoriteAppResp(Schema):
-    """收藏应用响应"""
-    is_favorited = fields.Boolean()
 
 
 class ForkAppResp(Schema):

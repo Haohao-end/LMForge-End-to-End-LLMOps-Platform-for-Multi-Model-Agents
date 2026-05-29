@@ -35,6 +35,7 @@ class WebAppService(BaseService):
     conversation_service: ConversationService
     language_model_service: LanguageModelService
     retrieval_service: RetrievalService
+    app_service: AppService | None = None
 
     def get_web_app(self, token: str) -> App:
         """根据传递的token获取WebApp实例"""
@@ -113,7 +114,11 @@ class WebAppService(BaseService):
             })
 
         # 4.获取校验后的运行时配置
-        app_config = self.app_config_service.get_app_config(app)
+        app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            app,
+            persist_changes=False,
+        )
 
         # 5.在落库前解析运行时模型能力，避免带图请求被静默降级
         if hasattr(self.language_model_service, "resolve_runtime_language_model"):

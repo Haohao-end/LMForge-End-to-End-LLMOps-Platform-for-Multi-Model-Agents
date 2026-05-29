@@ -766,10 +766,6 @@ class Router:
             view_func=self.public_app_handler.get_latest_public_app_a2a_conversation,
         )
         bp.add_url_rule(
-            "/public/apps/<string:app_id>/analysis",
-            view_func=self.public_app_handler.get_public_app_analysis,
-        )
-        bp.add_url_rule(
             "/public/apps/tags",
             view_func=self.public_app_handler.get_app_tags,
         )
@@ -788,21 +784,6 @@ class Router:
             methods=["POST"],
             view_func=self.public_app_handler.fork_public_app,
         )
-        bp.add_url_rule(
-            "/public/apps/<uuid:app_id>/like",
-            methods=["POST"],
-            view_func=self.public_app_handler.like_app,
-        )
-        bp.add_url_rule(
-            "/public/apps/<uuid:app_id>/favorite",
-            methods=["POST"],
-            view_func=self.public_app_handler.favorite_app,
-        )
-        bp.add_url_rule(
-            "/public/apps/my-favorites",
-            view_func=self.public_app_handler.get_my_favorites,
-        )
-
         # 20.公共工作流广场模块
         bp.add_url_rule(
             "/public/workflows",
@@ -831,17 +812,6 @@ class Router:
             methods=["POST"],
             view_func=self.public_workflow_handler.fork_public_workflow,
         )
-        bp.add_url_rule(
-            "/public/workflows/<uuid:workflow_id>/like",
-            methods=["POST"],
-            view_func=self.public_workflow_handler.like_workflow,
-        )
-        bp.add_url_rule(
-            "/public/workflows/<uuid:workflow_id>/favorite",
-            methods=["POST"],
-            view_func=self.public_workflow_handler.favorite_workflow,
-        )
-
         # 21.标签模块
         bp.add_url_rule("/tags", view_func=self.tag_handler.list_tags)
         bp.add_url_rule("/tags", methods=["POST"], view_func=self.tag_handler.create_tag)
@@ -851,11 +821,7 @@ class Router:
         bp.add_url_rule("/tags/<uuid:tag_id>", methods=["POST"], view_func=self.tag_handler.update_tag)
         bp.add_url_rule("/tags/<uuid:tag_id>/delete", methods=["POST"], view_func=self.tag_handler.delete_tag)
 
-        # 22.点赞与收藏聚合列表
-        bp.add_url_rule("/likes", view_func=self.like_handler.get_likes)
-        bp.add_url_rule("/favorites", view_func=self.favorite_handler.get_favorites)
-
-        # 23.通知模块
+        # 22.通知模块
         bp.add_url_rule("/notifications", view_func=self.notification_handler.get_notifications)
         bp.add_url_rule(
             "/notifications/<string:notification_id>/read",

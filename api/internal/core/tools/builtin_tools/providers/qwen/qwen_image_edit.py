@@ -1,6 +1,6 @@
 import os
 import requests
-from langchain_core.tools import Tool
+from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from internal.exception import FailException
 from internal.lib.helper import add_attribute
@@ -104,15 +104,19 @@ def _edit_image(prompt: str, image: str, **kwargs) -> str:
 
 
 @add_attribute("args_schema", QwenImageEditArgsSchema)
-def qwen_image_edit(**kwargs) -> Tool:
+def qwen_image_edit(**kwargs) -> StructuredTool:
     """千问Qwen-Image-Edit图像编辑工具"""
-    return Tool(
+    return StructuredTool.from_function(
         name="qwen_image_edit",
         description=(
             "使用阿里千问Qwen-Image-Edit模型编辑图像。"
             "支持单张图片输入，可进行图像编辑、风格转换、内容修改等操作。"
             "输入需要包含编辑描述和一张图片URL或base64数据。"
         ),
-        func=lambda prompt, image: _edit_image(prompt, image, **kwargs),
-        args_schema=QwenImageEditArgsSchema
+        func=lambda prompt, image: _edit_image(**{
+            **kwargs,
+            "prompt": prompt,
+            "image": image,
+        }),
+        args_schema=QwenImageEditArgsSchema,
     )

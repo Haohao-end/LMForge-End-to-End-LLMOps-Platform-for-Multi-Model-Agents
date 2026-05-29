@@ -1,6 +1,6 @@
 from datetime import datetime
 import pytz
-from langchain_core.tools import Tool
+from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from internal.lib.helper import add_attribute
 
@@ -37,13 +37,16 @@ def _convert_timezone(time_str: str, from_timezone: str, to_timezone: str, **kwa
 
 
 @add_attribute("args_schema", TimezoneConverterArgsSchema)
-def timezone_converter(**kwargs) -> Tool:
+def timezone_converter(**kwargs) -> StructuredTool:
     """时区转换工具"""
-    return Tool(
+    return StructuredTool.from_function(
         name="timezone_converter",
         description="在不同时区之间转换时间。输入时间字符串、源时区和目标时区。",
-        func=lambda time_str, from_timezone, to_timezone: _convert_timezone(
-            time_str, from_timezone, to_timezone, **kwargs
-        ),
-        args_schema=TimezoneConverterArgsSchema
+        func=lambda time_str, from_timezone, to_timezone: _convert_timezone(**{
+            **kwargs,
+            "time_str": time_str,
+            "from_timezone": from_timezone,
+            "to_timezone": to_timezone,
+        }),
+        args_schema=TimezoneConverterArgsSchema,
     )

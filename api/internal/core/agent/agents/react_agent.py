@@ -106,12 +106,14 @@ class ReACTAgent(FunctionCallAgent):
                     task_id=state["task_id"],
                     event=QueueEvent.AGENT_END.value,
                 ))
-            return {"messages": [AIMessage(MAX_ITERATION_RESPONSE)]}
+            return {"messages": [AIMessage(MAX_ITERATION_RESPONSE)], "pending_skill_prompts": []}
 
         # 3.从智能体配置中提取大语言模型
         id = uuid.uuid4()
         start_at = time.perf_counter()
         llm = self.llm
+        pending_skill_prompts = self._deduplicate_pending_skill_prompts(state.get("pending_skill_prompts") or [])
+        llm_messages = self._inject_pending_skill_prompts(state["messages"], pending_skill_prompts)
 
         # 4.定义变量存储流式输出内容
         gathered = None
@@ -119,7 +121,7 @@ class ReACTAgent(FunctionCallAgent):
         generation_type = ""
 
         # 5.流式输出调用LLM，并判断输出内容是否以"```json"为开头，用于区分工具调用和文本生成
-        for chunk in llm.stream(state["messages"]):
+        for chunk in llm.stream(llm_messages):
             # 6.处理流式输出内容块叠加
             if is_first_chunk:
                 gathered = chunk
@@ -211,7 +213,8 @@ class ReACTAgent(FunctionCallAgent):
                 ))
                 return {
                     "messages": [AIMessage(content="", tool_calls=tool_calls)],
-                    "iteration_count": state["iteration_count"] + 1
+                    "iteration_count": state["iteration_count"] + 1,
+                    "pending_skill_prompts": [],
                 }
             except Exception as _:
                 generation_type = "message"
@@ -227,6 +230,15 @@ class ReACTAgent(FunctionCallAgent):
 
         # 17.如果最终类型是message则表示已经拿到最终答案, 则推送一条空内容战术统计数据,同时停止监听
         if generation_type == "message":
+            if pending_skill_prompts:
+                logging.info(
+                    "技能 prompt 租约已回收: lease_ids=%s",
+                    [
+                        str(item.get("lease_id") or item.get("skill_id") or item.get("source_key") or "")
+                        for item in pending_skill_prompts
+                        if isinstance(item, dict)
+                    ],
+                )
             self.agent_queue_manager.publish(state["task_id"], AgentThought(
                 id=id,
                 task_id=state["task_id"],
@@ -248,4 +260,8 @@ class ReACTAgent(FunctionCallAgent):
                 latency=(time.perf_counter() - start_at),
             ))
 
-        return {"messages": [gathered], "iteration_count": state["iteration_count"] + 1}
+        return {
+            "messages": [gathered],
+            "iteration_count": state["iteration_count"] + 1,
+            "pending_skill_prompts": [],
+        }

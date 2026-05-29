@@ -181,6 +181,10 @@ const handleSubmit = async () => {
     Message.warning(t('publicApps.debug.imageInputUnsupported'))
     return
   }
+  if (image_urls.value.length > 0 && !canImageInput.value) {
+    Message.warning('当前公共应用预览链路暂不支持图片输入，请移除图片后重试')
+    return
+  }
 
   const currentMessage = createStreamMessage(currentQuery)
   messages.value.unshift(currentMessage)

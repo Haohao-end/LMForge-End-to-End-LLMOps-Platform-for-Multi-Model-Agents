@@ -78,7 +78,10 @@ export type CreateAppRequest = { name: string; icon: string; description: string
 export type UpdateAppRequest = { name: string; icon: string; description: string }
 
 // 获取应用分页列表数据请求
-export type GetAppsWithPageRequest = BasePaginatorRequest & { search_word: string }
+export type GetAppsWithPageRequest = BasePaginatorRequest & {
+  search_word: string
+  published_only?: boolean
+}
 
 // 获取应用分页列表数据响应
 export type GetAppsWithPageResponse = BasePaginatorResponse<{
@@ -92,6 +95,7 @@ export type GetAppsWithPageResponse = BasePaginatorResponse<{
     model: string
   }
   status: string
+  is_public: boolean
   creator_name: string
   creator_avatar: string
   draft_updated_at: number

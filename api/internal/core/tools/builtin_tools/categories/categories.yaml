@@ -4,6 +4,9 @@
 - category: image
   name: 图片
   icon: image.svg
+- category: video
+  name: 视频
+  icon: video.svg
 - category: weather
   name: 天气
   icon: weather.svg

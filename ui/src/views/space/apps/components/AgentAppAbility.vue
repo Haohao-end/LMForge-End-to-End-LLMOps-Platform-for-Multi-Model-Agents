@@ -35,12 +35,12 @@ const defaultActivateKeys = [
 </script>
 
 <template>
-  <div class="flex flex-col h-[calc(100vh-141px)]">
+  <div class="flex flex-col h-[calc(100vh-141px)] min-w-0 w-full overflow-hidden">
     <!-- 应用能力标题 -->
     <div class="p-4 text-gray-700 font-bold">{{ t('appStudio.abilities.title') }}</div>
     <!-- 应用能力列表 -->
-    <div class="flex-1 overflow-scroll scrollbar-w-none">
-      <a-collapse :bordered="false" :default-active-key="defaultActivateKeys">
+    <div class="flex-1 min-w-0 overflow-y-auto overflow-x-hidden scrollbar-w-none">
+      <a-collapse :bordered="false" :default-active-key="defaultActivateKeys" class="w-full min-w-0">
         <template #expand-icon="{ active }">
           <icon-down v-if="active" />
           <icon-right v-else />
@@ -152,6 +152,9 @@ const defaultActivateKeys = [
 
 <style>
 .app-ability-item {
+  width: 100%;
+  min-width: 0;
+
   .arco-collapse-item-header {
     background-color: transparent;
     border: none;

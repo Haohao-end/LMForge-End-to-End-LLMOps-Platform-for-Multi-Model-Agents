@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from io import BytesIO
 from typing import Any, Generator, Union
 from uuid import UUID
@@ -53,7 +54,7 @@ class AudioService(BaseService):
         endpoint = f"{base_url.rstrip('/')}/v1/audio/transcriptions"
 
         try:
-            resp = requests.post(
+            resp = self._get_requests_session().post(
                 endpoint,
                 headers={"Authorization": f"Bearer {api_key}"},
                 files={"file": (getattr(audio, "filename", "audio.wav"), BytesIO(content))},
@@ -169,7 +170,7 @@ class AudioService(BaseService):
         full_voice = f"{model}:{voice}"
 
         try:
-            response = requests.post(
+            response = self._get_requests_session().post(
                 endpoint,
                 headers={
                     "Authorization": f"Bearer {api_key}",
@@ -211,6 +212,14 @@ class AudioService(BaseService):
         except Exception as error:
             logger.error("文字转语音失败: %(error)s", {"error": error}, exc_info=True)
             raise FailException("文字转语音失败，请稍后重试")
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _get_requests_session() -> requests.Session:
+        """复用 HTTP Session，减少音频请求的连接建立开销。"""
+        session = requests.Session()
+        session.trust_env = True
+        return session
 
     @classmethod
     def _stream_tts_response(cls, response: requests.Response, common_data: dict[str, str]) -> Generator:

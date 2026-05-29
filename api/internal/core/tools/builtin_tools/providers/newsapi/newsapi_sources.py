@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from langchain_core.tools import Tool
+from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from internal.lib.helper import add_attribute
 
@@ -55,13 +55,16 @@ def _get_news_sources(category: str = "", language: str = "en", country: str = "
 
 
 @add_attribute("args_schema", NewsAPISourcesArgsSchema)
-def newsapi_sources(**kwargs) -> Tool:
+def newsapi_sources(**kwargs) -> StructuredTool:
     """新闻源列表查询工具"""
-    return Tool(
+    return StructuredTool.from_function(
         name="newsapi_sources",
         description="获取可用的新闻源列表，可按类别、语言、国家筛选。",
-        func=lambda category="", language="en", country="": _get_news_sources(
-            category, language, country, **kwargs
-        ),
-        args_schema=NewsAPISourcesArgsSchema
+        func=lambda category="", language="en", country="": _get_news_sources(**{
+            **kwargs,
+            "category": category,
+            "language": language,
+            "country": country,
+        }),
+        args_schema=NewsAPISourcesArgsSchema,
     )

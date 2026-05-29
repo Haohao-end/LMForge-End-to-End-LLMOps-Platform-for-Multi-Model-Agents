@@ -1,4 +1,5 @@
 import { type BasePaginatorRequest, type BasePaginatorResponse, type BaseResponse } from '@/models/base'
+import type { ChatConversationMessage } from '@/models/chat'
 
 // 获取指定会话消息列表请求结构
 export type GetConversationMessagesWithPageRequest = BasePaginatorRequest & {

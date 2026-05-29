@@ -80,6 +80,8 @@ class AssistantAgentService(BaseService):
     language_model_service: LanguageModelService | None = None
     public_agent_a2a_service: PublicAgentA2AService | None = None
     public_agent_registry_service: PublicAgentRegistryService | None = None
+    _introduction_prewarm_lock = Lock()
+    _introduction_prewarm_pending = set()
 
     @classmethod
     def _resolve_conversation_id(cls, conversation_id: str) -> UUID | None:
@@ -559,6 +561,10 @@ class AssistantAgentService(BaseService):
             .all()
         )
 
+        account_id = getattr(account, "id", None)
+        if account_id is not None:
+            self._schedule_introduction_prewarm(account_id)
+
         return messages, paginator
 
     def get_conversations(
@@ -600,7 +606,7 @@ class AssistantAgentService(BaseService):
             .all()
         )
 
-        return [
+        result = [
             {
                 "id": conversation.id,
                 "name": conversation.name,
@@ -610,6 +616,11 @@ class AssistantAgentService(BaseService):
             }
             for conversation in conversations
         ]
+        account_id = getattr(account, "id", None)
+        if account_id is not None:
+            self._schedule_introduction_prewarm(account_id)
+        return result
+
 
     def delete_conversation(self, account: Account) -> None:
         """根据传递的账号，清空辅助Agent智能体会话消息列表"""

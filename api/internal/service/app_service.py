@@ -2,6 +2,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any, Generator, TYPE_CHECKING
 from uuid import UUID, uuid4
 from flask import Flask, current_app, has_app_context
@@ -9,6 +10,8 @@ from injector import inject
 from langchain_core.messages import AIMessage, trim_messages
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.tools import BaseTool, tool
+from pydantic import BaseModel, Field
 from internal.entity.audio_entity import ALLOWED_AUDIO_VOICES
 from redis import Redis
 from sqlalchemy import func, desc
@@ -48,7 +51,7 @@ from internal.schema.app_schema import (
 from internal.task.app_task import prewarm_mcp_tool_snapshots, sync_public_app_registry
 from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
-from .app_config_service import AppConfigService
+from .app_config_service import AppConfigService, call_config_loader
 from .base_service import BaseService
 from .conversation_service import ConversationService
 from .cos_service import CosService
@@ -457,6 +460,8 @@ class AppService(BaseService):
         filters = [App.account_id == account.id]
         if req.search_word.data:
             filters.append(App.name.ilike(f"%{req.search_word.data}%"))
+        if getattr(req, "published_only", None) and req.published_only.data:
+            filters.append(App.status == AppStatus.PUBLISHED.value)
 
         # 3.执行分页操作
         apps = paginator.paginate(
@@ -465,7 +470,12 @@ class AppService(BaseService):
 
         return apps, paginator
 
-    def get_draft_app_config(self, app_id: UUID, account: Account) -> dict[str, Any]:
+    def get_draft_app_config(
+        self,
+        app_id: UUID,
+        account: Account,
+        persist_changes: bool = True,
+    ) -> dict[str, Any]:
         """根据传递的应用id，获取指定的应用草稿配置信息"""
         app = self.get_app(app_id, account)
         draft_app_config = self.app_config_service.get_draft_app_config(app)
@@ -487,7 +497,7 @@ class AppService(BaseService):
         app = self.get_app(app_id, account)
 
         # 2.校验传递的草稿配置信息
-        draft_app_config = self._validate_draft_app_config(draft_app_config, account)
+        draft_app_config = self._validate_draft_app_config(draft_app_config, account, app_id)
 
         # 3.获取当前应用的最新草稿信息
         draft_app_config_record = app.draft_app_config
@@ -663,7 +673,11 @@ class AppService(BaseService):
         draft_version = app.draft_app_config
         draft_version.is_current_published = False
         if callable(display_config_loader):
-            draft_version.display_config = display_config_loader(draft_version)
+            draft_version.display_config = display_config_loader(
+                draft_version,
+                current_account_id=account.id,
+                current_app_id=app_id,
+            )
 
         published_versions = (
             self.db.session.query(AppConfigVersion)
@@ -685,7 +699,11 @@ class AppService(BaseService):
                 and published_version.version == current_published_version
             )
             if callable(display_config_loader):
-                published_version.display_config = display_config_loader(published_version)
+                published_version.display_config = display_config_loader(
+                    published_version,
+                    current_account_id=account.id,
+                    current_app_id=app_id,
+                )
 
         return [draft_version, *published_versions]
 
@@ -712,7 +730,7 @@ class AppService(BaseService):
         )
 
         # 4.校验历史版本配置信息
-        draft_app_config_dict = self._validate_draft_app_config(draft_app_config_dict, account)
+        draft_app_config_dict = self._validate_draft_app_config(draft_app_config_dict, account, app_id)
 
         # 5.更新草稿配置信息
         draft_app_config_record = app.draft_app_config
@@ -744,7 +762,7 @@ class AppService(BaseService):
         app = self.get_app(app_id, account)
 
         # 2.获取应用的草稿配置，并校验长期记忆是否启用
-        draft_app_config = self.get_draft_app_config(app_id, account)
+        draft_app_config = self.get_draft_app_config(app_id, account, persist_changes=False)
         if draft_app_config["long_term_memory"]["enable"] is False:
             raise FailException("该应用并未开启长期记忆，无法获取")
 
@@ -756,7 +774,7 @@ class AppService(BaseService):
         app = self.get_app(app_id, account)
 
         # 2.获取应用的草稿配置，并校验长期记忆是否启用
-        draft_app_config = self.get_draft_app_config(app_id, account)
+        draft_app_config = self.get_draft_app_config(app_id, account, persist_changes=False)
         if draft_app_config["long_term_memory"]["enable"] is False:
             raise FailException("该应用并未开启长期记忆，无法获取")
 
@@ -812,6 +830,7 @@ class AppService(BaseService):
         account: Account,
         draft_app_config: dict[str, Any],
         flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> list[Any]:
         """根据应用草稿配置构建运行时工具列表"""
         return self._build_runtime_tools_for_config(
@@ -1008,6 +1027,278 @@ class AppService(BaseService):
             tools.extend(workflow_tools)
 
         return tools
+
+    @staticmethod
+    def _build_agent_binding_prompt_appendix(agent_bindings: list[dict[str, Any]] | None) -> str:
+        """把已绑定 Agent 的名称、描述和调用模式拼成一段额外提示词。"""
+        if not isinstance(agent_bindings, list) or not agent_bindings:
+            return ""
+
+        sections: list[str] = []
+        for binding in agent_bindings:
+            if not isinstance(binding, dict):
+                continue
+
+            title = str(binding.get("name") or binding.get("description") or binding.get("app_id") or "Agent").strip()
+            description = str(binding.get("description") or "").strip()
+            runtime_tool_name = str(binding.get("tool_name") or "").strip()
+            invoke_mode = str(binding.get("invoke_mode") or "tool").strip().lower() or "tool"
+            source_scope = str(binding.get("source_scope") or "").strip()
+
+            bullet = f"- {title}"
+            if description:
+                bullet += f"：{description}"
+            if source_scope:
+                bullet += f"（{source_scope}）"
+            bullet += "；"
+            bullet += "通过 A2A 协议委派" if invoke_mode == "a2a" else "通过内部工具包装委派"
+            if runtime_tool_name:
+                bullet += f"；工具名：{runtime_tool_name}"
+            sections.append(bullet)
+
+        if not sections:
+            return ""
+
+        return (
+            "## 已绑定 Agent 子应用\n\n"
+            "如果用户的问题明显适合交给子应用处理，请优先调用对应工具，不要自己凭空编造结果。\n\n"
+            + "\n".join(sections)
+        )
+
+    @staticmethod
+    def _push_runtime_context(runtime_context: dict[str, Any] | None, next_app_id: UUID | str) -> dict[str, Any]:
+        """把下一跳 app_id 压入运行时上下文调用栈。"""
+        context = dict(runtime_context or {})
+        normalized_next_app_id = str(next_app_id).strip()
+        call_stack = [
+            str(app_id).strip()
+            for app_id in (context.get("call_stack") or [])
+            if str(app_id).strip()
+        ]
+        if not call_stack:
+            root_app_id = str(context.get("root_app_id") or normalized_next_app_id).strip() or normalized_next_app_id
+            call_stack = [root_app_id]
+            context["root_app_id"] = root_app_id
+
+        if normalized_next_app_id and (not call_stack or call_stack[-1] != normalized_next_app_id):
+            call_stack.append(normalized_next_app_id)
+
+        context["call_stack"] = call_stack
+        context["root_app_id"] = str(context.get("root_app_id") or call_stack[0]).strip() or call_stack[0]
+        return context
+
+    @staticmethod
+    def _extract_a2a_answer_text(response: dict[str, Any]) -> str:
+        """从公共 A2A 响应中提取可返回给工具的纯文本答案。"""
+        if not isinstance(response, dict):
+            return ""
+
+        message = response.get("message", {})
+        if isinstance(message, dict):
+            parts = message.get("parts", [])
+            if isinstance(parts, list):
+                text_parts: list[str] = []
+                for part in parts:
+                    if not isinstance(part, dict):
+                        continue
+                    if str(part.get("type", "")).strip() != "text":
+                        continue
+                    text = str(part.get("text", "")).strip()
+                    if text:
+                        text_parts.append(text)
+                if text_parts:
+                    return "\n".join(text_parts).strip()
+
+        metadata = response.get("metadata", {})
+        if isinstance(metadata, dict):
+            error = str(metadata.get("error", "")).strip()
+            if error:
+                return error
+            status = str(metadata.get("status", "")).strip()
+            if status:
+                return status
+
+        return ""
+
+    def get_langchain_tools_by_agent_bindings(
+        self,
+        agent_bindings: list[dict[str, Any]] | None,
+        *,
+        account: Account | None,
+        app_id: UUID,
+        flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> list[BaseTool]:
+        """根据 Agent 绑定列表生成 LangChain 工具。"""
+        if not isinstance(agent_bindings, list) or not agent_bindings:
+            return []
+
+        tools: list[BaseTool] = []
+        normalized_runtime_context = self._push_runtime_context(runtime_context, app_id)
+        runtime_account_id_text = str(
+            normalized_runtime_context.get("account_id")
+            or getattr(account, "id", "")
+            or ""
+        ).strip()
+        normalized_runtime_context["account_id"] = runtime_account_id_text
+        runtime_account_id: UUID | str | None = None
+        if runtime_account_id_text:
+            try:
+                runtime_account_id = UUID(runtime_account_id_text)
+            except Exception:
+                runtime_account_id = runtime_account_id_text
+        runtime_account = SimpleNamespace(id=runtime_account_id)
+
+        for binding in agent_bindings:
+            if not isinstance(binding, dict):
+                continue
+
+            target_app_id = str(binding.get("app_id") or "").strip()
+            if not target_app_id:
+                continue
+
+            tool_name = str(
+                binding.get("tool_name") or self.app_config_service._build_agent_runtime_tool_name(target_app_id)
+            ).strip()
+            binding_title = str(binding.get("name") or binding.get("description") or target_app_id).strip()
+            binding_description = str(binding.get("description") or "").strip()
+            binding_invoke_mode = str(binding.get("invoke_mode") or "tool").strip().lower() or "tool"
+
+            class AgentBindingQuery(BaseModel):
+                """Agent 子应用输入结构。"""
+
+                query: str = Field(description=f"需要委派给子应用 {binding_title} 处理的问题")
+
+            def _invoke_agent_binding(query: str, *, _binding=binding, _tool_name=tool_name) -> str:
+                """封装 Agent 子应用调用逻辑。"""
+                try:
+                    return self._invoke_agent_binding_target(
+                        binding=_binding,
+                        query=query,
+                        account=runtime_account,
+                        flask_app=flask_app,
+                        runtime_context=normalized_runtime_context,
+                    )
+                except Exception as exc:
+                    logging.exception("调用子 Agent 工具失败: tool_name=%s, error=%s", _tool_name, str(exc))
+                    return f"调用子应用失败: {str(exc)}"
+
+            delegate_tool = tool(tool_name, args_schema=AgentBindingQuery)(_invoke_agent_binding)
+            delegate_tool.description = (
+                f"委派给子应用 {binding_title} 执行。"
+                f"{f' 描述: {binding_description}。' if binding_description else ''}"
+                f" 调用模式: {'A2A' if binding_invoke_mode == 'a2a' else '内部工具'}。"
+            ).strip()
+            tools.append(delegate_tool)
+
+        return tools
+
+    def _invoke_agent_binding_target(
+        self,
+        *,
+        binding: dict[str, Any],
+        query: str,
+        account: Account | SimpleNamespace | None,
+        flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> str:
+        """实际执行一个 Agent 子应用绑定。"""
+        normalized_query = str(query or "").strip()
+        if not normalized_query:
+            return "用户问题为空，无法委派子应用"
+
+        target_app_id = str(binding.get("app_id") or "").strip()
+        if not target_app_id:
+            return "子应用绑定缺少有效的 app_id"
+
+        normalized_runtime_context = self._push_runtime_context(runtime_context, target_app_id)
+        call_stack = [str(app_id).strip() for app_id in normalized_runtime_context.get("call_stack", []) if str(app_id).strip()]
+        if len(call_stack) != len(set(call_stack)):
+            return f"检测到 Agent 调用循环，已停止调用子应用 {target_app_id}"
+
+        try:
+            target_app_uuid = UUID(target_app_id)
+        except Exception:
+            return "子应用绑定的 app_id 格式错误"
+
+        target_app = self.db.session.query(App).filter(
+            App.id == target_app_uuid,
+            App.status == AppStatus.PUBLISHED.value,
+        ).one_or_none()
+        if not target_app:
+            return f"子应用 {target_app_id} 不存在或未发布，已自动跳过"
+
+        caller_account_id = str(
+            normalized_runtime_context.get("account_id")
+            or getattr(account, "id", "")
+            or ""
+        ).strip()
+        effective_invoke_mode = "a2a" if target_app.is_public else "tool"
+        if effective_invoke_mode == "a2a":
+            from .public_agent_a2a_service import PublicAgentA2AService
+
+            public_agent_a2a_service = PublicAgentA2AService(
+                db=self.db,
+                app_service=self,
+                app_config_service=self.app_config_service,
+                language_model_service=self.language_model_service,
+                public_agent_registry_service=self.public_agent_registry_service,
+                conversation_service=self.conversation_service,
+            )
+            response = public_agent_a2a_service.send_message(
+                target_app_id,
+                {
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "text", "text": normalized_query}],
+                    },
+                    "metadata": {
+                        "runtime_context": normalized_runtime_context,
+                        **({"caller_account_id": caller_account_id} if caller_account_id else {}),
+                    },
+                },
+                flask_app=flask_app,
+            )
+            return self._extract_a2a_answer_text(response) or "子应用已处理完成，但未返回文本答案"
+
+        target_app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            target_app,
+            persist_changes=False,
+        )
+        if hasattr(self.language_model_service, "resolve_runtime_language_model"):
+            model_resolution = self.language_model_service.resolve_runtime_language_model(
+                target_app_config.get("model_config", {}),
+                image_urls=[],
+                entrypoint=LanguageModelService.ENTRYPOINT_DEBUGGER,
+            )
+            llm = model_resolution.llm
+        else:
+            llm = self.language_model_service.load_language_model(target_app_config.get("model_config", {}))
+
+        tools = self._build_runtime_tools(
+            target_app.id,
+            account,
+            target_app_config,
+            flask_app=flask_app,
+            runtime_context=normalized_runtime_context,
+        )
+        agent = self._create_runtime_agent(
+            llm,
+            account,
+            target_app_config,
+            tools,
+            flask_app=flask_app,
+            invoke_from=InvokeFrom.DEBUGGER.value,
+        )
+        agent_result = agent.invoke(
+            {
+                "messages": [llm.convert_to_human_message(normalized_query, [])],
+                "history": [],
+                "long_term_memory": "",
+            }
+        )
+        return str(getattr(agent_result, "answer", "") or "").strip() or "子应用已处理完成，但未返回文本答案"
 
     @classmethod
     def _create_runtime_agent(
@@ -1228,7 +1519,7 @@ class AppService(BaseService):
         app = self.get_app(app_id, account)
 
         # 2.获取应用的最新草稿配置信息
-        draft_app_config = self.get_draft_app_config(app_id, account)
+        draft_app_config = self.get_draft_app_config(app_id, account, persist_changes=False)
 
         # 3.获取当前应用的调试会话信息（支持按conversation_id切换）
         debug_conversation_id = UUID(req.conversation_id.data) if req.conversation_id.data else None
@@ -1305,7 +1596,7 @@ class AppService(BaseService):
     def prompt_compare_chat(self, app_id: UUID, req: Any, account: Account) -> Generator[str, None, None]:
         """根据传递的应用id发起无状态提示词对比调试"""
         app = self.get_app(app_id, account)
-        draft_app_config = self.get_draft_app_config(app_id, account)
+        draft_app_config = self.get_draft_app_config(app_id, account, persist_changes=False)
         overrides = self._validate_draft_app_config(
             {
                 "preset_prompt": req.preset_prompt.data,
@@ -1477,7 +1768,12 @@ class AppService(BaseService):
             raise
 
 
-    def _validate_draft_app_config(self, draft_app_config: dict[str, Any], account: Account) -> dict[str, Any]:
+    def _validate_draft_app_config(
+        self,
+        draft_app_config: dict[str, Any],
+        account: Account,
+        app_id: UUID | None = None,
+    ) -> dict[str, Any]:
         """校验传递的应用草稿配置信息，返回校验后的数据"""
         # 1.校验上传的草稿配置中对应的字段，至少拥有一个可以更新的配置
         acceptable_fields = [
@@ -1977,6 +2273,23 @@ class AppService(BaseService):
                         and review_config["inputs_config"]["preset_response"].strip() == ""
                 ):
                     raise ValidateErrorException("输入审核预设响应不能为空")
+
+        # 18.校验Agent绑定
+        if "agent_bindings" in draft_app_config:
+            if app_id is None:
+                raise ValidateErrorException("Agent绑定校验缺少应用ID")
+
+            agent_bindings = draft_app_config["agent_bindings"]
+            if not isinstance(agent_bindings, list):
+                raise ValidateErrorException("Agent绑定列表必须是列表型数据")
+
+            _, validate_agent_bindings = self.app_config_service.process_and_validate_agent_bindings(
+                agent_bindings,
+                current_account_id=account.id,
+                current_app_id=app_id,
+                strict=True,
+            )
+            draft_app_config["agent_bindings"] = validate_agent_bindings
 
         return draft_app_config
 

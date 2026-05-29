@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -26,6 +27,9 @@ from internal.core.tools.builtin_tools.entities.tool_entity import (
 )
 from internal.core.tools.builtin_tools.providers.builtin_provider_manager import (
     BuiltinProviderManager,
+)
+from internal.core.tools.mcp_tools.providers.mcp_provider_manager import (
+    McpProviderManager,
 )
 from internal.exception import FailException, NotFoundException, ValidateErrorException
 
@@ -379,6 +383,26 @@ def test_builtin_category_manager_should_raise_when_icon_file_missing(
         BuiltinCategoryManager()
 
 
+def test_builtin_category_manager_should_load_repo_video_category(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[5]
+    category_manager_path = (
+        repo_root
+        / "api/internal/core/tools/builtin_tools/categories/builtin_category_manager.py"
+    )
+
+    monkeypatch.setattr(
+        "internal.core.tools.builtin_tools.categories.builtin_category_manager.os.path.abspath",
+        lambda _path: str(category_manager_path),
+    )
+
+    manager = BuiltinCategoryManager()
+    category_map = manager.get_category_map()
+
+    assert "video" in category_map
+    assert category_map["video"]["entity"].name == "视频"
+    assert category_map["video"]["entity"].icon == "video.svg"
+
+
 def test_builtin_category_manager_should_skip_reinit_when_map_already_exists(
     monkeypatch,
 ):
@@ -445,6 +469,27 @@ def test_builtin_provider_manager_should_load_provider_map_and_delegate_methods(
     assert manager.get_tool("missing", "search") is None
 
 
+def test_mcp_provider_manager_should_load_repo_catalog_urls(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[5]
+    provider_manager_path = (
+        repo_root
+        / "api/internal/core/tools/mcp_tools/providers/mcp_provider_manager.py"
+    )
+
+    monkeypatch.setattr(
+        "internal.core.tools.mcp_tools.providers.mcp_provider_manager.os.path.abspath",
+        lambda _path: str(provider_manager_path),
+    )
+
+    manager = McpProviderManager()
+
+    assert manager.get_provider("mind-map-mcp").provider_entity.url == "https://mcp.api-inference.modelscope.net/a478ea710ab240/mcp"
+    assert manager.get_provider("mcp-server-chart").provider_entity.url == "https://mcp.api-inference.modelscope.net/736c38ad140e45/mcp"
+    assert manager.get_provider("bing-cn-mcp-server").provider_entity.url == "https://mcp.api-inference.modelscope.net/198086eeedf448/mcp"
+    assert manager.get_provider("12306-mcp").provider_entity.url == "https://mcp.api-inference.modelscope.net/fbc1920197624e/mcp"
+    assert manager.get_provider("fetch").provider_entity.url == "https://mcp.api-inference.modelscope.net/bcb784e2572846/mcp"
+
+
 def test_builtin_provider_manager_should_skip_init_when_provider_map_not_empty(
     monkeypatch,
 ):
@@ -462,6 +507,60 @@ def test_builtin_provider_manager_should_skip_init_when_provider_map_not_empty(
 
     manager._get_provider_tool_map()
     assert "provider_a" in manager.provider_map
+
+
+def test_builtin_provider_manager_should_expose_atlascloud_media_providers(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[5]
+    provider_manager_path = (
+        repo_root
+        / "api/internal/core/tools/builtin_tools/providers/builtin_provider_manager.py"
+    )
+    provider_entity_path = (
+        repo_root / "api/internal/core/tools/builtin_tools/entities/provider_entity.py"
+    )
+
+    def _fake_abspath(path):
+        if str(path).endswith("builtin_provider_manager.py"):
+            return str(provider_manager_path)
+        if str(path).endswith("provider_entity.py"):
+            return str(provider_entity_path)
+        return str(path)
+
+    monkeypatch.setattr(
+        "internal.core.tools.builtin_tools.entities.provider_entity.os.path.abspath",
+        _fake_abspath,
+    )
+
+    manager = BuiltinProviderManager()
+
+    image_provider = manager.get_provider("atlascloud_image")
+    video_provider = manager.get_provider("atlascloud_video")
+
+    assert image_provider is not None
+    assert video_provider is not None
+    assert image_provider.provider_entity.category == "image"
+    assert video_provider.provider_entity.category == "video"
+    assert image_provider.provider_entity.icon == "icon.svg"
+    assert video_provider.provider_entity.icon == "icon.svg"
+    assert [tool.name for tool in image_provider.get_tool_entities()] == [
+        "atlascloud_gpt_image_2_text_to_image",
+        "atlascloud_gpt_image_2_edit",
+    ]
+    assert [tool.name for tool in video_provider.get_tool_entities()] == [
+        "atlascloud_seedance_2_0_text_to_video",
+        "atlascloud_seedance_2_0_image_to_video",
+        "atlascloud_seedance_2_0_reference_to_video",
+        "atlascloud_seedance_2_0_fast_text_to_video",
+        "atlascloud_seedance_2_0_fast_image_to_video",
+        "atlascloud_seedance_2_0_fast_reference_to_video",
+        "atlascloud_hailuo_2_3_t2v_standard",
+        "atlascloud_hailuo_2_3_t2v_pro",
+        "atlascloud_hailuo_2_3_i2v_standard",
+        "atlascloud_hailuo_2_3_i2v_pro",
+        "atlascloud_hailuo_2_3_fast",
+        "atlascloud_kling_video_o3_std_text_to_video",
+        "atlascloud_vidu_q3_turbo_text_to_video",
+    ]
 
 
 def test_provider_entity_accessors_should_return_items_from_maps():

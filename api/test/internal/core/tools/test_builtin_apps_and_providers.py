@@ -3,9 +3,13 @@ import importlib
 import json
 
 import pytest
+from langchain_core.tools import StructuredTool
 
 from internal.exception import FailException
 from internal.core.tools.builtin_tools.providers.dalle.dalle3 import Dalle3ArgsSchema, dalle3
+from internal.core.tools.builtin_tools.providers.atlascloud_video.atlascloud_seedance_2_0 import (
+    atlascloud_seedance_2_0_text_to_video,
+)
 from internal.core.tools.builtin_tools.providers.duckduckgo.duckduckgo_search import DDGInput, duckduckgo_search
 from internal.core.tools.builtin_tools.providers.gaode.gaode_weather import GaodeWeatherTool, gaode_weather
 from internal.core.tools.builtin_tools.providers.google.google_serper import (
@@ -14,6 +18,7 @@ from internal.core.tools.builtin_tools.providers.google.google_serper import (
 )
 from internal.core.tools.builtin_tools.providers.qwen.qwen_image_text_to_image import _generate_image
 from internal.core.tools.builtin_tools.providers.time.current_time import CurrentTimeTool, current_time
+from internal.core.tools.builtin_tools.providers.time.timezone_converter import timezone_converter
 from internal.core.tools.builtin_tools.providers.wikipedia.wikipedia_search import wikipedia_search
 
 

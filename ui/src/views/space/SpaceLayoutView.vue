@@ -153,6 +153,14 @@ watch(
           {{ $t('space.createMcp') }}
         </a-button>
         <a-button
+          v-if="route.path.startsWith('/space/mcp')"
+          type="primary"
+          class="rounded-lg"
+          @click="handleCreate('mcp')"
+        >
+          创建 MCP
+        </a-button>
+        <a-button
           v-if="route.path.startsWith('/space/datasets')"
           type="primary"
           class="rounded-lg"
@@ -192,6 +200,13 @@ watch(
             active-class="bg-gray-100"
           >
             {{ $t('space.nav.mcp') }}
+          </router-link>
+          <router-link
+            to="/space/mcp"
+            class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
+            active-class="bg-gray-100"
+          >
+            MCP
           </router-link>
           <router-link
             to="/space/datasets"

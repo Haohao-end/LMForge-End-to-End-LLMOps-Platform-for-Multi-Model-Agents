@@ -1,5 +1,6 @@
 import logging
 import types
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -230,6 +231,10 @@ def test_app_module_main_should_invoke_http_run(monkeypatch):
     class _FakeHttp:
         def __init__(self, *_args, **_kwargs):
             self.extensions = {"celery": "fake-celery-app"}
+            self.config = {"ASSISTANT_MCP_BINDINGS": []}
+
+        def app_context(self):
+            return nullcontext()
 
         def run(self, **kwargs):
             run_calls.append(kwargs)

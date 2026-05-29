@@ -35,7 +35,7 @@ export type ChatThought = {
   thought: string
   observation: string
   tool: string
-  tool_input: unknown
+  tool_input: Record<string, unknown>
   latency: number
   created_at: number
 }
@@ -73,6 +73,13 @@ const toNonNegativeNumber = (value: unknown) => {
   return Number.isFinite(normalized) && normalized >= 0 ? normalized : 0
 }
 
+const normalizeToolInput = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  return value as Record<string, unknown>
+}
+
 const buildThought = (data: StreamEventData, position: number): ChatThought => {
   return {
     id: String(data.id ?? ''),
@@ -81,7 +88,7 @@ const buildThought = (data: StreamEventData, position: number): ChatThought => {
     thought: String(data.thought ?? ''),
     observation: String(data.observation ?? ''),
     tool: String(data.tool ?? ''),
-    tool_input: data.tool_input ?? {},
+    tool_input: normalizeToolInput(data.tool_input),
     latency: toPositiveNumber(data.latency),
     created_at: 0,
   }

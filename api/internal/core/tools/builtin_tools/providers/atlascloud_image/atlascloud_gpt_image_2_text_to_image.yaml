@@ -1,0 +1,32 @@
+name: atlascloud_gpt_image_2_text_to_image
+label: GPT Image 2 文生图
+description: 使用 Atlas Cloud 的 OpenAI GPT Image 2 生成高质量图片
+params:
+  - name: prompt
+    label: 图片描述
+    type: string
+    required: true
+  - name: size
+    label: 图片尺寸
+    type: select
+    default: "1024x1024"
+    required: false
+    options:
+      - value: "1024x1024"
+        label: "1024x1024"
+      - value: "1024x1536"
+        label: "1024x1536"
+      - value: "1536x1024"
+        label: "1536x1024"
+  - name: quality
+    label: 图片质量
+    type: select
+    default: medium
+    required: false
+    options:
+      - value: low
+        label: 低
+      - value: medium
+        label: 中
+      - value: high
+        label: 高

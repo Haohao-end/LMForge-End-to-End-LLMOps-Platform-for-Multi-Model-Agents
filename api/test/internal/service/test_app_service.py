@@ -66,7 +66,13 @@ def _build_service() -> AppService:
         redis_client=SimpleNamespace(),
         cos_service=SimpleNamespace(),
         retrieval_service=SimpleNamespace(),
-        app_config_service=SimpleNamespace(),
+        app_config_service=SimpleNamespace(
+            _build_agent_runtime_tool_name=lambda target_app_id: f"agent_app_{str(target_app_id).replace('-', '')}",
+            get_langchain_tools_by_tools_config=lambda *_args, **_kwargs: [],
+            get_langchain_tools_by_mcp_bindings=lambda *_args, **_kwargs: [],
+            get_langchain_tools_by_workflow_ids=lambda *_args, **_kwargs: [],
+            get_version_display_config=lambda *_args, **_kwargs: {},
+        ),
         api_provider_manager=SimpleNamespace(),
         conversation_service=SimpleNamespace(),
         language_model_manager=SimpleNamespace(),
@@ -1036,7 +1042,7 @@ class TestAppService:
         monkeypatch.setattr(
             service,
             "_validate_draft_app_config",
-            lambda draft_config, _account: {"model_config": draft_config["model_config"]},
+            lambda draft_config, _account, *_args: {"model_config": draft_config["model_config"]},
         )
         updates = []
         monkeypatch.setattr(
@@ -1493,9 +1499,25 @@ class TestAppService:
             status=AppStatus.PUBLISHED.value,
             draft_app_config=draft_version,
         )
-        service.app_config_service.get_version_display_config = lambda version: display_configs.setdefault(
+        service.app_config_service.get_version_display_config = lambda version, **_kwargs: display_configs.setdefault(
             version.id,
-            {"id": str(version.id), "tools": [{"provider": {"label": "搜索服务"}, "tool": {"label": "天气查询"}}]},
+            {
+                "id": str(version.id),
+                "tools": [{"provider": {"label": "搜索服务"}, "tool": {"label": "天气查询"}}],
+                "agent_bindings": [
+                    {
+                        "app_id": str(uuid4()),
+                        "name": "Agent 子应用",
+                        "icon": "/icons/agent.png",
+                        "description": "说明",
+                        "source_scope": "public",
+                        "invoke_mode": "a2a",
+                        "is_public": True,
+                        "status": AppStatus.PUBLISHED.value,
+                        "tool_name": "agent_app_demo",
+                    }
+                ],
+            },
         )
         monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
 
@@ -1516,8 +1538,10 @@ class TestAppService:
         assert versions == [draft_version, published_latest, published_history]
         assert draft_version.is_current_published is False
         assert draft_version.display_config == display_configs[draft_version.id]
+        assert draft_version.display_config["agent_bindings"][0]["invoke_mode"] == "a2a"
         assert published_latest.is_current_published is True
         assert published_latest.display_config == display_configs[published_latest.id]
+        assert published_latest.display_config["agent_bindings"][0]["source_scope"] == "public"
         assert published_history.is_current_published is False
         assert published_history.display_config == display_configs[published_history.id]
 
@@ -1568,7 +1592,7 @@ class TestAppService:
         )
         monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
         monkeypatch.setattr(service, "get", lambda *_args, **_kwargs: history)
-        monkeypatch.setattr(service, "_validate_draft_app_config", lambda payload, _account: payload)
+        monkeypatch.setattr(service, "_validate_draft_app_config", lambda payload, _account, *_args: payload)
         updates = []
         monkeypatch.setattr(
             service,

@@ -338,6 +338,10 @@ const handleSubmit = async () => {
     Message.warning(t('appStudio.debug.imageInputUnsupported'))
     return
   }
+  if (image_urls.value.length > 0 && !canImageInput.value) {
+    Message.warning('当前模型不支持图片输入，请切换到视觉模型或移除图片后重试')
+    return
+  }
 
   // 5.3 满足条件，处理正式提问的前置工作，涵盖：清空建议问题、删除消息id、任务id
   suggested_questions.value = []

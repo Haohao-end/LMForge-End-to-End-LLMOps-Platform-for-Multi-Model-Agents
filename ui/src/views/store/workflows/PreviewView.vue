@@ -94,8 +94,6 @@ type PreviewWorkflow = {
   description: string
   account_name: string
   account_avatar: string
-  view_count: number
-  fork_count: number
   is_debug_passed?: boolean
 }
 type FlowInstance = {
@@ -364,14 +362,6 @@ onMounted(async () => {
               </div>
               <div class="flex items-center h-[18px] text-xs text-gray-500">
                 {{ workflow.account_name }}
-              </div>
-              <div class="flex items-center h-[18px] text-xs text-gray-500">
-                <icon-eye />
-                {{ workflow.view_count }} 次浏览
-              </div>
-              <div class="flex items-center h-[18px] text-xs text-gray-500">
-                <icon-branch />
-                {{ workflow.fork_count }} 次Fork
               </div>
               <a-tag
                 v-if="workflow.is_debug_passed"

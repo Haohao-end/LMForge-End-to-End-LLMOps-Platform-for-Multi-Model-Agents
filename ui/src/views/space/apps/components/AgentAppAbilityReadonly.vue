@@ -299,6 +299,123 @@ const formatToolCount = (count: number) => {
           <div v-else class="text-gray-400 text-sm">{{ t('appStudio.abilities.readonly.noAgentBindings') }}</div>
         </a-collapse-item>
 
+        <!-- MCP -->
+        <a-collapse-item key="mcp_bindings" header="MCP" class="app-ability-item">
+          <div v-if="mcpBindingsCount > 0" class="space-y-2">
+            <div
+              v-for="(binding, index) in (props.draft_app_config.mcp_bindings || [])"
+              :key="index"
+              class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+            >
+              <a-avatar
+                :size="34"
+                shape="square"
+                class="shrink-0 overflow-hidden"
+                :style="binding.icon ? { backgroundColor: '#f3f4f6' } : getBindingAvatarStyle(binding)"
+              >
+                <img
+                  v-if="binding.icon"
+                  :src="normalizeIconUrl(binding.icon)"
+                  :alt="binding.label || binding.name"
+                  class="w-full h-full object-cover"
+                />
+                <span v-else class="text-white font-semibold text-[12px] tracking-wide">
+                  {{ getBindingAvatarText(binding) }}
+                </span>
+              </a-avatar>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-gray-700 truncate">
+                  {{ binding.name || '未命名 MCP 绑定' }}
+                </div>
+                <div class="text-xs text-gray-500 truncate">
+                  {{ binding.description || '无描述' }}
+                </div>
+                <div class="text-xs text-gray-400 truncate">
+                  {{ binding.transport || 'streamable_http' }} · {{ binding.url || binding.command || '未配置地址' }}
+                </div>
+              </div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <a-tag :color="getMcpBindingStatus(binding).color" size="small">
+                  {{ getMcpBindingStatus(binding).label }}
+                </a-tag>
+                <a-tooltip
+                  v-if="getMcpBindingStatus(binding).show_help && getMcpBindingStatus(binding).tooltip"
+                  :content="getMcpBindingStatus(binding).tooltip"
+                  position="top"
+                >
+                  <icon-question-circle class="text-gray-400 text-sm" />
+                </a-tooltip>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-gray-400 text-sm">未配置 MCP</div>
+        </a-collapse-item>
+
+        <!-- Skills -->
+        <a-collapse-item key="skills" header="Skills" class="app-ability-item">
+          <div v-if="skillsCount > 0" class="space-y-2">
+            <div
+              v-for="(skill, index) in props.draft_app_config.skills"
+              :key="index"
+              class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+            >
+              <a-avatar :size="32" shape="square" class="rounded-lg flex-shrink-0">
+                <img v-if="skill.icon" :src="normalizeIconUrl(skill.icon)" />
+                <icon-storage v-else />
+              </a-avatar>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-gray-700 truncate">
+                  {{ skill.label || skill.name || '未命名技能' }}
+                </div>
+                <div class="text-xs text-gray-500 truncate">
+                  {{ skill.source_key || skill.name }}
+                  <template v-if="skill.tool_count > 0"> · {{ skill.tool_count }} 个工具</template>
+                  <template v-if="skill.executor_type"> · {{ skill.executor_type }}</template>
+                </div>
+                <div class="text-xs text-gray-400 truncate">
+                  {{ skill.readme || skill.description || '无描述' }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-gray-400 text-sm">未配置 Skills</div>
+        </a-collapse-item>
+
+        <!-- Agent 子应用 -->
+        <a-collapse-item key="agent_bindings" header="Agent 子应用" class="app-ability-item">
+          <div v-if="agentBindingsCount > 0" class="space-y-2">
+            <div
+              v-for="(binding, index) in props.draft_app_config.agent_bindings"
+              :key="index"
+              class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+            >
+              <a-avatar :size="32" shape="square" class="rounded-lg flex-shrink-0">
+                <img v-if="binding.icon" :src="normalizeIconUrl(binding.icon)" />
+                <icon-apps v-else />
+              </a-avatar>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="text-sm font-medium text-gray-700 truncate">
+                    {{ binding.name || '未命名 Agent' }}
+                  </div>
+                  <a-tag :color="binding.invoke_mode === 'a2a' ? 'arcoblue' : 'orange'" size="small">
+                    {{ binding.invoke_mode === 'a2a' ? 'A2A' : 'Tool' }}
+                  </a-tag>
+                </div>
+                <div class="text-xs text-gray-500 truncate">
+                  {{ binding.source_scope === 'public' ? '应用广场' : '我的应用' }}
+                  <template v-if="binding.is_public"> · 公开应用</template>
+                  <template v-else> · 私有应用</template>
+                </div>
+                <div class="text-xs text-gray-400 truncate">
+                  {{ binding.description || '无描述' }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-gray-400 text-sm">未配置 Agent 子应用</div>
+        </a-collapse-item>
+
         <!-- 工作流 -->
         <a-collapse-item
           key="workflows"

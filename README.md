@@ -10,6 +10,10 @@
   </p>
 
   <p align="center">
+    <strong>Sponsored by <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a></strong>
+  </p>
+
+  <p align="center">
     <a href="https://openllm.cloud">Visit Website</a>
     ·
     <a href="https://s.apifox.cn/c76bd530-fd50-429c-94cc-f0e41c2675d1/api-305434417">API Docs</a>
@@ -179,11 +183,19 @@ npm run test:unit -- --run
 
 Use the home page as the default assistant entry point to route user questions to the most relevant published public agents through A2A, or describe a new idea in natural language and trigger AI app creation. The same surface also supports multi-turn chat, suggested prompts, image upload, and audio input.
 
-### 2. App Workspace
+### 2. App Workspace and Deep Research
 
-<img width="2560" height="1418" alt="OpenAgent Apps Workspace" src="https://github.com/user-attachments/assets/ec6f6bdb-70d6-4803-8b53-e60185b23da0" />
+<img width="1920" height="1080" alt="OpenAgent App Workspace Deep Research" src="https://github.com/user-attachments/assets/2dd4dc3e-f216-4c8d-96e4-7a2f81e138ae" />
 
-Manage app drafts, published versions, analysis views, prompt comparisons, copies, and publishing actions from the app workspace.
+The app workspace is the main work area for an AI app, not a standalone settings page. The left side handles model, prompt, and capability bindings. The right side is used for live debugging, execution traces, and result checks. In the current codebase, the README term `Deep Research` maps to the deep thinking mode behind `enable_deep_thinking`.
+
+Key capabilities:
+
+- Configuration and version management: manage model changes, prompt logic, drafts, publishing, version comparison, prompt comparison, and app duplication in one place.
+- Capability integration: bind plugins, MCP, Skills, child Agent apps, workflows, and datasets through a single workspace.
+- Complex task execution: with `Deep Research` enabled, the app can break work into steps and coordinate bound capabilities across a longer execution chain.
+- Sandbox and artifact output: support script execution, code handling, file generation, and attachment export for tasks that need concrete outputs.
+- Debugging and result verification: use the right-side panel to run real conversations and inspect deep execution timelines, task state, produced artifacts, and final results.
 
 ### 3. Visual Workflow Editor
 
@@ -242,6 +254,7 @@ The repository already includes automated backend and frontend tests.
 
 ## Acknowledgments
 
+- Thanks to Atlas Cloud for supporting OpenAgent.
 - Special thanks to Rui Yang and Haoyu Wang (Johns Hopkins University) for responsibly reporting a Host Header poisoning issue in the built-in tool icon URL construction and helping improve the security of this project.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

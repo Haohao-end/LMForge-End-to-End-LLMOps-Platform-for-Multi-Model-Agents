@@ -665,6 +665,48 @@ def test_react_agent_should_delegate_and_cover_message_and_tool_json_branches(mo
     )
     assert short_result["messages"][0].content == "ab"
 
+    prompt_full = "# 前端技能\n\n用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。"
+    captured_prompt_messages = {}
+    prompt_loader_llm = _NodeLLM(
+        features=[],
+        metadata={"pricing": {"input": 0.1, "output": 0.2, "unit": 0.001}},
+        stream_chunks=[_Chunk("react final answer")],
+    )
+
+    def _prompt_loader_stream(self, messages):
+        captured_prompt_messages["messages"] = messages
+        for chunk in self.stream_chunks:
+            yield chunk
+
+    monkeypatch.setattr(_NodeLLM, "stream", _prompt_loader_stream)
+    prompt_loader_agent = _new_react_agent(prompt_loader_llm, _build_agent_config())
+    prompt_loader_result = prompt_loader_agent._llm_node(
+        {
+            "task_id": task_id,
+            "messages": [HumanMessage(content="q")],
+            "iteration_count": 0,
+            "pending_skill_prompts": [
+                {
+                    "lease_id": "lease-2",
+                    "skill_id": "skill-2",
+                    "source_key": "frontend-skill",
+                    "name": "frontend-skill",
+                    "label": "前端技能",
+                    "description": "用于视觉层次、留白和布局质量要求高的前端页面设计与实现任务。",
+                    "category": "设计",
+                    "executor_type": "prompt",
+                    "prompt": prompt_full,
+                }
+            ],
+        }
+    )
+    assert prompt_loader_result["messages"][0].content == "react final answer"
+    assert prompt_loader_result["pending_skill_prompts"] == []
+    assert any(
+        isinstance(message, SystemMessage) and prompt_full in message.content
+        for message in captured_prompt_messages["messages"]
+    )
+
     limit_agent = _new_react_agent(_NodeLLM(features=[]), _build_agent_config(max_iteration_count=0))
     limit_result = limit_agent._llm_node(
         {"task_id": task_id, "messages": [HumanMessage(content="q")], "iteration_count": 1}

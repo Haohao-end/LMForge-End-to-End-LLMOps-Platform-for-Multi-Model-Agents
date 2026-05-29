@@ -32,6 +32,7 @@ class TestPublicAgentRegistryService:
                     {"provider_id": "google", "tool_id": "google_serper"},
                     {"provider_id": "gaode", "tool_id": "gaode_weather"},
                 ],
+                mcp_bindings=[],
                 workflows=[],
                 token="should-not-leak",
                 headers={"Authorization": "secret"},
@@ -56,6 +57,7 @@ class TestPublicAgentRegistryService:
         assert "Agent标签: 客服, 售后" in document.page_content
         assert "开场白: 你好，我可以处理售后问题" in document.page_content
         assert "工具摘要: google:google_serper, gaode:gaode_weather" in document.page_content
+        assert "MCP摘要: 无" in document.page_content
 
     def test_search_public_apps_should_rebuild_index_when_store_is_empty(self, monkeypatch):
         app_id = uuid4()
@@ -68,6 +70,7 @@ class TestPublicAgentRegistryService:
             app_config=SimpleNamespace(
                 opening_statement="专门解答油痘肌、痘痘肌和护肤方案",
                 tools=[],
+                mcp_bindings=[],
                 workflows=[],
             ),
         )
@@ -133,6 +136,7 @@ class TestPublicAgentRegistryService:
             app_config=SimpleNamespace(
                 opening_statement="专门解答油痘肌、痘痘肌和护肤方案",
                 tools=[],
+                mcp_bindings=[],
                 workflows=[],
             ),
         )
@@ -181,6 +185,7 @@ class TestPublicAgentRegistryService:
             app_config=SimpleNamespace(
                 opening_statement="专门处理油痘肌护肤、痘痘肌护理与护肤方案",
                 tools=[],
+                mcp_bindings=[],
                 workflows=[],
             ),
         )
@@ -221,6 +226,7 @@ class TestPublicAgentRegistryService:
                     "Agent标签: 护肤, 油痘肌\n"
                     "开场白: 专门处理油痘肌护肤、痘痘肌护理与护肤方案\n"
                     "工具摘要: 无\n"
+                    "MCP摘要: 无\n"
                     "工作流摘要: 无"
                 ),
             }
@@ -237,6 +243,7 @@ class TestPublicAgentRegistryService:
             app_config=SimpleNamespace(
                 opening_statement="专门处理油痘肌护肤、痘痘肌护理与护肤方案",
                 tools=[],
+                mcp_bindings=[],
                 workflows=[],
             ),
         )
@@ -282,6 +289,7 @@ class TestPublicAgentRegistryService:
                     "Agent标签: 护肤, 油痘肌\n"
                     "开场白: 专门处理油痘肌护肤、痘痘肌护理与护肤方案\n"
                     "工具摘要: 无\n"
+                    "MCP摘要: 无\n"
                     "工作流摘要: 无"
                 ),
             }
@@ -298,6 +306,7 @@ class TestPublicAgentRegistryService:
             app_config=SimpleNamespace(
                 opening_statement="专门处理油痘肌护肤、痘痘肌护理与护肤方案",
                 tools=[],
+                mcp_bindings=[],
                 workflows=[],
             ),
         )
@@ -339,6 +348,7 @@ class TestPublicAgentRegistryService:
                     "Agent标签: 护肤, 油痘肌\n"
                     "开场白: 专门处理油痘肌护肤、痘痘肌护理与护肤方案\n"
                     "工具摘要: 无\n"
+                    "MCP摘要: 无\n"
                     "工作流摘要: 无"
                 ),
             }
