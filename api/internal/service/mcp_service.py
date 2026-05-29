@@ -158,10 +158,6 @@ class McpService(BaseService):
             return ""
         return "当前仅支持 http、sse、streamable_http 和 stdio"
 
-    @staticmethod
-    def _is_public_mcp_available(provider_dict: dict[str, Any]) -> bool:
-        return bool(provider_dict.get("is_public")) and bool(provider_dict.get("is_bindable"))
-
     def _build_tool_inputs(self, input_schema: dict[str, Any] | None) -> list[dict[str, Any]]:
         if not isinstance(input_schema, dict):
             return []
@@ -475,11 +471,7 @@ class McpService(BaseService):
         """获取公共 MCP 广场列表。"""
         del account
         paginator = Paginator(db=self.db, req=req)
-        candidates = [
-            item
-            for item in self._get_public_candidates()
-            if self._is_public_mcp_available(item)
-        ]
+        candidates = self._get_public_candidates()
 
         search_word = _normalize_text(req.search_word.data).lower()
         category = normalize_mcp_category(req.category.data) if req.category.data else ""
@@ -536,18 +528,12 @@ class McpService(BaseService):
                 raise NotFoundException("MCP 不存在或未公开") from exc
             if not provider:
                 raise NotFoundException("MCP 不存在或未公开")
-            provider_dict = self._build_private_provider_payload(provider, include_tools=True)
-            if not self._is_public_mcp_available(provider_dict):
-                raise NotFoundException("MCP 不存在或未公开")
-            return provider_dict
+            return self._build_private_provider_payload(provider, include_tools=True)
 
         catalog_provider = self._resolve_catalog_provider(raw_key)
         if not catalog_provider:
             raise NotFoundException("MCP 不存在")
-        provider_dict = self._build_catalog_provider_payload(catalog_provider, include_tools=True)
-        if not self._is_public_mcp_available(provider_dict):
-            raise NotFoundException("MCP 不存在或未公开")
-        return provider_dict
+        return self._build_catalog_provider_payload(catalog_provider, include_tools=True)
 
     def create_mcp_provider(self, req: CreateMcpProviderReq, account: Account) -> McpProvider:
         self._ensure_mcp_provider_table()

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from flask_wtf import FlaskForm
 from marshmallow import Schema, fields, pre_dump
-from wtforms import StringField
-from wtforms.validators import Length, Optional
+from wtforms import BooleanField, IntegerField, StringField
+from wtforms.validators import DataRequired, Length, NumberRange, Optional, ValidationError
 
 from internal.lib.helper import datetime_to_timestamp
+from internal.schema import DictField, ListField
 from pkg.paginator import PaginatorReq
 
 
@@ -13,6 +15,18 @@ class GetSkillsWithPageReq(PaginatorReq):
 
     search_word = StringField("search_word", default="", validators=[Optional()])
     category = StringField("category", default="", validators=[Optional(), Length(max=64)])
+
+
+class RollbackSkillPackageReq(FlaskForm):
+    """技能包回滚请求。"""
+
+    version = IntegerField(
+        "version",
+        validators=[
+            DataRequired("技能版本不能为空"),
+            NumberRange(min=1, message="技能版本必须大于0"),
+        ],
+    )
 
 
 class SkillToolInputResp(Schema):
@@ -28,6 +42,20 @@ class SkillToolResp(Schema):
     description = fields.String()
     entrypoint = fields.String()
     inputs = fields.List(fields.Nested(SkillToolInputResp), dump_default=[])
+
+
+class SkillVersionResp(Schema):
+    id = fields.UUID(dump_default="")
+    skill_package_id = fields.UUID(dump_default="")
+    version = fields.Integer(dump_default=0)
+    checksum = fields.String(dump_default="")
+    sync_status = fields.String(dump_default="")
+    sync_error = fields.String(dump_default="")
+    is_current_version = fields.Boolean(dump_default=False)
+    summary = fields.String(dump_default="")
+    tool_count = fields.Integer(dump_default=0)
+    created_at = fields.Integer(dump_default=0)
+    updated_at = fields.Integer(dump_default=0)
 
 
 class SkillPackageResp(Schema):

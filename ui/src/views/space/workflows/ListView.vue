@@ -7,17 +7,15 @@ import { useRoute, useRouter } from 'vue-router'
 import CreateOrUpdateWorkflowModal from '@/views/space/workflows/components/CreateOrUpdateWorkflowModal.vue'
 import CardGridSkeleton from '@/components/skeletons/CardGridSkeleton.vue'
 import { getUserAvatarUrl } from '@/utils/helper'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义页面所需数据
 const route = useRoute()
 const router = useRouter()
-const props = defineProps({
-  createType: { type: String, default: '', required: true },
-})
-const emits = defineEmits(['update:create-type'])
 const createOrUpdateWorkflowModalVisible = ref(false)
 const updateWorkflowId = ref('')
 const accountStore = useAccountStore()
+const { t } = useI18n()
 const {
   loading: getWorkflowsWithPageLoading,
   workflows,
@@ -25,6 +23,15 @@ const {
   loadWorkflows,
 } = useGetWorkflowsWithPage()
 const { handleDeleteWorkflow } = useDeleteWorkflow()
+
+const clearCreateTypeQuery = async () => {
+  const nextQuery = { ...route.query }
+  delete nextQuery.create_type
+  await router.replace({
+    path: route.path,
+    query: nextQuery,
+  })
+}
 
 // 2.定义滚动数据分页处理器
 const handleScroll = (event: Event) => {
@@ -47,19 +54,19 @@ onMounted(async () => {
 })
 
 watch(
-  () => props.createType,
-  (newValue) => {
-    if (newValue === 'workflow') {
-      updateWorkflowId.value = ''
-      createOrUpdateWorkflowModalVisible.value = true
-      emits('update:create-type', '')
-    }
-  },
+  () => route.query?.search_word,
+  async () => await loadWorkflows(String(route.query?.search_word ?? ''), '', true),
 )
 
 watch(
-  () => route.query?.search_word,
-  async () => await loadWorkflows(String(route.query?.search_word ?? ''), '', true),
+  () => route.query?.create_type,
+  (newValue) => {
+    if (newValue !== 'workflow') return
+    updateWorkflowId.value = ''
+    createOrUpdateWorkflowModalVisible.value = true
+    void clearCreateTypeQuery()
+  },
+  { immediate: true },
 )
 
 // 3.定义卡片点击处理器
@@ -105,7 +112,7 @@ const handleCardClick = (workflowId: string) => {
                     />
                   </div>
                   <div class="text-xs text-gray-500 line-clamp-1">
-                    {{ workflow.tool_call_name }} · {{ workflow.node_count }} 节点数
+                    {{ workflow.tool_call_name }} · {{ t('space.workflows.list.nodeCount', { count: workflow.node_count }) }}
                   </div>
                 </div>
                 <!-- 操作按钮 -->
@@ -124,7 +131,7 @@ const handleCardClick = (workflowId: string) => {
                         }
                       "
                     >
-                      编辑工作流
+                      {{ t('space.workflows.list.editWorkflow') }}
                     </a-doption>
                     <a-doption
                       class="text-red-700"
@@ -135,7 +142,7 @@ const handleCardClick = (workflowId: string) => {
                           })
                       "
                     >
-                      删除
+                      {{ t('common.actions.delete') }}
                     </a-doption>
                   </template>
                 </a-dropdown>
@@ -148,10 +155,10 @@ const handleCardClick = (workflowId: string) => {
             <!-- 应用的归属者信息 -->
             <div class="flex items-center gap-1.5">
               <a-avatar :size="18" class="bg-blue-700" :image-url="getUserAvatarUrl(accountStore.account.avatar, accountStore.account.name)">
-                {{ (accountStore.account.name || '未知用户')[0] }}
+                {{ (accountStore.account.name || t('space.workflows.list.unknownUser'))[0] }}
               </a-avatar>
               <div class="text-xs text-gray-400">
-                {{ accountStore.account.name }} · 最近编辑
+                {{ accountStore.account.name || t('space.workflows.list.unknownUser') }} · {{ t('space.workflows.list.recentEdited') }}
                 {{ moment(workflow.created_at * 1000).format('MM-DD HH:mm') }}
               </div>
             </div>
@@ -160,7 +167,7 @@ const handleCardClick = (workflowId: string) => {
         <!-- 没数据的UI状态 -->
         <a-col v-if="workflows.length === 0" :span="24">
           <a-empty
-            description="没有可用的工作流"
+            :description="t('space.workflows.list.noAvailable')"
             class="h-[400px] flex flex-col items-center justify-center"
           />
         </a-col>
@@ -171,12 +178,12 @@ const handleCardClick = (workflowId: string) => {
         <a-col v-if="getWorkflowsWithPageLoading" :span="24" align="center">
           <a-space class="my-4">
             <a-spin />
-            <div class="text-gray-400">加载中</div>
+            <div class="text-gray-400">{{ t('space.workflows.list.loading') }}</div>
           </a-space>
         </a-col>
         <!-- 数据加载完成 -->
         <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" align="center">
-          <div class="text-gray-400 my-4">数据已加载完成</div>
+          <div class="text-gray-400 my-4">{{ t('space.workflows.list.loaded') }}</div>
         </a-col>
       </a-row>
     </template>

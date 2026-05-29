@@ -6,6 +6,8 @@ import { useGetApiTool, useGetApiToolProvidersWithPage } from '@/hooks/use-tool'
 import { useGetBuiltinTool, useGetBuiltinTools, useGetCategories } from '@/hooks/use-builtin-tool'
 import { apiPrefix, typeMap } from '@/config'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
+import { getStoreCategoryDisplayName } from '@/utils/store-display'
 type ToolProvider = {
   id: string
   name: string
@@ -79,6 +81,7 @@ const defaultToolInfo: ToolInfoState = {
 }
 
 // 1.定义自定义组件所需数据
+const { t, locale } = useI18n()
 const props = defineProps({
   app_id: { type: String, default: '', required: true },
   tools: {
@@ -114,6 +117,10 @@ const computedBuiltinTools = computed(() => {
     (item: { category: string }) => item.category === toolsActivateCategory.value,
   )
 })
+
+const getCategoryLabel = (category: string) => {
+  return getStoreCategoryDisplayName(category, locale.value === 'en-US' ? 'en-US' : 'zh-CN')
+}
 
 // 统一处理图标地址，兼容绝对地址、相对地址以及 /api 路径
 const normalizeIconUrl = (icon: string = '') => {
@@ -362,7 +369,7 @@ const handleSelectTool = async (provider_idx: number, tool_idx: number) => {
   } else {
     // 8.6 新增数据，检测关联插件数是否大于等于5
     if (props.tools.length >= 5) {
-      Message.warning('一个Agent应用最多关联5个扩展插件')
+      Message.warning(t('appStudio.abilities.tools.maxReached'))
       return
     }
 
@@ -406,7 +413,7 @@ onMounted(() => {
     <!-- 折叠面板 -->
     <a-collapse-item key="tools" class="app-ability-item">
       <template #header>
-        <div class="text-gray-700 font-bold">扩展插件</div>
+        <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.tools.title') }}</div>
       </template>
       <template #extra>
         <a-button size="mini" type="text" class="!text-gray-700" @click.stop="handleShowToolsModal">
@@ -468,8 +475,7 @@ onMounted(() => {
         </div>
       </div>
       <div v-else class="text-xs text-gray-500 leading-[22px]">
-        插件能够让智能体调用外部
-        API，例如搜索信息、浏览网页、生成图片等，扩展智能体的能力和使用场景。
+        {{ t('appStudio.abilities.tools.empty') }}
       </div>
     </a-collapse-item>
     <!-- 工具设置模态窗 -->
@@ -502,14 +508,14 @@ onMounted(() => {
               :class="`text-gray-700 pt-1 cursor-pointer border-blue-700 hover:border-b-4 hover:font-bold transition-all ${toolInfoNavType === 'info' ? 'font-bold border-b-4' : ''}`"
               @click="toolInfoNavType = 'info'"
             >
-              信息
+              {{ t('appStudio.abilities.tools.info') }}
             </div>
             <div
               v-if="toolInfo.type === 'builtin_tool' && toolInfo?.tool?.params?.length > 0"
               :class="`text-gray-700 pt-1 cursor-pointer border-blue-700 hover:border-b-4 hover:font-bold transition-all ${toolInfoNavType === 'setting' ? 'font-bold border-b-4' : ''}`"
               @click="toolInfoNavType = 'setting'"
             >
-              设置
+              {{ t('appStudio.abilities.tools.settings') }}
             </div>
           </div>
         </div>
@@ -526,13 +532,13 @@ onMounted(() => {
         class="app-modal-section-scroll pb-4"
       >
         <!-- 工具描述 -->
-        <div class="text-gray-70 font-bold mb-1">工具描述</div>
+        <div class="text-gray-70 font-bold mb-1">{{ t('appStudio.abilities.tools.description') }}</div>
         <div class="text-gray-500 text-xs">{{ toolInfo?.tool?.description }}</div>
         <!-- 工具参数 -->
         <div v-if="toolInfo?.tool?.inputs?.length > 0" class="">
           <!-- 分隔符 -->
           <div class="flex items-center gap-2 my-4">
-            <div class="text-xs font-bold text-gray-500">参数</div>
+            <div class="text-xs font-bold text-gray-500">{{ t('appStudio.abilities.tools.params') }}</div>
             <hr class="flex-1" />
           </div>
           <!-- 参数列表 -->
@@ -546,7 +552,7 @@ onMounted(() => {
               <div class="flex items-center gap-2 text-xs">
                 <div class="text-gray-900 font-bold">{{ input.name }}</div>
                 <div class="text-gray-500">{{ typeMap[input.type] }}</div>
-                <div v-if="input.required" class="text-red-700">必填</div>
+                <div v-if="input.required" class="text-red-700">{{ t('appStudio.abilities.tools.required') }}</div>
               </div>
               <!-- 参数描述信息 -->
               <div class="text-xs text-gray-500">{{ input.description }}</div>
@@ -578,18 +584,18 @@ onMounted(() => {
               v-if="param.type === 'select'"
               :default-value="param.default"
               v-model:model-value="toolInfoSettingForm[param.name]"
-              placeholder="请输入参数值"
+              :placeholder="t('appStudio.abilities.tools.parameterValuePlaceholder')"
               :options="param.options"
             />
             <a-input
               v-if="param.type === 'string'"
-              placeholder="请输入参数值"
+              :placeholder="t('appStudio.abilities.tools.parameterValuePlaceholder')"
               v-model:model-value="toolInfoSettingForm[param.name]"
               :default-value="param.default"
             />
             <a-input-number
               v-if="param.type === 'number'"
-              placeholder="请输入参数值"
+              :placeholder="t('appStudio.abilities.tools.parameterValuePlaceholder')"
               v-model:model-value="toolInfoSettingForm[param.name]"
               :default-value="param.default"
               :min="param.min"
@@ -600,8 +606,8 @@ onMounted(() => {
               v-model:model-value="toolInfoSettingForm[param.name]"
               :default-value="param.default"
             >
-              <a-radio :value="true">开启</a-radio>
-              <a-radio :value="false">关闭</a-radio>
+              <a-radio :value="true">{{ t('appStudio.abilities.longTermMemory.on') }}</a-radio>
+              <a-radio :value="false">{{ t('appStudio.abilities.longTermMemory.off') }}</a-radio>
             </a-radio-group>
           </a-form-item>
         </a-form>
@@ -610,14 +616,16 @@ onMounted(() => {
       <div class="flex items-center justify-between">
         <div class=""></div>
         <a-space :size="12">
-          <a-button class="rounded-lg" @click="handleCancelToolInfoModal">取消</a-button>
+          <a-button class="rounded-lg" @click="handleCancelToolInfoModal">
+            {{ t('common.actions.cancel') }}
+          </a-button>
           <a-button
             :loading="updateDraftAppConfigLoading"
             type="primary"
             class="rounded-lg"
             @click="handleSubmitToolInfo"
           >
-            保存
+            {{ t('common.actions.save') }}
           </a-button>
         </a-space>
       </div>
@@ -636,10 +644,12 @@ onMounted(() => {
           class="flex flex-col flex-shrink-0 bg-gray-50 w-full md:w-56 lg:w-64 h-full px-3 py-4 overflow-auto scrollbar-w-none"
         >
           <!-- 标题 -->
-          <div class="text-gray-900 font-bold text-lg mb-4">关联插件</div>
+          <div class="text-gray-900 font-bold text-lg mb-4">{{ t('appStudio.abilities.tools.addTitle') }}</div>
           <!-- 添加插件按钮 -->
           <router-link :to="{ name: 'space-tools-list', query: { create_type: 'tool' } }">
-            <a-button long type="primary" class="rounded-lg mb-5">创建自定义插件</a-button>
+            <a-button long type="primary" class="rounded-lg mb-5">
+              {{ t('appStudio.abilities.tools.createCustomPlugin') }}
+            </a-button>
           </router-link>
           <!-- 工具类别导航 -->
           <div class="flex flex-col gap-1 mb-4">
@@ -648,20 +658,20 @@ onMounted(() => {
               @click="toolsActivateType = 'api_tool'"
             >
               <icon-code />
-              自定义插件
+              {{ t('appStudio.abilities.tools.customPlugin') }}
             </div>
             <div
               :class="`rounded-lg h-8 leading-8 px-3 flex items-center gap-2 cursor-pointer hover:bg-white hover:text-blue-700 ${toolsActivateType === 'builtin_tool' ? 'text-blue-700 bg-white' : 'text-gray-700'}`"
               @click="toolsActivateType = 'builtin_tool'"
             >
               <icon-translate />
-              内置插件
+              {{ t('appStudio.abilities.tools.builtinPlugin') }}
             </div>
           </div>
           <!-- 内置工具分类 -->
           <div v-if="toolsActivateType === 'builtin_tool'" class="">
             <!-- 分类标题 -->
-            <div class="text-xs text-gray-500 mb-3">类别</div>
+            <div class="text-xs text-gray-500 mb-3">{{ t('appStudio.abilities.tools.category') }}</div>
             <!-- 分类列表 -->
             <div class="flex flex-col gap-1">
               <!-- 所有类别 -->
@@ -670,7 +680,7 @@ onMounted(() => {
                 @click="toolsActivateCategory = 'all'"
               >
                 <icon-apps />
-                全部
+                {{ t('appStudio.abilities.tools.all') }}
               </div>
               <div
                 v-for="category in categories"
@@ -679,7 +689,7 @@ onMounted(() => {
                 @click="toolsActivateCategory = category.category"
               >
                 <icon-apps />
-                {{ category.name }}
+                {{ getCategoryLabel(category.category || category.name) }}
               </div>
             </div>
           </div>
@@ -689,7 +699,11 @@ onMounted(() => {
           <!-- 标题与关闭按钮 -->
           <div class="w-full flex items-center justify-between gap-2 mb-7">
             <div class="text-lg font-bold text-gray-700">
-              {{ toolsActivateType === 'api_tool' ? '自定义插件' : '内置插件' }}
+              {{
+                toolsActivateType === 'api_tool'
+                  ? t('appStudio.abilities.tools.customPlugin')
+                  : t('appStudio.abilities.tools.builtinPlugin')
+              }}
             </div>
             <a-button size="mini" type="text" class="!text-gray-700 ml-6">
               <template #icon>
@@ -734,14 +748,18 @@ onMounted(() => {
                     <template #icon>
                       <icon-plus />
                     </template>
-                    {{ isToolSelected(builtin_tool, tool) ? '删除' : '添加' }}
+                    {{
+                      isToolSelected(builtin_tool, tool)
+                        ? t('appStudio.abilities.tools.remove')
+                        : t('appStudio.abilities.tools.add')
+                    }}
                   </a-button>
                 </div>
               </div>
             </div>
             <div v-if="computedBuiltinTools.length === 0" class="">
               <a-empty
-                description="没有可用的内置插件"
+                :description="t('appStudio.abilities.tools.noBuiltinPlugins')"
                 class="h-[400px] flex flex-col items-center justify-center"
               />
             </div>
@@ -787,14 +805,18 @@ onMounted(() => {
                       <template #icon>
                         <icon-plus />
                       </template>
-                      {{ isToolSelected(api_tool_provider, tool) ? '删除' : '添加' }}
+                      {{
+                        isToolSelected(api_tool_provider, tool)
+                          ? t('appStudio.abilities.tools.remove')
+                          : t('appStudio.abilities.tools.add')
+                      }}
                     </a-button>
                   </div>
                 </div>
               </div>
               <div v-if="api_tool_providers.length === 0" class="">
                 <a-empty
-                  description="没有可用的API插件"
+                  :description="t('appStudio.abilities.tools.noApiPlugins')"
                   class="h-[400px] flex flex-col items-center justify-center"
                 />
               </div>
@@ -808,12 +830,12 @@ onMounted(() => {
                 >
                   <a-space class="my-4">
                     <a-spin />
-                    <div class="text-gray-400">加载中</div>
+                    <div class="text-gray-400">{{ t('appStudio.list.loading') }}</div>
                   </a-space>
                 </a-col>
                 <!-- 数据加载完成 -->
                 <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" class="!text-center">
-                  <div class="text-gray-400 my-4">数据已加载完成</div>
+                  <div class="text-gray-400 my-4">{{ t('appStudio.list.loadedAll') }}</div>
                 </a-col>
               </a-row>
             </a-spin>

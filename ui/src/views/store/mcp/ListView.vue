@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import ResourceCardDescription from '@/components/ResourceCardDescription.vue'
 import CardGridSkeleton from '@/components/skeletons/CardGridSkeleton.vue'
@@ -12,7 +13,9 @@ import {
 } from '@/services/mcp'
 import type { McpCategory, McpProvider } from '@/models/mcp'
 import CreateOrUpdateMcpModal from '@/views/space/mcp/components/CreateOrUpdateMcpModal.vue'
+import { getStoreCategoryDisplayName, getStoreTypeDisplayName } from '@/utils/store-display'
 
+const { t, locale } = useI18n()
 const loading = ref(false)
 const categories = ref<McpCategory[]>([])
 const providers = ref<McpProvider[]>([])
@@ -31,16 +34,6 @@ const avatarPalettes = [
   ['#be123c', '#e11d48'],
   ['#0f766e', '#14b8a6'],
 ]
-const FALLBACK_CATEGORY_NAMES: Record<string, string> = {
-  general: '通用',
-  productivity: '效率工具',
-  coding: '编程工具',
-  content_creation: '内容创作',
-  media: '媒体音视频',
-  data_analysis: '数据分析',
-  observability: '可观测运维',
-  other: '其他',
-}
 
 const hashString = (value: string) => {
   let hash = 0
@@ -81,7 +74,16 @@ const categoryNameMap = computed(() => {
 })
 
 const getCategoryName = (category: string) => {
-  return categoryNameMap.value.get(category) || FALLBACK_CATEGORY_NAMES[category] || category || '其他'
+  const normalized = String(category || '').trim()
+  const mappedName = categoryNameMap.value.get(normalized)
+  if (locale.value === 'zh-CN' && mappedName) {
+    return mappedName
+  }
+  return getStoreCategoryDisplayName(normalized, locale.value as 'zh-CN' | 'en-US')
+}
+
+const getTypeName = (value: string) => {
+  return getStoreTypeDisplayName(value, locale.value as 'zh-CN' | 'en-US')
 }
 
 const getCategoryButtonClass = (active: boolean) =>
@@ -114,7 +116,7 @@ const loadProviders = async () => {
     })
     providers.value = res.data.list || []
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载 MCP 广场失败'))
+    Message.error(getErrorMessage(error, t('store.mcp.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -136,7 +138,7 @@ const loadProviderDetail = async (providerKey: string) => {
     const res = await getPublicMcpProvider(providerKey)
     activeProvider.value = res.data
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载 MCP 详情失败'))
+    Message.error(getErrorMessage(error, t('store.mcp.detailLoadFailed')))
     showDetailVisible.value = false
   } finally {
     detailLoading.value = false
@@ -162,7 +164,7 @@ onMounted(async () => {
             <icon-storage :size="18" />
           </a-avatar>
           <div>
-            <div class="text-lg font-medium text-gray-900">MCP广场</div>
+            <div class="text-lg font-medium text-gray-900">{{ t('store.mcp.title') }}</div>
           </div>
         </div>
         <a-button
@@ -171,7 +173,7 @@ onMounted(async () => {
           class="rounded-lg"
           @click="openCreateModal"
         >
-          创建 MCP
+          {{ t('store.mcp.createButton') }}
         </a-button>
       </div>
 
@@ -182,7 +184,7 @@ onMounted(async () => {
             :class="getCategoryButtonClass(selectedCategory === 'all')"
             @click="handleCategoryChange('all')"
           >
-            全部
+            {{ t('store.mcp.all') }}
           </a-button>
           <a-button
             v-for="item in categories"
@@ -191,13 +193,13 @@ onMounted(async () => {
             :class="getCategoryButtonClass(selectedCategory === item.id)"
             @click="handleCategoryChange(item.id)"
           >
-            {{ item.name }}
+            {{ getCategoryName(item.id || item.name) }}
           </a-button>
         </div>
 
         <a-input-search
           v-model="searchWord"
-          placeholder="搜索 MCP 名称、描述或来源"
+          :placeholder="t('store.mcp.searchPlaceholder')"
           class="w-full sm:w-[240px] bg-white rounded-lg border-gray-300"
           @search="handleSearch"
         />
@@ -233,10 +235,10 @@ onMounted(async () => {
                 <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1.5 min-w-0">
                   <div class="text-sm font-bold text-gray-900 truncate">{{ provider.label }}</div>
-                  <a-tag size="small" color="green">可绑定</a-tag>
+                  <a-tag size="small" color="green">{{ t('store.mcp.bindable') }}</a-tag>
                 </div>
                   <div class="text-[11px] text-gray-500 line-clamp-1">
-                    {{ provider.name }} · {{ provider.tool_count }} 个工具
+                  {{ t('store.mcp.providerSummary', { name: provider.name, count: provider.tool_count }) }}
                   </div>
                 </div>
               </div>
@@ -257,7 +259,7 @@ onMounted(async () => {
                   {{ (provider.creator_name || 'M')[0] }}
                 </a-avatar>
                 <div class="text-[11px] text-gray-400">
-                  {{ provider.creator_name || '公开目录' }} ·
+                  {{ provider.creator_name || t('store.mcp.publicDirectory') }} ·
                   {{ formatTimestampShort(provider.published_at || provider.created_at) }}
                 </div>
               </div>
@@ -265,7 +267,7 @@ onMounted(async () => {
           </a-col>
 
           <a-col v-if="providers.length === 0" :span="24">
-            <a-empty description="暂无 MCP" class="py-20" />
+            <a-empty :description="t('store.mcp.empty')" class="py-20" />
           </a-col>
         </a-row>
       </div>
@@ -275,7 +277,7 @@ onMounted(async () => {
       :visible="showDetailVisible"
       :width="560"
       :footer="false"
-      title="MCP 详情"
+      :title="t('store.mcp.detailTitle')"
       :drawer-style="{ background: '#F9FAFB' }"
       @cancel="showDetailVisible = false"
     >
@@ -301,10 +303,10 @@ onMounted(async () => {
             <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               <div class="text-sm font-bold text-gray-900">{{ activeProvider.label }}</div>
-              <a-tag size="small" color="green">可绑定</a-tag>
+              <a-tag size="small" color="green">{{ t('store.mcp.bindable') }}</a-tag>
             </div>
               <div class="text-[11px] text-gray-500 mt-1">
-                {{ activeProvider.creator_name || '公开目录' }} · 公开来源
+                {{ activeProvider.creator_name || t('store.mcp.publicDirectory') }} · {{ t('store.mcp.publicSource') }}
               </div>
             </div>
           </div>
@@ -317,19 +319,19 @@ onMounted(async () => {
 
           <div class="grid grid-cols-2 gap-3">
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">Transport</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('store.mcp.transport') }}</div>
               <div class="text-sm text-gray-800">{{ activeProvider.transport }}</div>
             </div>
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">工具数量</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('store.mcp.toolCountLabel') }}</div>
               <div class="text-sm text-gray-800">{{ activeProvider.tool_count }}</div>
             </div>
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">来源</div>
-              <div class="text-sm text-gray-800 break-all">公开目录</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('store.mcp.source') }}</div>
+              <div class="text-sm text-gray-800 break-all">{{ t('store.mcp.publicSource') }}</div>
             </div>
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">分类</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('store.mcp.category') }}</div>
               <a-tag size="small" color="gray">{{ getCategoryName(activeProvider.category) }}</a-tag>
             </div>
           </div>
@@ -340,8 +342,8 @@ onMounted(async () => {
 
           <div>
             <div class="flex items-center gap-2 mb-3">
-              <div class="text-sm font-semibold text-gray-800">工具列表</div>
-              <a-tag size="small">{{ activeProvider.tools.length }} 个</a-tag>
+              <div class="text-sm font-semibold text-gray-800">{{ t('store.mcp.toolsTitle') }}</div>
+              <a-tag size="small">{{ t('store.mcp.toolCount', { count: activeProvider.tools.length }) }}</a-tag>
             </div>
 
             <div v-if="activeProvider.tools.length > 0" class="flex flex-col gap-2">
@@ -352,15 +354,15 @@ onMounted(async () => {
                 :body-style="{ padding: '12px' }"
               >
                 <div class="font-semibold text-gray-900 mb-1">{{ tool.label }}</div>
-                <div class="text-xs text-gray-500">{{ tool.description || '暂无描述' }}</div>
+                <div class="text-xs text-gray-500">{{ tool.description || t('store.mcp.noDescription') }}</div>
                 <div v-if="tool.inputs.length > 0" class="mt-3">
-                  <div class="text-xs text-gray-500 mb-2">参数</div>
+                  <div class="text-xs text-gray-500 mb-2">{{ t('store.mcp.parameters') }}</div>
                   <div class="flex flex-col gap-2">
                     <div v-for="input in tool.inputs" :key="input.name" class="rounded-md bg-gray-50 p-2">
                       <div class="flex items-center gap-2 text-xs">
                         <div class="font-semibold text-gray-800">{{ input.name }}</div>
-                        <div class="text-gray-500">{{ input.type }}</div>
-                        <a-tag v-if="input.required" size="small" color="red">必填</a-tag>
+                        <div class="text-gray-500">{{ getTypeName(input.type) }}</div>
+                        <a-tag v-if="input.required" size="small" color="red">{{ t('store.mcp.required') }}</a-tag>
                       </div>
                       <div class="text-xs text-gray-500 mt-1">{{ input.description }}</div>
                     </div>
@@ -369,7 +371,7 @@ onMounted(async () => {
               </a-card>
             </div>
 
-            <a-empty v-else description="暂无可展示的工具" />
+            <a-empty v-else :description="t('store.mcp.noTools')" />
           </div>
         </div>
       </a-spin>

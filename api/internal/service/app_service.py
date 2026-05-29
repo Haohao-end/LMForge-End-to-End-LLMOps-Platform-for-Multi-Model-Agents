@@ -147,27 +147,6 @@ class AppService(BaseService):
                 config_type,
             )
 
-    def prewarm_assistant_mcp_tool_snapshots(self) -> list[dict[str, Any]]:
-        """在应用启动时预热首页助手的全局 MCP 快照。"""
-        assistant_mcp_bindings = current_app.config.get("ASSISTANT_MCP_BINDINGS", [])
-        if not isinstance(assistant_mcp_bindings, list):
-            assistant_mcp_bindings = []
-
-        assistant_mcp_tool_snapshots = current_app.config.get("ASSISTANT_MCP_TOOL_SNAPSHOTS", [])
-        if not isinstance(assistant_mcp_tool_snapshots, list):
-            assistant_mcp_tool_snapshots = []
-
-        if not assistant_mcp_bindings:
-            current_app.config["ASSISTANT_MCP_TOOL_SNAPSHOTS"] = []
-            return []
-
-        refreshed_snapshots = self.app_config_service.refresh_mcp_tool_snapshots(
-            assistant_mcp_bindings,
-            assistant_mcp_tool_snapshots,
-        )
-        current_app.config["ASSISTANT_MCP_TOOL_SNAPSHOTS"] = refreshed_snapshots
-        return refreshed_snapshots
-
     def _sync_public_app_registry_after_unpublish(self, app_id: UUID) -> None:
         """取消发布后优先执行本地索引移除，失败时再退回异步任务同步。"""
         if not self.public_agent_registry_service:
@@ -499,11 +478,7 @@ class AppService(BaseService):
     ) -> dict[str, Any]:
         """根据传递的应用id，获取指定的应用草稿配置信息"""
         app = self.get_app(app_id, account)
-        draft_app_config = call_config_loader(
-            self.app_config_service.get_draft_app_config,
-            app,
-            persist_changes=persist_changes,
-        )
+        draft_app_config = self.app_config_service.get_draft_app_config(app)
         if hasattr(self.language_model_service, "describe_runtime_capabilities"):
             draft_app_config["capabilities"] = self.language_model_service.describe_runtime_capabilities(
                 draft_app_config.get("model_config", {}),
@@ -579,14 +554,6 @@ class AppService(BaseService):
             mcp_bindings=draft_app_config.get("mcp_bindings", []),
             mcp_tool_snapshots=draft_app_config.get("mcp_tool_snapshots", []),
             skills=[{"skill_id": skill["skill_id"]} for skill in draft_app_config.get("skills", [])],
-            agent_bindings=[
-                {
-                    "app_id": binding.get("app_id", ""),
-                    "invoke_mode": binding.get("invoke_mode", "tool"),
-                }
-                for binding in draft_app_config.get("agent_bindings", [])
-                if isinstance(binding, dict) and str(binding.get("app_id", "")).strip()
-            ],
             workflows=[workflow["id"] for workflow in draft_app_config["workflows"]],
             retrieval_config=draft_app_config["retrieval_config"],
             long_term_memory=draft_app_config["long_term_memory"],
@@ -870,17 +837,15 @@ class AppService(BaseService):
             app_config_service=self.app_config_service,
             retrieval_service=self.retrieval_service,
             skill_service=self._get_skill_service(),
-            app_service=self,
             account=account,
             app_id=app_id,
             draft_app_config=draft_app_config,
             flask_app=flask_app,
-            runtime_context=runtime_context,
         )
 
     @staticmethod
     def _build_skill_prompt_appendix(skill_bindings: list[dict[str, Any]] | None) -> str:
-        """把已绑定 Skill 的名称和描述拼成一段额外提示词。"""
+        """把已绑定 Skill 的正文拼成一段额外提示词。"""
         if not isinstance(skill_bindings, list) or not skill_bindings:
             return ""
 
@@ -890,16 +855,16 @@ class AppService(BaseService):
                 continue
 
             title = str(binding.get("label") or binding.get("name") or binding.get("source_key") or "Skill").strip()
-            description = str(binding.get("description") or "").strip()
-            if not description:
+            readme = str(binding.get("readme") or binding.get("description") or "").strip()
+            if not readme:
                 continue
 
-            sections.append(f"- {title}：{description}")
+            sections.append(f"### {title}\n{readme}")
 
         if not sections:
             return ""
 
-        return "## 已绑定 Skills\n\n" + "\n".join(sections)
+        return "## 已绑定 Skills\n\n" + "\n\n---\n\n".join(sections)
 
     @staticmethod
     def _build_mcp_prompt_appendix(mcp_bindings: list[dict[str, Any]] | None) -> str:
@@ -1014,11 +979,9 @@ class AppService(BaseService):
         retrieval_service: RetrievalService,
         skill_service: SkillService | None = None,
         account: Account,
-        app_service: "AppService | None" = None,
         app_id: UUID | None = None,
         draft_app_config: dict[str, Any],
         flask_app: Flask | None = None,
-        runtime_context: dict[str, Any] | None = None,
     ) -> list[Any]:
         """根据应用配置构建运行时工具列表，供多入口复用。"""
         tools = app_config_service.get_langchain_tools_by_tools_config(draft_app_config.get("tools", []))
@@ -1037,33 +1000,6 @@ class AppService(BaseService):
                     draft_app_config.get("skills", []),
                     runtime_context={
                         "app_id": str(app_id),
-                        "account_id": str(account.id),
-                    },
-                )
-            )
-            prompt_loaders = getattr(skill_service, "get_langchain_prompt_loaders_by_skill_bindings", None)
-            if callable(prompt_loaders):
-                tools.extend(
-                    prompt_loaders(
-                        draft_app_config.get("skills", []),
-                        runtime_context={
-                            "app_id": str(app_id),
-                            "account_id": str(account.id),
-                        },
-                    )
-                )
-
-        if app_service is not None and app_id is not None:
-            tools.extend(
-                app_service.get_langchain_tools_by_agent_bindings(
-                    draft_app_config.get("agent_bindings", []),
-                    account=account,
-                    app_id=app_id,
-                    flask_app=flask_app,
-                    runtime_context=runtime_context
-                    or {
-                        "root_app_id": str(app_id),
-                        "call_stack": [str(app_id)],
                         "account_id": str(account.id),
                     },
                 )
@@ -1390,7 +1326,6 @@ class AppService(BaseService):
         mcp_snapshot_prompt_appendix = cls._build_mcp_snapshot_prompt_appendix(
             draft_app_config.get("mcp_tool_snapshots", [])
         )
-        agent_prompt_appendix = cls._build_agent_binding_prompt_appendix(draft_app_config.get("agent_bindings", []))
         runtime_mcp_tools_prompt_appendix = cls._build_runtime_mcp_tools_prompt_appendix(tools)
         preset_prompt = draft_app_config["preset_prompt"]
         prompt_parts = [preset_prompt.strip()]
@@ -1400,8 +1335,6 @@ class AppService(BaseService):
             prompt_parts.append(mcp_prompt_appendix.strip())
         if mcp_snapshot_prompt_appendix:
             prompt_parts.append(mcp_snapshot_prompt_appendix.strip())
-        if agent_prompt_appendix:
-            prompt_parts.append(agent_prompt_appendix.strip())
         if runtime_mcp_tools_prompt_appendix:
             prompt_parts.append(runtime_mcp_tools_prompt_appendix.strip())
         preset_prompt = "\n\n".join(part for part in prompt_parts if part)
@@ -1845,7 +1778,7 @@ class AppService(BaseService):
         # 1.校验上传的草稿配置中对应的字段，至少拥有一个可以更新的配置
         acceptable_fields = [
             "model_config", "dialog_round", "preset_prompt",
-            "tools", "mcp_bindings", "mcp_tool_snapshots", "skills", "agent_bindings", "workflows", "datasets", "retrieval_config",
+            "tools", "mcp_bindings", "mcp_tool_snapshots", "skills", "workflows", "datasets", "retrieval_config",
             "long_term_memory", "opening_statement", "opening_questions",
             "speech_to_text", "text_to_speech", "suggested_after_answer", "review_config",
         ]

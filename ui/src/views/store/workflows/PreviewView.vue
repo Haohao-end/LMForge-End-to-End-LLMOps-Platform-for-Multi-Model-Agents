@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { markRaw, onMounted, ref, nextTick, provide, defineAsyncComponent, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ConnectionMode, Panel, useVueFlow, VueFlow, type Edge, type Node } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -43,6 +44,7 @@ const CodeNodeInfo = defineAsyncComponent(
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const workflowId = ref<string>(String(route.params?.workflow_id ?? ''))
 const isPreviewMode = ref(true)
 const loading = ref(false)
@@ -175,7 +177,7 @@ const loadWorkflow = async () => {
     accountAvatarIndex.value = 0
     accountAvatarSrc.value = accountAvatarCandidates.value[0] || ''
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载工作流失败'))
+    Message.error(getErrorMessage(error, t('store.workflows.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -253,7 +255,7 @@ const loadDraftGraph = async () => {
       })
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载工作流图失败'))
+    Message.error(getErrorMessage(error, t('store.workflows.loadGraphFailed')))
   }
 }
 
@@ -341,7 +343,7 @@ onMounted(async () => {
             <a-skeleton-line v-if="loading" :widths="[100]" />
             <div v-else-if="workflow" class="flex items-center gap-2">
               <div class="text-gray-700 font-bold">{{ workflow.name }}</div>
-              <a-tag color="orange" size="small">预览模式</a-tag>
+              <a-tag color="orange" size="small">{{ t('store.workflows.previewMode') }}</a-tag>
             </div>
             <div v-if="loading" class="flex items-center gap-2">
               <a-skeleton-line :widths="[60]" :line-height="18" />
@@ -367,7 +369,7 @@ onMounted(async () => {
                 class="rounded h-[18px] leading-[18px] bg-green-100 text-green-700"
               >
                 <icon-check-circle />
-                已调试通过
+                {{ t('store.workflows.debuggedPassed') }}
               </a-tag>
             </div>
           </div>
@@ -383,7 +385,7 @@ onMounted(async () => {
           <template #icon>
             <icon-plus />
           </template>
-          添加到我的个人空间
+          {{ t('store.workflows.addToMySpace') }}
         </a-button>
       </div>
     </div>
@@ -418,7 +420,7 @@ onMounted(async () => {
               </template>
               <!-- 视口大小 -->
               <div class="flex items-center gap-3">
-                  <a-dropdown
+                <a-dropdown
                   trigger="hover"
                   @select="
                     (value: string | number) => {

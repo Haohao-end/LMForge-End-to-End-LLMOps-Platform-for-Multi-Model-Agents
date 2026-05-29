@@ -98,7 +98,7 @@ describe('SkillsAbilityItem', () => {
     expect(wrapper.text()).toContain('代码工坊')
     expect(wrapper.text()).toContain('code_workbench')
     expect(wrapper.text()).toContain('3 个工具')
-    expect(wrapper.text()).toContain('scf')
+    expect(wrapper.text()).toContain('SCF')
     expect(wrapper.text()).toContain('面向代码分析、补丁生成、文件输出和自动化脚本执行的技能包。')
 
     await wrapper.setProps({

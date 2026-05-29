@@ -4,6 +4,7 @@ import { useUpdateDraftAppConfig } from '@/hooks/use-app'
 import { useGetDatasetsWithPage } from '@/hooks/use-dataset'
 import { cloneDeep, isEqual } from 'lodash'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 type DatasetSelection = {
   id: string
   name: string
@@ -18,6 +19,7 @@ type RetrievalConfigForm = {
 }
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
   app_id: { type: String, default: '', required: true },
   retrieval_config: {
@@ -55,6 +57,12 @@ const originRetrievalConfigForm = ref<RetrievalConfigForm>({
   score: 0,
 })
 const isRetrievalConfigInit = ref(false)
+
+const getRetrievalStrategyLabel = (strategy: string) => {
+  if (strategy === 'semantic') return t('appStudio.abilities.datasets.retrievalStrategies.semantic')
+  if (strategy === 'full_text') return t('appStudio.abilities.datasets.retrievalStrategies.fullText')
+  return t('appStudio.abilities.datasets.retrievalStrategies.hybrid')
+}
 
 // 2.定义滚动数据分页处理器
 const handleScroll = async (event: UIEvent) => {
@@ -111,7 +119,7 @@ const handleSelectDataset = (idx: number) => {
   } else {
     // 7.3 检测已关联的知识库数量
     if (activateDatasets.value.length >= 5) {
-      Message.warning('关联知识库已超过5个，无法继续关联')
+      Message.warning(t('appStudio.abilities.datasets.maxReached'))
       return
     }
     // 7.4 添加数据到激活知识库列表
@@ -235,7 +243,7 @@ onMounted(() => {
   <div class="">
     <a-collapse-item key="datasets" class="app-ability-item">
       <template #header>
-        <div class="text-gray-700 font-bold">知识库</div>
+        <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.datasets.title') }}</div>
       </template>
       <template #extra>
         <a-space>
@@ -247,13 +255,7 @@ onMounted(() => {
             <template #icon>
               <icon-language />
             </template>
-            <div v-if="retrieval_config?.retrieval_strategy === 'semantic'" class="">
-              相似性检索
-            </div>
-            <div v-else-if="retrieval_config?.retrieval_strategy === 'full_text'" class="">
-              全文检索
-            </div>
-            <div v-else class="">混合检索</div>
+            <div class="">{{ getRetrievalStrategyLabel(retrieval_config?.retrieval_strategy || 'hybrid') }}</div>
           </a-button>
           <a-button
             size="mini"
@@ -321,7 +323,7 @@ onMounted(() => {
         </div>
       </div>
       <div v-else class="text-xs text-gray-500 leading-[22px]">
-        引用文本类型的数据，实现知识问答，应用最多支持关联 5 个知识库。
+        {{ t('appStudio.abilities.datasets.empty') }}
       </div>
     </a-collapse-item>
     <!-- 知识库模态窗 -->
@@ -336,7 +338,9 @@ onMounted(() => {
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between mb-6">
-        <div class="text-lg font-bold text-gray-700">选择引用知识库</div>
+        <div class="text-lg font-bold text-gray-700">
+          {{ t('appStudio.abilities.datasets.selectTitle') }}
+        </div>
         <a-button
           type="text"
           class="!text-gray-700"
@@ -375,7 +379,7 @@ onMounted(() => {
             <!-- 无数据UI状态 -->
             <a-empty
               v-if="apiDatasets.length === 0"
-              description="没有可用的知识库"
+              :description="t('appStudio.abilities.datasets.noAvailable')"
               class="h-[400px] flex flex-col items-center justify-center"
             />
           </div>
@@ -389,12 +393,12 @@ onMounted(() => {
             >
               <a-space class="my-4">
                 <a-spin />
-                <div class="text-gray-400">加载中</div>
+                <div class="text-gray-400">{{ t('appStudio.list.loading') }}</div>
               </a-space>
             </a-col>
             <!-- 数据加载完成 -->
             <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" class="!text-center">
-              <div class="text-gray-400 my-4">数据已加载完成</div>
+              <div class="text-gray-400 my-4">{{ t('appStudio.list.loadedAll') }}</div>
             </a-col>
           </a-row>
         </a-spin>
@@ -402,17 +406,21 @@ onMounted(() => {
       <!-- 底部选中知识库及按钮 -->
       <div class="flex items-center justify-between">
         <!-- 左侧提示文字 -->
-        <div class="">{{ activateDatasets.length }} 个知识库被选中</div>
+        <div class="">
+          {{ t('appStudio.abilities.datasets.selectedCount', { count: activateDatasets.length }) }}
+        </div>
         <!-- 按钮组 -->
         <a-space :size="12">
-          <a-button class="rounded-lg" @click="handleCancelDatasetsModal">取消</a-button>
+          <a-button class="rounded-lg" @click="handleCancelDatasetsModal">
+            {{ t('common.actions.cancel') }}
+          </a-button>
           <a-button
             :loading="updateDraftAppConfigLoading"
             type="primary"
             class="rounded-lg"
             @click="handleSubmitDatasets"
           >
-            添加
+            {{ t('appStudio.abilities.tools.add') }}
           </a-button>
         </a-space>
       </div>
@@ -427,7 +435,9 @@ onMounted(() => {
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
-        <div class="text-lg font-bold text-gray-700">检索设置</div>
+        <div class="text-lg font-bold text-gray-700">
+          {{ t('appStudio.abilities.datasets.retrievalTitle') }}
+        </div>
         <a-button
           type="text"
           class="!text-gray-700"
@@ -441,18 +451,22 @@ onMounted(() => {
       </div>
       <!-- 中间表单内容 -->
       <a-form :model="retrievalConfigForm" @submit="handleSubmitRetrievalConfig" class="pt-6">
-        <a-form-item field="retrieval_strategy" label="检索策略" label-align="left">
+        <a-form-item
+          field="retrieval_strategy"
+          :label="t('appStudio.abilities.datasets.retrievalStrategy')"
+          label-align="left"
+        >
           <a-radio-group
             v-model:model-value="retrievalConfigForm.retrieval_strategy"
             default-value="semantic"
             :options="[
-              { label: '混合策略', value: 'hybrid' },
-              { label: '全文检索', value: 'full_text' },
-              { label: '相似性检索', value: 'semantic' },
+              { label: t('appStudio.abilities.datasets.retrievalStrategies.hybrid'), value: 'hybrid' },
+              { label: t('appStudio.abilities.datasets.retrievalStrategies.fullText'), value: 'full_text' },
+              { label: t('appStudio.abilities.datasets.retrievalStrategies.semantic'), value: 'semantic' },
             ]"
           />
         </a-form-item>
-        <a-form-item field="k" label="最大召回数量">
+        <a-form-item field="k" :label="t('appStudio.abilities.datasets.maxRecall')">
           <div class="flex items-center gap-4 w-full pl-3">
             <a-slider v-model:model-value="retrievalConfigForm.k" :step="1" :min="1" :max="10" />
             <a-input-number
@@ -462,7 +476,7 @@ onMounted(() => {
             />
           </div>
         </a-form-item>
-        <a-form-item field="score" label="最小匹配度">
+        <a-form-item field="score" :label="t('appStudio.abilities.datasets.minScore')">
           <div class="flex items-center gap-4 w-full pl-3">
             <a-slider
               v-model:model-value="retrievalConfigForm.score"
@@ -485,14 +499,16 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <div class=""></div>
           <a-space :size="16">
-            <a-button class="rounded-lg" @click="handleCancelRetrievalConfigModal">取消</a-button>
+            <a-button class="rounded-lg" @click="handleCancelRetrievalConfigModal">
+              {{ t('common.actions.cancel') }}
+            </a-button>
             <a-button
               :loading="updateDraftAppConfigLoading"
               type="primary"
               html-type="submit"
               class="rounded-lg"
             >
-              保存
+              {{ t('common.actions.save') }}
             </a-button>
           </a-space>
         </div>

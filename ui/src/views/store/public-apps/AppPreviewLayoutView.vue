@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { getPublicAppDetail, forkPublicApp, type PublicApp } from '@/services/public-app'
@@ -8,6 +9,7 @@ import { formatTimestampShort } from '@/utils/time-formatter'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const loading = ref(false)
 const forkLoading = ref(false)
 const normalizeIconUrl = (icon: string = '') => {
@@ -94,7 +96,7 @@ const loadApp = async () => {
     creatorAvatarIndex.value = 0
     creatorAvatarSrc.value = creatorAvatarCandidates.value[0] || ''
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载应用失败'))
+    Message.error(getErrorMessage(error, t('publicApps.preview.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -102,14 +104,14 @@ const loadApp = async () => {
 
 // Fork 到个人空间
 const handleForkToMySpace = async () => {
-  try {
-    forkLoading.value = true
-    const res = await forkPublicApp(String(route.params?.app_id))
-    Message.success(`已添加到个人空间: ${res.data.name}`)
-    router.push({ name: 'space-apps-detail', params: { app_id: res.data.id } })
-  } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '操作失败'))
-  } finally {
+  try {
+    forkLoading.value = true
+    const res = await forkPublicApp(String(route.params?.app_id))
+    Message.success(t('publicApps.preview.addToSpaceSuccess', { name: res.data.name }))
+    router.push({ name: 'space-apps-detail', params: { app_id: res.data.id } })
+  } catch (error: unknown) {
+    Message.error(getErrorMessage(error, t('publicApps.preview.actionFailed')))
+  } finally {
     forkLoading.value = false
   }
 }
@@ -170,10 +172,10 @@ onMounted(async () => await loadApp())
           <!-- 应用信息 -->
           <div class="flex flex-col justify-between h-[40px]">
             <a-skeleton-line v-if="loading" :widths="[100]" />
-            <div v-else class="flex items-center gap-2">
-              <div class="text-gray-700 font-bold">{{ app.name }}</div>
-              <a-tag color="orange" size="small">预览模式</a-tag>
-            </div>
+            <div v-else class="flex items-center gap-2">
+              <div class="text-gray-700 font-bold">{{ app.name }}</div>
+              <a-tag color="orange" size="small">{{ t('publicApps.preview.previewMode') }}</a-tag>
+            </div>
             <div v-if="loading" class="flex items-center gap-2">
               <a-skeleton-line :widths="[60]" :line-height="18" />
               <a-skeleton-line :widths="[60]" :line-height="18" />
@@ -194,9 +196,9 @@ onMounted(async () => await loadApp())
                 {{ app.creator_name }}
               </div>
               <a-tag size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
-                发布于 {{ formatTimestampShort(app.published_at) }}
+                {{ t('publicApps.preview.publishedAt', { time: formatTimestampShort(app.published_at) }) }}
               </a-tag>
-            </div>
+            </div>
           </div>
         </div>
       </div>
@@ -206,12 +208,12 @@ onMounted(async () => await loadApp())
           :loading="forkLoading"
           type="primary"
           @click="handleForkToMySpace"
-        >
-          <template #icon>
-            <icon-plus />
-          </template>
-          添加到我的个人空间
-        </a-button>
+        >
+          <template #icon>
+            <icon-plus />
+          </template>
+          {{ t('publicApps.preview.addToMySpace') }}
+        </a-button>
       </div>
     </div>
     <!-- 底部内容区 -->

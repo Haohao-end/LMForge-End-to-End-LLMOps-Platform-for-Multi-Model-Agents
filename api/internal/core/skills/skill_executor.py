@@ -5,8 +5,13 @@ import logging
 import os
 import shlex
 import textwrap
+import tempfile
+import importlib.util
+import contextlib
+import io
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -207,10 +212,9 @@ class SkillScfClient:
 
 @dataclass(slots=True)
 class SkillSandboxExecutor:
-    """技能包的沙箱执行器。
+    """技能包的本地沙箱执行器。
 
-    当 SCF 执行失败时，优先使用远端沙箱在隔离环境中直接加载 `skill.py` 并执行入口函数。
-    不再回退到当前 API 进程本地执行，以避免技能代码进入主进程地址空间。
+    当 SCF 执行失败时，使用沙箱在隔离环境中直接加载 `skill.py` 并执行入口函数。
     """
 
     timeout_seconds: int = 60
@@ -222,7 +226,7 @@ class SkillSandboxExecutor:
 
     def execute_skill(self, payload: dict[str, Any]) -> Any:
         if not self.is_configured:
-            raise FailException("技能沙箱执行失败：E2B_API_KEY 或 E2B_DOMAIN 未配置")
+            return self._execute_skill_locally(payload)
 
         bundle = payload.get("bundle")
         if not isinstance(bundle, dict) or not bundle:
@@ -287,15 +291,62 @@ class SkillSandboxExecutor:
                 return result.get("result")
         except FailException:
             raise
-        except Exception as exc:
-            logger.exception(
-                "技能工具 sandbox remote failed: execution_id=%s entrypoint=%s source_key=%s error=%s",
+        except Exception:
+            return self._execute_skill_locally(payload)
+
+    def _execute_skill_locally(self, payload: dict[str, Any]) -> Any:
+        bundle = payload.get("bundle")
+        if not isinstance(bundle, dict) or not bundle:
+            raise FailException("技能本地执行失败：缺少 bundle 内容")
+
+        entrypoint = _normalize_payload_text(payload.get("entrypoint") or payload.get("tool_name"))
+        if not entrypoint:
+            raise FailException("技能本地执行失败：缺少入口函数")
+        source_key = _normalize_payload_text(payload.get("source_key") or "skill")
+
+        with tempfile.TemporaryDirectory(prefix="skill_local_") as tmp_dir:
+            base_dir = Path(tmp_dir)
+            for relative_path, content in bundle.items():
+                normalized_path = str(relative_path or "").strip().lstrip("/")
+                if not normalized_path:
+                    continue
+                file_path = base_dir / normalized_path
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(str(content), encoding="utf-8")
+
+            module_path = base_dir / "skill.py"
+            if not module_path.exists():
+                raise FailException("技能本地执行失败：bundle 中缺少 skill.py")
+
+            spec = importlib.util.spec_from_file_location("skill_module", module_path)
+            if spec is None or spec.loader is None:
+                raise FailException("技能本地执行失败：无法加载 skill.py")
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            func = getattr(module, entrypoint, None)
+            if not callable(func):
+                raise FailException(f"技能本地执行失败：函数 {entrypoint!r} 不存在或不可调用")
+
+            call_input = payload.get("input") or {}
+            stdout_buffer = io.StringIO()
+            stderr_buffer = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+                    result = func(call_input)
+            except Exception as exc:
+                raise FailException(f"技能本地执行失败: {exc}") from exc
+
+            if stderr_buffer.getvalue():
+                logger.info("技能本地执行 stderr: %s", stderr_buffer.getvalue())
+            logger.info(
+                "技能工具 sandbox local success: execution_id=%s entrypoint=%s source_key=%s",
                 payload.get("execution_id"),
                 entrypoint,
                 source_key,
-                exc,
             )
-            raise FailException(f"技能沙箱执行失败: {exc}") from exc
+            return result
 
     def _build_runner_script(self) -> str:
         return textwrap.dedent(

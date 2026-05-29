@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { type FileItem, type Form, Message } from '@arco-design/web-vue'
 import { useCreateDocuments, useGetDocumentsStatus } from '@/hooks/use-dataset'
@@ -43,6 +44,7 @@ let timer: ReturnType<typeof setInterval> | null = null
 let batch = ''
 let fetchCount = 0
 const route = useRoute()
+const { t } = useI18n()
 const {
   loading: createDocumentsLoading,
   create_documents_result,
@@ -76,7 +78,7 @@ const nextStep = async () => {
   if (currentStep.value === 1) {
     // 2.2 检查是否已经上传了文件，如果没上传则不允许点击下一步
     if (createDocumentsForm.value.file_list.length === 0) {
-      Message.error('请上传需要添加到知识库的文件')
+      Message.error(t('space.datasets.documents.create.uploadRequired'))
       return
     }
 
@@ -85,7 +87,7 @@ const nextStep = async () => {
       (fileItem) => getUploadFileId(fileItem) !== '',
     )
     if (!isUploaded) {
-      Message.warning('文件正在上传中，请稍等')
+      Message.warning(t('space.datasets.documents.create.uploadingWarning'))
       return
     }
 
@@ -204,14 +206,14 @@ onUnmounted(() => stopTimer())
           </template>
         </a-button>
       </router-link>
-      <div class="text-lg font-bold text-gray-700">添加文件</div>
+      <div class="text-lg font-bold text-gray-700">{{ t('space.datasets.documents.create.title') }}</div>
     </div>
     <!-- 步骤条 -->
     <div class="w-[520px] mx-auto">
       <a-steps :current="currentStep">
-        <a-step>上传</a-step>
-        <a-step>分段设置</a-step>
-        <a-step>数据处理</a-step>
+        <a-step>{{ t('space.datasets.documents.create.steps.upload') }}</a-step>
+        <a-step>{{ t('space.datasets.documents.create.steps.segment') }}</a-step>
+        <a-step>{{ t('space.datasets.documents.create.steps.process') }}</a-step>
       </a-steps>
     </div>
     <!-- 步骤条页面 -->
@@ -225,7 +227,7 @@ onUnmounted(() => stopTimer())
           accept=".doc,.docx,.pdf,.txt,.md,.markdown"
           :limit="10"
           multiple
-          tip="支持PDF、TXT、DOC、DOCX、MD，最多可上传10个文件，每个文件的大小不超过10MB"
+          :tip="t('space.datasets.documents.create.uploadTip')"
           :custom-request="
             (option: UploadCustomRequestOption) => {
               // 1.提取选项中的文件选项以及成功回调
@@ -234,7 +236,7 @@ onUnmounted(() => stopTimer())
               const uploadTask = async () => {
                 try {
                   if (!fileItem.file) {
-                    onError(new Error('无效文件'))
+                    onError(new Error(t('space.datasets.documents.create.invalidFile')))
                     return
                   }
                   console.log('[Upload] Starting upload for file:', fileItem.file.name)
@@ -245,14 +247,14 @@ onUnmounted(() => stopTimer())
                   const fileId = response?.data?.id
                   if (!fileId) {
                     console.error('[Upload] No file ID in response:', response)
-                    onError(new Error('上传失败: 未获得文件ID'))
+                    onError(new Error(t('space.datasets.documents.create.uploadMissingId')))
                     return
                   }
                   console.log('[Upload] File ID:', fileId)
                   onSuccess({ id: fileId })
                 } catch (error: unknown) {
                   console.error('[Upload] Error:', error)
-                  onError(error instanceof Error ? error : new Error('上传失败'))
+                  onError(error instanceof Error ? error : new Error(t('space.datasets.documents.create.uploadFailed')))
                 }
               }
 
@@ -271,16 +273,16 @@ onUnmounted(() => stopTimer())
           :class="`px-5 py-4 bg-white rounded-lg border cursor-pointer mb-4 hover:border-blue-700 ${createDocumentsForm.process_type === 'automatic' ? 'border-blue-700' : ''}`"
           @click="createDocumentsForm.process_type = 'automatic'"
         >
-          <div class="font-bold text-gray-700 mb-2">自动分段与清洗</div>
-          <div class="text-gray-500">自动分段与预处理规则</div>
+          <div class="font-bold text-gray-700 mb-2">{{ t('space.datasets.documents.create.automaticTitle') }}</div>
+          <div class="text-gray-500">{{ t('space.datasets.documents.create.automaticDescription') }}</div>
         </div>
         <!-- 自定义 -->
         <div
           :class="`px-5 py-4 bg-white rounded-lg border cursor-pointer hover:border-blue-700 ${createDocumentsForm.process_type === 'custom' ? 'border-blue-700' : ''}`"
           @click="createDocumentsForm.process_type = 'custom'"
         >
-          <div class="font-bold text-gray-700 mb-2">自定义</div>
-          <div class="text-gray-500">自定义分段规则、分段长度与预处理规则</div>
+          <div class="font-bold text-gray-700 mb-2">{{ t('space.datasets.documents.create.customTitle') }}</div>
+          <div class="text-gray-500">{{ t('space.datasets.documents.create.customDescription') }}</div>
           <!-- 自定义表单 -->
           <div v-if="createDocumentsForm.process_type === 'custom'" class="">
             <a-divider />
@@ -288,22 +290,22 @@ onUnmounted(() => stopTimer())
             <a-form :model="createDocumentsForm.rule" ref="customRuleFormRef" layout="vertical">
               <a-form-item
                 field="separators"
-                label="分段标识符"
+                :label="t('space.datasets.documents.create.separatorLabel')"
                 required
                 asterisk-position="end"
-                :rules="[{ required: true, message: '分段标识符不能为空' }]"
+                :rules="[{ required: true, message: t('space.datasets.documents.create.separatorRequired') }]"
               >
                 <a-input-tag
                   v-model:model-value="createDocumentsForm.rule.separators"
-                  placeholder="请输入分段标识符，按下Enter结束"
+                  :placeholder="t('space.datasets.documents.create.separatorPlaceholder')"
                 />
               </a-form-item>
               <a-form-item
                 field="chunk_size"
-                label="分段最大长度"
+                :label="t('space.datasets.documents.create.chunkSizeLabel')"
                 required
                 asterisk-position="end"
-                :rules="[{ required: true, message: '分段最大长度不能为空' }]"
+                :rules="[{ required: true, message: t('space.datasets.documents.create.chunkSizeRequired') }]"
               >
                 <a-input-number
                   v-model:model-value="createDocumentsForm.rule.chunk_size"
@@ -311,15 +313,15 @@ onUnmounted(() => stopTimer())
                   :max="1000"
                   :step="1"
                   :default-value="500"
-                  placeholder="请输入100-1000的数字"
+                  :placeholder="t('space.datasets.documents.create.chunkSizePlaceholder')"
                 />
               </a-form-item>
               <a-form-item
                 field="chunk_overlap"
-                label="块重叠数"
+                :label="t('space.datasets.documents.create.chunkOverlapLabel')"
                 required
                 asterisk-position="end"
-                :rules="[{ required: true, message: '块重叠大小不能为空' }]"
+                :rules="[{ required: true, message: t('space.datasets.documents.create.chunkOverlapRequired') }]"
               >
                 <a-input-number
                   v-model:model-value="createDocumentsForm.rule.chunk_overlap"
@@ -327,18 +329,18 @@ onUnmounted(() => stopTimer())
                   :max="500"
                   :step="1"
                   :default-value="50"
-                  placeholder="请输入0-500的数字"
+                  :placeholder="t('space.datasets.documents.create.chunkOverlapPlaceholder')"
                 />
               </a-form-item>
-              <a-form-item field="pre_process_rules" label="文本预处理规则">
+              <a-form-item field="pre_process_rules" :label="t('space.datasets.documents.create.preProcessLabel')">
                 <a-checkbox-group
                   v-model:model-value="createDocumentsForm.rule.pre_process_rules"
                   direction="vertical"
                 >
                   <a-checkbox value="remove_extra_space">
-                    替换掉连续的空格、换行符和制表符
+                    {{ t('space.datasets.documents.create.preProcessRule1') }}
                   </a-checkbox>
-                  <a-checkbox value="remove_url_and_email">删除所有 URL 和电子邮件</a-checkbox>
+                  <a-checkbox value="remove_url_and_email">{{ t('space.datasets.documents.create.preProcessRule2') }}</a-checkbox>
                 </a-checkbox-group>
               </a-form-item>
             </a-form>
@@ -348,7 +350,7 @@ onUnmounted(() => stopTimer())
       <!-- 数据处理页面 -->
       <div v-else class="">
         <!-- 数据处理状态提示 -->
-        <div class="text-gray-900 mb-4 text-base">服务器正在处理中</div>
+        <div class="text-gray-900 mb-4 text-base">{{ t('space.datasets.documents.create.processingTitle') }}</div>
         <!-- 处理中的文档列表 -->
         <div class="flex flex-col gap-2">
           <div
@@ -368,8 +370,8 @@ onUnmounted(() => stopTimer())
             </div>
             <!-- 处理的百分比 -->
             <div v-if="document.segment_count === 0" class="text-gray-500">0.00%</div>
-            <div v-else-if="document.status === 'error'" class="">处理出错</div>
-            <div v-else-if="document.status === 'completed'" class="">处理完成</div>
+            <div v-else-if="document.status === 'error'" class="">{{ t('space.datasets.documents.create.processingError') }}</div>
+            <div v-else-if="document.status === 'completed'" class="">{{ t('space.datasets.documents.create.processingCompleted') }}</div>
             <div v-else class="text-gray-500">
               {{ ((document.completed_segment_count / document.segment_count) * 100).toFixed(2) }}%
             </div>
@@ -390,7 +392,7 @@ onUnmounted(() => stopTimer())
             }
           "
         >
-          上一步
+          {{ t('space.datasets.documents.create.previous') }}
         </a-button>
         <a-button
           :loading="createDocumentsLoading"
@@ -399,18 +401,18 @@ onUnmounted(() => stopTimer())
           class="rounded-lg"
           @click="nextStep"
         >
-          下一步
+          {{ t('space.datasets.documents.create.next') }}
         </a-button>
         <!-- 数据处理页面显示的内容 -->
         <div v-if="currentStep === 3" class="flex items-center gap-2">
-          <div class="text-gray-500">点击确认不影响数据处理，处理完毕后可进行引用</div>
+          <div class="text-gray-500">{{ t('space.datasets.documents.create.processingHint') }}</div>
           <router-link
             :to="{
               name: 'space-datasets-documents-list',
               params: { dataset_id: route.params?.dataset_id as string },
             }"
           >
-            <a-button type="primary" class="rounded-lg">确定</a-button>
+            <a-button type="primary" class="rounded-lg">{{ t('space.datasets.documents.create.confirm') }}</a-button>
           </router-link>
         </div>
       </div>

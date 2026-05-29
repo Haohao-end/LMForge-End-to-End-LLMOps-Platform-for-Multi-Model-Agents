@@ -1,28 +1,30 @@
 <script setup lang="ts">
 import { type PropType, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import { useOptimizePrompt } from '@/hooks/use-ai'
 
 const props = defineProps({
-  buttonLabel: { type: String, default: '优化' },
+  buttonLabel: { type: String, default: '' },
   buttonClass: { type: String, default: 'rounded-lg px-2' },
   buttonSize: {
     type: String as PropType<'mini' | 'small' | 'medium' | 'large'>,
     default: 'mini',
   },
-  applyButtonText: { type: String, default: '替换' },
-  inputPlaceholder: { type: String, default: '你希望如何编写或优化提示词' },
+  applyButtonText: { type: String, default: '' },
+  inputPlaceholder: { type: String, default: '' },
 })
 const emits = defineEmits<{
   apply: [prompt: string]
 }>()
+const { t } = useI18n()
 const popupVisible = ref(false)
 const originPrompt = ref('')
 const { loading, optimize_prompt, handleOptimizePrompt } = useOptimizePrompt()
 
 const handleSubmit = async () => {
   if (originPrompt.value.trim() === '') {
-    Message.warning('原始prompt不能为空')
+    Message.warning(t('chat.promptOptimize.emptyOrigin'))
     return
   }
 
@@ -31,7 +33,7 @@ const handleSubmit = async () => {
 
 const handleApply = () => {
   if (optimize_prompt.value.trim() === '') {
-    Message.warning('优化prompt为空，请重新生成')
+    Message.warning(t('chat.promptOptimize.emptyOptimized'))
     return
   }
 
@@ -47,11 +49,11 @@ const handleApply = () => {
     position="bl"
     :popup-translate="[0, 8]"
   >
-    <a-button :size="props.buttonSize" :class="props.buttonClass">
-      <template #icon>
-        <icon-sync />
-      </template>
-      {{ props.buttonLabel }}
+      <a-button :size="props.buttonSize" :class="props.buttonClass">
+        <template #icon>
+          <icon-sync />
+        </template>
+      {{ props.buttonLabel || t('chat.promptOptimize.button') }}
     </a-button>
     <template #content>
       <a-card class="rounded-lg w-[422px]">
@@ -67,10 +69,10 @@ const handleApply = () => {
                 class="rounded-lg"
                 @click="handleApply"
               >
-                {{ props.applyButtonText }}
+                {{ props.applyButtonText || t('chat.promptOptimize.apply') }}
               </a-button>
               <a-button size="small" class="rounded-lg" @click="popupVisible = false">
-                退出
+                {{ t('chat.promptOptimize.close') }}
               </a-button>
             </a-space>
           </div>
@@ -79,7 +81,7 @@ const handleApply = () => {
               v-model="originPrompt"
               type="text"
               class="flex-1 outline-0"
-              :placeholder="props.inputPlaceholder"
+              :placeholder="props.inputPlaceholder || t('chat.promptOptimize.placeholder')"
             />
             <a-button :loading="loading" type="text" shape="circle" @click="handleSubmit">
               <template #icon>

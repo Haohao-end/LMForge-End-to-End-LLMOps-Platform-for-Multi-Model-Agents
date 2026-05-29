@@ -2,8 +2,10 @@
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
 import PromptOptimizeTrigger from '@/components/PromptOptimizeTrigger.vue'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
   app_id: { type: String, required: true },
   preset_prompt: { type: String, default: '', required: true },
@@ -44,7 +46,7 @@ const handleEditorBlur = async () => {
   <div class="flex flex-col h-[calc(100vh-173px)]">
     <!-- 提示标题 -->
     <div class="flex items-center justify-between px-4 mb-4">
-      <div class="text-gray-700 font-bold">人设与回复逻辑</div>
+      <div class="text-gray-700 font-bold">{{ t('appStudio.presetPrompt.title') }}</div>
       <a-space :size="8">
         <router-link
           :to="{ name: 'space-apps-prompt-compare', params: { app_id: props.app_id } }"
@@ -53,7 +55,7 @@ const handleEditorBlur = async () => {
             <template #icon>
               <icon-experiment />
             </template>
-            提示词对比调试
+            {{ t('appStudio.presetPrompt.compareDebug') }}
           </a-button>
         </router-link>
         <prompt-optimize-trigger @apply="handleReplacePresetPrompt" />
@@ -63,21 +65,7 @@ const handleEditorBlur = async () => {
     <div class="flex-1 px-4 min-h-0">
       <markdown-editor
         :model-value="props.preset_prompt"
-        placeholder="请在这里输入Agent的人设与回复逻辑，支持 Markdown 格式
-
-示例：
-# 角色定位
-你是一个专业的AI助手...
-
-## 回复风格
-- 友好且专业
-- 简洁明了
-- 富有同理心
-
-## 核心能力
-1. 理解用户意图
-2. 提供准确信息
-3. 持续学习优化"
+        :placeholder="t('appStudio.presetPrompt.placeholder')"
         :max-length="5000"
         default-mode="split"
         @update:model-value="handleEditorUpdate"

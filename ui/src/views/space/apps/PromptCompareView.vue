@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import HumanMessage from '@/components/HumanMessage.vue'
 import AiMessage from '@/components/AiMessage.vue'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
@@ -53,6 +54,7 @@ type CompareLane = {
 }
 
 const route = useRoute()
+const { t } = useI18n()
 const props = defineProps({
   app: {
     type: Object,
@@ -129,8 +131,8 @@ const initializeLanes = () => {
   lanes.value = [
     {
       key: 'baseline',
-      title: '默认提示词',
-      description: '用于模拟当前应用默认配置的表现。',
+      title: t('appStudio.promptCompare.baselineTitle'),
+      description: t('appStudio.promptCompare.baselineDescription'),
       preset_prompt: presetPrompt,
       model_config: cloneModelConfig(modelConfig),
       lane_id: createLocalUuid(),
@@ -140,8 +142,8 @@ const initializeLanes = () => {
     },
     {
       key: 'candidate',
-      title: '对比提示词',
-      description: '修改候选提示词或模型，实时比较输出差异。',
+      title: t('appStudio.promptCompare.candidateTitle'),
+      description: t('appStudio.promptCompare.candidateDescription'),
       preset_prompt: presetPrompt,
       model_config: cloneModelConfig(modelConfig),
       lane_id: createLocalUuid(),
@@ -163,7 +165,7 @@ const getHistoryPayload = (lane: CompareLane) => {
 
 const handleApplyPrompt = async (lane: CompareLane) => {
   if (lane.preset_prompt.trim() === '') {
-    Message.warning('提示词不能为空')
+    Message.warning(t('appStudio.promptCompare.promptEmpty'))
     return
   }
 
@@ -177,23 +179,23 @@ const isAppliedPromptLane = (lane: CompareLane) => lane.preset_prompt === applie
 
 const validateBeforeSubmit = () => {
   if (query.value.trim() === '') {
-    Message.warning('用户提问不能为空')
+    Message.warning(t('appStudio.promptCompare.queryEmpty'))
     return false
   }
 
   for (const lane of lanes.value) {
     if (lane.preset_prompt.trim() === '') {
-      Message.warning(`${lane.title}不能为空`)
+      Message.warning(t('appStudio.promptCompare.promptEmpty'))
       return false
     }
     if (!lane.model_config?.provider || !lane.model_config?.model) {
-      Message.warning(`${lane.title}尚未选择模型`)
+      Message.warning(t('appStudio.promptCompare.modelNotSelected', { title: lane.title }))
       return false
     }
   }
 
   if (anyLaneLoading.value) {
-    Message.warning('当前仍有对比请求在执行，请稍后')
+    Message.warning(t('appStudio.promptCompare.requestInProgress'))
     return false
   }
 
@@ -244,10 +246,10 @@ const streamLane = async (lane: CompareLane, userQuery: string) => {
 
     const apiResp = resp as { code?: unknown; message?: unknown } | void
     if (apiResp && apiResp.code && apiResp.code !== 'success') {
-      throw new Error(String(apiResp.message || '提示词对比调试失败'))
+      throw new Error(String(apiResp.message || t('appStudio.promptCompare.debugFailed')))
     }
   } catch (error) {
-    currentMessage.answer = getErrorMessage(error, '提示词对比调试失败')
+    currentMessage.answer = getErrorMessage(error, t('appStudio.promptCompare.debugFailed'))
   } finally {
     lane.loading = false
     lane.task_id = ''
@@ -281,7 +283,7 @@ const handleStop = async () => {
 
 const handleClear = () => {
   if (anyLaneLoading.value) {
-    Message.warning('请先等待对比请求结束或手动停止响应')
+    Message.warning(t('appStudio.promptCompare.clearWhileRunning'))
     return
   }
 
@@ -325,8 +327,8 @@ onMounted(async () => {
                   "
                 />
                 <prompt-optimize-trigger
-                  button-label="优化"
-                  apply-button-text="应用到当前输入框"
+                  :button-label="t('chat.promptOptimize.button')"
+                  :apply-button-text="t('chat.promptOptimize.applyToCurrentInput')"
                   @apply="
                     (value) => {
                       lane.preset_prompt = value
@@ -357,14 +359,14 @@ onMounted(async () => {
                 class="rounded-lg"
                 @click="handleApplyPrompt(lane)"
               >
-                选中并更新应用
+                {{ t('appStudio.promptCompare.applyAndUpdate') }}
               </a-button>
               <div
                 v-else
                 class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-600"
               >
                 <icon-check />
-                已选中
+                {{ t('appStudio.promptCompare.selected') }}
               </div>
             </div>
           </div>
@@ -386,7 +388,7 @@ onMounted(async () => {
                 </div>
               </div>
               <a-tag :color="lane.loading ? 'arcoblue' : 'gray'" bordered>
-                {{ lane.loading ? '生成中' : '已就绪' }}
+                {{ lane.loading ? t('appStudio.promptCompare.generating') : t('appStudio.promptCompare.ready') }}
               </a-tag>
             </div>
 
@@ -395,7 +397,7 @@ onMounted(async () => {
               class="compare-output-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3"
             >
               <div v-if="lane.messages.length === 0" class="flex h-full items-center justify-center">
-                <a-empty description="发送一条消息开始对比" />
+                <a-empty :description="t('appStudio.promptCompare.emptyLane')" />
               </div>
               <div v-else class="flex flex-col gap-6">
                 <div v-for="message in lane.messages" :key="`${lane.key}-${message.created_at}-${message.id || message.query}`" class="flex flex-col gap-6">
@@ -427,16 +429,16 @@ onMounted(async () => {
               v-model="query"
               rows="4"
               class="w-full resize-none border-0 bg-transparent text-gray-700 outline-none"
-              placeholder="输入同一条用户消息，默认提示词和对比提示词会同时流式输出结果"
+              :placeholder="t('appStudio.promptCompare.queryPlaceholder')"
               @keydown.enter.exact.prevent="handleSubmit"
             />
             <div class="mt-3 flex items-center justify-between gap-3">
               <div class="text-xs text-gray-500">
-                Enter 发送，Shift + Enter 换行
+                {{ t('appStudio.promptCompare.keyboardHint') }}
               </div>
               <a-space :size="8">
                 <a-button class="rounded-lg" :disabled="anyLaneLoading" @click="handleClear">
-                  清空对比
+                  {{ t('appStudio.promptCompare.clearCompare') }}
                 </a-button>
                 <a-button
                   class="rounded-lg"
@@ -444,7 +446,7 @@ onMounted(async () => {
                   :disabled="!anyLaneLoading"
                   @click="handleStop"
                 >
-                  停止响应
+                  {{ t('appStudio.promptCompare.stopResponse') }}
                 </a-button>
                 <a-button
                   type="primary"
@@ -455,7 +457,7 @@ onMounted(async () => {
                   <template #icon>
                     <icon-send />
                   </template>
-                  发送
+                  {{ t('appStudio.promptCompare.send') }}
                 </a-button>
               </a-space>
             </div>

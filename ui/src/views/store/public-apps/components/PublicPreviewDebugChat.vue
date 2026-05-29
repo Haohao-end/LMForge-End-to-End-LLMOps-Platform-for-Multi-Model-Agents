@@ -13,6 +13,7 @@ import { uploadImage } from '@/services/upload-file'
 import { useAccountStore } from '@/stores/account'
 import { Message } from '@arco-design/web-vue'
 import { computed, nextTick, onMounted, ref, watch, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
   applyChatStreamEvent,
@@ -22,6 +23,7 @@ import {
 } from '@/views/shared/chat-stream'
 
 const route = useRoute()
+const { t } = useI18n()
 const PUBLIC_APP_DEBUG_QUERY_DRAFT_STORAGE_KEY_PREFIX = 'draft:public-apps:debug-query'
 const PUBLIC_APP_CONTEXT_STORAGE_KEY_PREFIX = 'public-apps:debug-context'
 const props = defineProps({
@@ -172,7 +174,11 @@ const handleSubmitQuestion = async (question: string) => {
 const handleSubmit = async () => {
   const currentQuery = query.value.trim()
   if (!currentQuery) {
-    Message.warning('用户提问不能为空')
+    Message.warning(t('publicApps.debug.emptyQuery'))
+    return
+  }
+  if (image_urls.value.length > 0 && !canImageInput.value) {
+    Message.warning(t('publicApps.debug.imageInputUnsupported'))
     return
   }
   if (image_urls.value.length > 0 && !canImageInput.value) {
@@ -217,7 +223,7 @@ const handleSubmit = async () => {
       },
     )
   } catch (error: unknown) {
-    Message.error(error instanceof Error ? error.message : '发送消息失败')
+    Message.error(error instanceof Error ? error.message : t('publicApps.debug.sendFailed'))
   } finally {
     loading.value = false
   }
@@ -307,7 +313,7 @@ watch(
             :show-image-previews="true"
             :show-upload-button="true"
             :upload-disabled="true"
-            upload-disabled-title="当前公共应用预览链路暂不支持图片输入"
+            :upload-disabled-title="t('publicApps.debug.uploadDisabled')"
             :show-clear-button="true"
             :clear-disabled="messages.length === 0 && !chatContextId"
             :clear-loading="false"
@@ -315,8 +321,8 @@ watch(
             :submit-loading="loading"
             :audio-to-text-loading="audioToTextLoading"
             :is-recording="isRecording"
-            clear-title="清空调试会话"
-            placeholder="发送调试消息"
+            :clear-title="t('publicApps.debug.clearSession')"
+            :placeholder="t('publicApps.debug.placeholder')"
             @clear="clearConversation"
             @upload="triggerFileInput"
             @file-change="(event) => handleFileChange(event)"
@@ -329,7 +335,7 @@ watch(
           />
         </div>
         <div class="text-center text-gray-500 text-xs py-4">
-          内容由AI生成，无法确保真实准确，仅供参考
+          {{ t('chat.messages.aiGeneratedDisclaimer') }}
         </div>
       </div>
     </div>

@@ -24,7 +24,6 @@ from internal.exception import FailException
 from internal.model import App, WechatEndUser, EndUser, Message, WechatMessage, Conversation
 from pkg.sqlalchemy import SQLAlchemy
 from .app_config_service import AppConfigService
-from .app_config_service import call_config_loader
 from .app_service import AppService
 from .base_service import BaseService
 from .conversation_service import ConversationService
@@ -211,15 +210,9 @@ class WechatService(BaseService):
             tools = AppService._build_runtime_tools_for_config(
                 app_config_service=self.app_config_service,
                 retrieval_service=self.retrieval_service,
-                app_service=self.app_service,
                 account=SimpleNamespace(id=app.account_id),
                 draft_app_config=app_config,
                 flask_app=flask_app._get_current_object(),
-                runtime_context={
-                    "root_app_id": str(app.id),
-                    "call_stack": [str(app.id)],
-                    "account_id": str(app.account_id),
-                },
             )
 
             # 4.根据LLM是否支持tool_call决定使用不同的Agent

@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue'
+import { computed, ref, onUnmounted } from 'vue'
 import router from '@/router'
 import { markNotificationAsRead } from '@/services/notification'
 import type { DocumentIndexNotification } from '@/models/notification'
+import { useI18n } from 'vue-i18n'
+
+const { locale } = useI18n()
+const isEnglish = computed(() => locale.value === 'en-US')
 
 // 通知列表
 const notifications = ref<DocumentIndexNotification[]>([])
@@ -129,7 +133,7 @@ defineExpose({
           <!-- 中间内容 -->
           <div class="flex-1 min-w-0">
             <p class="text-base font-medium text-gray-900 mb-1">
-              文档索引{{ notification.status === 'success' ? '完成' : '失败' }}
+              {{ isEnglish ? 'Document indexing' : '文档索引' }}{{ notification.status === 'success' ? (isEnglish ? ' completed' : '完成') : (isEnglish ? ' failed' : '失败') }}
             </p>
             <p class="text-sm text-gray-600 truncate">
               {{ notification.document_name }}
@@ -143,7 +147,7 @@ defineExpose({
           <!-- 右侧关闭按钮 -->
           <button
             class="flex-shrink-0 text-gray-300 hover:text-gray-500 transition-colors mt-0.5"
-            aria-label="关闭通知"
+            :aria-label="isEnglish ? 'Close notification' : '关闭通知'"
             @click.stop="handleCloseNotification(notification.id)"
           >
             <icon-close :size="16" />

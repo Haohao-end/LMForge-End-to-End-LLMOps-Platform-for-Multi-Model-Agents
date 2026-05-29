@@ -29,6 +29,8 @@ from internal.handler import (
     PublicWorkflowHandler,
     McpHandler,
     SkillHandler,
+    LikeHandler,
+    FavoriteHandler,
     HomeHandler,
     NotificationHandler,
     TagHandler
@@ -65,6 +67,8 @@ class Router:
     public_workflow_handler: PublicWorkflowHandler
     mcp_handler: McpHandler
     skill_handler: SkillHandler
+    like_handler: LikeHandler
+    favorite_handler: FavoriteHandler
     home_handler: HomeHandler
     notification_handler: NotificationHandler
     tag_handler: TagHandler
@@ -194,6 +198,27 @@ class Router:
         bp.add_url_rule("/skills", view_func=self.skill_handler.get_skills_with_page)
         bp.add_url_rule("/skills/<uuid:skill_id>", view_func=self.skill_handler.get_skill_package)
         bp.add_url_rule("/skills/<uuid:skill_id>/icon", view_func=self.skill_handler.get_skill_package_icon)
+        bp.add_url_rule("/skills/<uuid:skill_id>/versions", view_func=self.skill_handler.get_skill_package_versions)
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/enable",
+            methods=["POST"],
+            view_func=self.skill_handler.enable_skill_package,
+        )
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/disable",
+            methods=["POST"],
+            view_func=self.skill_handler.disable_skill_package,
+        )
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/sync",
+            methods=["POST"],
+            view_func=self.skill_handler.sync_skill_package,
+        )
+        bp.add_url_rule(
+            "/skills/<uuid:skill_id>/rollback",
+            methods=["POST"],
+            view_func=self.skill_handler.rollback_skill_package,
+        )
 
         # 4.自定义API插件模块
         bp.add_url_rule(

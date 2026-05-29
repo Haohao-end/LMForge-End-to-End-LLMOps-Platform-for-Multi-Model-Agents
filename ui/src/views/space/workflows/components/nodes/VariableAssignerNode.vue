@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Handle, type NodeProps, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<NodeProps>()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -21,7 +23,7 @@ const props = defineProps<NodeProps>()
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">赋值变量</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.variableAssigner.title') }}</div>
       </div>
       <div class="w-full flex flex-col gap-2 min-w-0">
         <div
@@ -40,7 +42,7 @@ const props = defineProps<NodeProps>()
               v-if="input.value.type === 'ref'"
               class="bg-white text-gray-500 border px-2 py-1 rounded break-words"
             >
-              引用 / {{ input.value.content.ref_var_name }}
+              {{ t('workflowEditor.referencePrefix') }} {{ input.value.content.ref_var_name }}
             </div>
             <div v-else class="text-gray-500 px-2 py-1 bg-white rounded break-words">
               {{ input.value.content || '-' }}
@@ -54,7 +56,7 @@ const props = defineProps<NodeProps>()
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">输出数据</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.outputData') }}</div>
       </div>
       <div class="flex flex-wrap gap-2 w-full min-w-0">
         <div

@@ -4,7 +4,6 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from threading import Lock, Thread
 from typing import Any, Generator
 from uuid import UUID
 
@@ -184,64 +183,18 @@ class AssistantAgentService(BaseService):
         )
 
         if self.app_config_service is not None:
-            assistant_mcp_bindings, assistant_mcp_tool_snapshots = self._get_assistant_mcp_runtime_config()
+            assistant_mcp_bindings = (
+                current_app.config.get("ASSISTANT_MCP_BINDINGS", [])
+                if has_app_context()
+                else []
+            )
+            if not isinstance(assistant_mcp_bindings, list):
+                assistant_mcp_bindings = []
             tools.extend(
-                self.app_config_service.get_langchain_tools_by_mcp_bindings(
-                    assistant_mcp_bindings,
-                    assistant_mcp_tool_snapshots,
-                )
+                self.app_config_service.get_langchain_tools_by_mcp_bindings(assistant_mcp_bindings)
             )
 
         return tools
-
-    @staticmethod
-    def _get_assistant_mcp_runtime_config() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """读取首页助手全局 MCP 绑定与快照。"""
-        if not has_app_context():
-            return [], []
-
-        assistant_mcp_bindings = current_app.config.get("ASSISTANT_MCP_BINDINGS", [])
-        assistant_mcp_tool_snapshots = current_app.config.get("ASSISTANT_MCP_TOOL_SNAPSHOTS", [])
-        if not isinstance(assistant_mcp_bindings, list):
-            assistant_mcp_bindings = []
-        if not isinstance(assistant_mcp_tool_snapshots, list):
-            assistant_mcp_tool_snapshots = []
-        return assistant_mcp_bindings, assistant_mcp_tool_snapshots
-
-    def _schedule_introduction_prewarm(self, account_id: UUID) -> None:
-        """在后台预热首页介绍缓存，降低首页首开 LLM 命中概率。"""
-        if not has_app_context():
-            return
-
-        if bool(current_app.config.get("TESTING", False)):
-            return
-
-        prewarm_flag = current_app.config.get("ASSISTANT_INTRO_PREWARM_ENABLED", True)
-        if prewarm_flag is False:
-            return
-
-        flask_app = current_app._get_current_object()
-        pending_key = str(account_id)
-        with self._introduction_prewarm_lock:
-            if pending_key in self._introduction_prewarm_pending:
-                return
-            self._introduction_prewarm_pending.add(pending_key)
-
-        def _worker() -> None:
-            try:
-                with flask_app.app_context():
-                    account = self.get(Account, account_id)
-                    if account is None:
-                        return
-                    for _ in self.generate_introduction(account):
-                        pass
-            except Exception:
-                logging.exception("首页助手介绍预热失败: account_id=%s", account_id)
-            finally:
-                with self._introduction_prewarm_lock:
-                    self._introduction_prewarm_pending.discard(pending_key)
-
-        Thread(target=_worker, daemon=True).start()
 
     def chat(self, req: AssistantAgentChat, account: Account) -> Generator:
         """传递query与账号实现与辅助Agent进行会话"""

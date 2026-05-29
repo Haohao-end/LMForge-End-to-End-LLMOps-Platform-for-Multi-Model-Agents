@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { useGetDatasetQueries, useHit } from '@/hooks/use-dataset'
 import type { GetDatasetQueriesResponse, HitRequest, HitResponse } from '@/models/dataset'
@@ -16,6 +17,7 @@ const props = defineProps({
   dataset_id: { type: String, required: true },
 })
 const emits = defineEmits(['update:visible'])
+const { t } = useI18n()
 const retrievalSettingModalVisible = ref(false)
 const defaultRetrievalSetting: RetrievalSetting = { retrieval_strategy: 'semantic', k: 5, score: 0.5 }
 const retrievalSettingForm = ref<RetrievalSetting>({ ...defaultRetrievalSetting })
@@ -52,7 +54,7 @@ const hideHitTestingModal = () => emits('update:visible', false)
 const handleHitTesting = async () => {
   // 5.1 判断检索的源文本是否为空
   if (hitTestingForm.value.query.trim() === '') {
-    Message.error('检索源文本不能为空')
+    Message.error(t('space.datasets.documents.hitTesting.noQuery'))
     return
   }
 
@@ -95,7 +97,7 @@ watch(
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
-        <div class="text-lg font-bold text-gray-700">召回测试</div>
+        <div class="text-lg font-bold text-gray-700">{{ t('space.datasets.documents.hitTesting.title') }}</div>
         <a-button type="text" class="!text-gray-700" size="small" @click="hideHitTestingModal">
           <template #icon>
             <icon-close />
@@ -103,7 +105,7 @@ watch(
         </a-button>
       </div>
       <!-- 副标题 -->
-      <div class="text-gray-500">基于给定的查询文本测试知识库的召回效果</div>
+      <div class="text-gray-500">{{ t('space.datasets.documents.hitTesting.description') }}</div>
       <!-- 中间内容区 -->
       <div class="pt-6">
         <div class="w-full flex justify-between gap-2">
@@ -113,7 +115,7 @@ watch(
             <div class="border border-blue-700 bg-blue-100 rounded-lg flex flex-col mb-6">
               <!-- 输入框标题 -->
               <div class="flex items-center justify-between px-4 py-1.5">
-                <div class="font-bold text-gray-900">源文本</div>
+                <div class="font-bold text-gray-900">{{ t('space.datasets.documents.hitTesting.sourceText') }}</div>
                 <a-button
                   size="small"
                   class="rounded-lg px-2"
@@ -123,12 +125,12 @@ watch(
                     <icon-language />
                   </template>
                   <div v-if="hitTestingForm.retrieval_strategy === 'semantic'" class="">
-                    相似性检索
+                    {{ t('space.datasets.documents.hitTesting.strategies.semantic') }}
                   </div>
                   <div v-else-if="hitTestingForm.retrieval_strategy === 'full_text'" class="">
-                    全文检索
+                    {{ t('space.datasets.documents.hitTesting.strategies.full_text') }}
                   </div>
-                  <div v-else class="">混合检索</div>
+                  <div v-else class="">{{ t('space.datasets.documents.hitTesting.strategies.hybrid') }}</div>
                 </a-button>
               </div>
               <!-- 输入框容器 -->
@@ -136,7 +138,7 @@ watch(
                 <!-- 输入框 -->
                 <a-textarea
                   v-model:model-value="hitTestingForm.query"
-                  placeholder="请输入文本，建议使用简短的陈述句"
+                  :placeholder="t('space.datasets.documents.hitTesting.queryPlaceholder')"
                   :max-length="200"
                   :auto-size="{ minRows: 6, maxRows: 6 }"
                   class="!bg-white !border-0 mb-1"
@@ -153,14 +155,14 @@ watch(
                     class="rounded-lg"
                     @click="handleHitTesting"
                   >
-                    召回测试
+                    {{ t('space.datasets.documents.hitTesting.recall') }}
                   </a-button>
                 </div>
               </div>
             </div>
             <!-- 底部最近查询 -->
             <div class="">
-              <div class="text-gray-700 font-bold mb-4">最近查询</div>
+              <div class="text-gray-700 font-bold mb-4">{{ t('space.datasets.documents.hitTesting.recentQueries') }}</div>
               <a-table
                 :loading="getDatasetQueriesLoading"
                 :pagination="false"
@@ -171,14 +173,14 @@ watch(
               >
                 <template #columns>
                   <a-table-column
-                    title="数据源"
+                    :title="t('space.datasets.documents.columns.source')"
                     data-index="source"
                     header-cell-class="text-gray-500 bg-transparent border-b font-bold"
                     cell-class="text-gray-500"
                     :width="110"
                   />
                   <a-table-column
-                    title="文本"
+                    :title="t('space.datasets.documents.columns.text')"
                     data-index="query"
                     header-cell-class="text-gray-500 bg-transparent border-b font-bold"
                     cell-class="text-gray-500"
@@ -188,7 +190,7 @@ watch(
                     </template>
                   </a-table-column>
                   <a-table-column
-                    title="时间"
+                    :title="t('space.datasets.documents.columns.time')"
                     data-index="created_at"
                     header-cell-class="text-gray-500 bg-transparent border-b font-bold"
                     cell-class="text-gray-500"
@@ -250,7 +252,7 @@ watch(
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
-        <div class="text-lg font-bold text-gray-700">检索设置</div>
+        <div class="text-lg font-bold text-gray-700">{{ t('space.datasets.documents.hitTesting.retrievalSettings') }}</div>
         <a-button
           type="text"
           class="!text-gray-700"
@@ -264,18 +266,18 @@ watch(
       </div>
       <!-- 中间表单内容 -->
       <a-form :model="retrievalSettingForm" @submit="saveRetrievalSetting" class="pt-6">
-        <a-form-item field="retrieval_strategy" label="检索策略" label-align="left">
+        <a-form-item field="retrieval_strategy" :label="t('space.datasets.documents.hitTesting.retrievalStrategy')" label-align="left">
           <a-radio-group
             v-model:model-value="retrievalSettingForm.retrieval_strategy"
             default-value="semantic"
             :options="[
-              { label: '混合策略', value: 'hybrid' },
-              { label: '全文检索', value: 'full_text' },
-              { label: '相似性检索', value: 'semantic' },
+              { label: t('space.datasets.documents.hitTesting.strategies.hybrid'), value: 'hybrid' },
+              { label: t('space.datasets.documents.hitTesting.strategies.full_text'), value: 'full_text' },
+              { label: t('space.datasets.documents.hitTesting.strategies.semantic'), value: 'semantic' },
             ]"
           />
         </a-form-item>
-        <a-form-item field="k" label="最大召回数量">
+        <a-form-item field="k" :label="t('space.datasets.documents.hitTesting.maxRecall')">
           <div class="flex items-center gap-4 w-full pl-3">
             <a-slider v-model:model-value="retrievalSettingForm.k" :step="1" :min="1" :max="10" />
             <a-input-number
@@ -285,7 +287,7 @@ watch(
             />
           </div>
         </a-form-item>
-        <a-form-item field="score" label="最小匹配度">
+        <a-form-item field="score" :label="t('space.datasets.documents.hitTesting.minScore')">
           <div class="flex items-center gap-4 w-full pl-3">
             <a-slider
               v-model:model-value="retrievalSettingForm.score"
@@ -308,8 +310,8 @@ watch(
         <div class="flex items-center justify-between">
           <div class=""></div>
           <a-space :size="16">
-            <a-button class="rounded-lg" @click="hideRetrievalSettingModal">取消</a-button>
-            <a-button type="primary" html-type="submit" class="rounded-lg">保存</a-button>
+            <a-button class="rounded-lg" @click="hideRetrievalSettingModal">{{ t('space.datasets.documents.hitTesting.cancel') }}</a-button>
+            <a-button type="primary" html-type="submit" class="rounded-lg">{{ t('space.datasets.documents.hitTesting.save') }}</a-button>
           </a-space>
         </div>
       </a-form>

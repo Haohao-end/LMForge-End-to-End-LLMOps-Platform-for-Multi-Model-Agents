@@ -5,6 +5,8 @@ import { apiPrefix } from '@/config'
 import { getErrorMessage } from '@/utils/error'
 import { getSkillCategories, getSkillsWithPage } from '@/services/skill'
 import type { SkillBinding, SkillCategory, SkillPackage } from '@/models/skill'
+import { useI18n } from 'vue-i18n'
+import { getStoreCategoryDisplayName } from '@/utils/store-display'
 
 type PaginatorState = {
   total_page: number
@@ -23,6 +25,7 @@ const props = defineProps({
   },
 })
 
+const { t, locale } = useI18n()
 const emits = defineEmits(['update:visible', 'select'])
 
 const loading = ref(false)
@@ -76,6 +79,18 @@ const isSelectedSkill = (skill: SkillPackage) => {
   return selectedSkillIdSet.value.has(String(skill.id || '').trim())
 }
 
+const getCategoryLabel = (category: string) => {
+  return getStoreCategoryDisplayName(category, locale.value as 'zh-CN' | 'en-US')
+}
+
+const getExecutorLabel = (executorType: string) => {
+  const normalized = String(executorType || '').trim()
+  if (normalized === 'scf') return t('store.skills.executorTypes.scf')
+  if (normalized === 'tool') return t('store.skills.executorTypes.tool')
+  if (normalized === 'prompt') return t('store.skills.executorTypes.prompt')
+  return normalized
+}
+
 const loadCategories = async () => {
   try {
     const res = await getSkillCategories()
@@ -118,7 +133,7 @@ const loadSkills = async (reset = false) => {
       page_size: PAGE_SIZE,
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载 Skills 广场失败'))
+    Message.error(getErrorMessage(error, t('appStudio.abilities.skills.loadMarketplaceFailed')))
   } finally {
     loading.value = false
   }
@@ -174,8 +189,8 @@ onMounted(async () => {
       <div
         class="flex flex-col flex-shrink-0 bg-gray-50 w-full md:w-56 lg:w-64 h-full px-3 py-4 overflow-auto scrollbar-w-none"
       >
-        <div class="text-gray-900 font-bold text-lg mb-2">关联 Skills</div>
-        <div class="text-xs text-gray-500 mb-4">从 Skills 广场中选择要绑定的技能</div>
+        <div class="text-gray-900 font-bold text-lg mb-2">{{ t('appStudio.abilities.skills.addTitle') }}</div>
+        <div class="text-xs text-gray-500 mb-4">{{ t('appStudio.abilities.skills.addDescription') }}</div>
         <div class="flex flex-col gap-1 mb-4">
           <div
             data-testid="skills-category-all"
@@ -183,7 +198,7 @@ onMounted(async () => {
             @click="handleCategoryChange('all')"
           >
             <icon-apps />
-            全部
+            {{ t('appStudio.abilities.skills.all') }}
           </div>
           <div
             v-for="item in categories"
@@ -193,20 +208,20 @@ onMounted(async () => {
             @click="handleCategoryChange(item.id)"
           >
             <icon-apps />
-            {{ item.name }}
+            {{ getCategoryLabel(item.id || item.name) }}
           </div>
         </div>
         <div class="text-xs text-gray-500 leading-5">
-          仅展示已发布的 Skills。选择后会直接纳入当前应用的 Skills 绑定。
+          {{ t('appStudio.abilities.skills.publishedOnly') }}
         </div>
       </div>
 
       <div class="flex-1 p-4 min-w-0 flex flex-col overflow-hidden">
         <div class="w-full flex items-center justify-between gap-2 mb-7">
-          <div class="text-lg font-bold text-gray-700">Skills 广场</div>
+          <div class="text-lg font-bold text-gray-700">{{ t('appStudio.abilities.skills.marketplaceTitle') }}</div>
           <a-input-search
             v-model="searchWord"
-            placeholder="搜索 Skills"
+            :placeholder="t('appStudio.abilities.skills.searchPlaceholder')"
             class="w-full sm:w-[280px] bg-white rounded-lg border-gray-300"
             @search="handleSearch"
           />
@@ -235,15 +250,17 @@ onMounted(async () => {
                   <div class="flex flex-col flex-1 min-w-0 gap-1">
                     <div class="flex items-center gap-2 min-w-0 flex-wrap">
                       <div class="text-sm font-semibold text-gray-900 truncate">{{ skill.label }}</div>
-                      <a-tag size="small" color="arcoblue">{{ skill.category }}</a-tag>
-                      <a-tag size="small" color="orangered">{{ skill.executor_type }}</a-tag>
+                      <a-tag size="small" color="arcoblue">{{ getCategoryLabel(skill.category) }}</a-tag>
+                      <a-tag size="small" color="orangered">{{ getExecutorLabel(skill.executor_type) }}</a-tag>
                     </div>
                     <div class="text-xs text-gray-500 truncate">
                       {{ skill.source_key }}
-                      <template v-if="skill.tool_count > 0"> · {{ skill.tool_count }} 个工具</template>
+                      <template v-if="skill.tool_count > 0">
+                        · {{ t('appStudio.abilities.readonly.toolCount', { count: skill.tool_count }) }}
+                      </template>
                     </div>
                     <div class="text-sm text-gray-600 line-clamp-2">
-                      {{ skill.description || '未填写描述' }}
+                      {{ skill.description || t('appStudio.abilities.skills.noDescription') }}
                     </div>
                   </div>
                 </div>
@@ -255,22 +272,30 @@ onMounted(async () => {
                     :disabled="isSelectedSkill(skill)"
                     @click.stop="handleSelect(skill)"
                   >
-                    {{ isSelectedSkill(skill) ? '已添加' : '添加到应用' }}
+                    {{
+                      isSelectedSkill(skill)
+                        ? t('appStudio.abilities.skills.added')
+                        : t('appStudio.abilities.skills.addToApp')
+                    }}
                   </a-button>
                 </div>
               </div>
 
-              <a-empty v-if="skills.length === 0" description="暂无可绑定的 Skills" class="py-20" />
+              <a-empty
+                v-if="skills.length === 0"
+                :description="t('appStudio.abilities.skills.noAvailable')"
+                class="py-20"
+              />
 
               <div v-if="paginator.total_page >= 2" class="w-full">
                 <div v-if="loading" class="text-center py-4">
                   <a-space>
                     <a-spin />
-                    <div class="text-gray-400">加载中</div>
+                    <div class="text-gray-400">{{ t('appStudio.list.loading') }}</div>
                   </a-space>
                 </div>
                 <div v-else-if="paginator.current_page >= paginator.total_page" class="text-center py-4">
-                  <div class="text-gray-400">数据已加载完成</div>
+                  <div class="text-gray-400">{{ t('appStudio.list.loadedAll') }}</div>
                 </div>
               </div>
             </div>

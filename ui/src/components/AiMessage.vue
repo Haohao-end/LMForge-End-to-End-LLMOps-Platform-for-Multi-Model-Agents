@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, type PropType } from 'vue'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import DotFlashing from '@/components/DotFlashing.vue'
 import { useAudioPlayer } from '@/hooks/use-audio'
 import { useMarkdownRenderer } from '@/hooks/use-markdown-renderer'
@@ -72,6 +73,7 @@ const props = defineProps({
   audio_stream_id: { type: String, default: '', required: false },
 })
 const emits = defineEmits(['selectSuggestedQuestion'])
+const { t } = useI18n()
 const { renderMarkdown, handleMarkdownCopyClick } = useMarkdownRenderer()
 const normalizedArtifacts = computed(() => {
   return mergeChatArtifacts([], props.artifacts) as ChatArtifact[]
@@ -227,11 +229,11 @@ const handleStopAudio = () => {
 const handleCopyAnswer = async () => {
   if (!props.answer) return
   await copyTextToClipboard(props.answer)
-  Message.success('AI消息已复制')
+  Message.success(t('chat.messages.aiCopied'))
 }
 
 const handleMarkdownClick = async (event: MouseEvent) => {
-  await handleMarkdownCopyClick(event, { successMessage: '代码已复制' })
+  await handleMarkdownCopyClick(event, { successMessage: t('chat.messages.codeCopied') })
 }
 </script>
 
@@ -297,7 +299,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           <chat-image-gallery
             v-if="galleryImages.length > 0"
             :images="galleryImages"
-            title="生成图片"
+            :title="t('chat.gallery.generatedImages')"
             class="message-gallery-card"
           />
           <template v-for="part in renderedArtifactParts" :key="part.key">
@@ -314,7 +316,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
                 target="_blank"
                 rel="noreferrer"
               >
-                下载附件
+                {{ t('chat.deepTimeline.downloadAttachment') }}
               </a>
             </div>
           </template>

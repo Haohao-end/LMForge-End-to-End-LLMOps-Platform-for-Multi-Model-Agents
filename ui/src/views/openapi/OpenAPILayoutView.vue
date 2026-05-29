@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useCredentialStore } from '@/stores/credential'
 import { AUTH_REQUIRED_EVENT } from '@/utils/request'
 import { isCredentialLoggedIn } from '@/utils/auth'
 
 const route = useRoute()
+const { t } = useI18n()
 const credentialStore = useCredentialStore()
 const create_api_key = ref(false)
 const isLoggedIn = computed(() => isCredentialLoggedIn(credentialStore.credential))
@@ -39,7 +41,7 @@ const handleCreateApiKey = () => {
           <a-avatar :size="32" class="bg-blue-700">
             <icon-link :size="18" />
           </a-avatar>
-          <div class="text-lg font-medium text-gray-900">开放 API</div>
+          <div class="text-lg font-medium text-gray-900">{{ $t('openapi.title') }}</div>
         </div>
       </div>
       <!-- 导航按钮 -->
@@ -51,14 +53,14 @@ const handleCreateApiKey = () => {
             class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
             exact-active-class="bg-gray-100"
           >
-            快速开始
+            {{ $t('openapi.nav.quickStart') }}
           </router-link>
           <router-link
             to="/openapi/api-keys"
             class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
             active-class="bg-gray-100"
           >
-            密钥
+            {{ $t('openapi.nav.apiKeys') }}
           </router-link>
         </div>
         <!-- 右侧按钮 -->
@@ -68,7 +70,7 @@ const handleCreateApiKey = () => {
           class="rounded-lg"
           @click="handleCreateApiKey"
         >
-          新增密钥
+          {{ $t('openapi.createKey') }}
         </a-button>
       </div>
     </div>

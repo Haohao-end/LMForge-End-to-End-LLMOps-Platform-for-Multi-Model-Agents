@@ -1,19 +1,22 @@
-<script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Message } from '@arco-design/web-vue'
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 // 定义组件props
 const props = defineProps({
   name: { type: String, required: true },
   description: { type: String, default: '' },
   icon: { type: String, default: '' },
-  fileList: { type: Array, default: () => [] },
-  loading: { type: Boolean, default: false },
-  placeholder: { type: String, default: '应用' },
+  fileList: { type: Array, default: () => [] },
+  loading: { type: Boolean, default: false },
+  placeholder: { type: String, default: '' },
   onUpload: { type: Function, required: true },
   onGenerate: { type: Function, required: true },
 })
 
-const emits = defineEmits(['update:icon', 'update:fileList'])
+const emits = defineEmits(['update:icon', 'update:fileList'])
+const { locale } = useI18n()
+const isEnglish = computed(() => locale.value === 'en-US')
 
 // 本地状态
 const localFileList = ref(props.fileList)
@@ -68,16 +71,17 @@ const handleBeforeRemove = async () => {
 
 // 处理生成
 const handleGenerate = async () => {
-  if (!props.name || props.name.trim() === '') {
-    Message.warning(`请先输入${props.placeholder}名称`)
-    return
-  }
+  if (!props.name || props.name.trim() === '') {
+    const noun = props.placeholder || (isEnglish.value ? 'item' : '名称')
+    Message.warning(isEnglish.value ? `Please enter the ${noun} name first` : `请先输入${noun}`)
+    return
+  }
 
   isGenerating.value = true
   try {
     await props.onGenerate()
   } catch {
-    Message.error('生成图标失败，请稍后重试')
+    Message.error(isEnglish.value ? 'Failed to generate the icon. Please try again later.' : '生成图标失败，请稍后重试')
   } finally {
     isGenerating.value = false
   }
@@ -122,7 +126,7 @@ const handleGenerate = async () => {
             <template #icon>
               <icon-upload />
             </template>
-            {{ localFileList.length > 0 ? '替换图标' : '上传图标' }}
+            {{ localFileList.length > 0 ? (isEnglish ? 'Replace Icon' : '替换图标') : (isEnglish ? 'Upload Icon' : '上传图标') }}
           </a-button>
         </template>
       </a-upload>
@@ -141,14 +145,19 @@ const handleGenerate = async () => {
           <icon-robot v-if="!localIcon" />
           <icon-refresh v-else />
         </template>
-        {{ localIcon ? 'AI 重新生成' : 'AI 生成图标' }}
+        {{ localIcon ? (isEnglish ? 'Regenerate with AI' : 'AI 重新生成') : (isEnglish ? 'Generate Icon with AI' : 'AI 生成图标') }}
       </a-button>
     </div>
 
     <!-- 提示文字 - 居中 -->
-    <div class="text-center text-xs text-gray-500 leading-relaxed w-full">
-      点击按钮上传自定义图标<br />或让 AI 根据名称智能生成
-    </div>
+    <div class="text-center text-xs text-gray-500 leading-relaxed w-full">
+      <template v-if="isEnglish">
+        Upload a custom icon or let AI generate one based on the name.
+      </template>
+      <template v-else>
+        点击按钮上传自定义图标<br />或让 AI 根据名称智能生成
+      </template>
+    </div>
   </a-space>
 </template>
 

@@ -3,7 +3,7 @@ import logging
 import re
 import time
 import uuid
-from typing import Literal, Any, ClassVar
+from typing import Literal, Any
 
 import tiktoken
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, RemoveMessage, AIMessage
@@ -22,9 +22,6 @@ from internal.core.agent.usage_utils import normalize_usage_text
 from internal.exception import FailException
 from .base_agent import BaseAgent
 from internal.core.language_model.entities.model_entity import ModelFeature
-
-
-logger = logging.getLogger(__name__)
 
 
 _HARD_FAIL_TOOL_NAMES = {
@@ -230,15 +227,6 @@ class FunctionCallAgent(BaseAgent):
         final_tool_calls = getattr(gathered, "tool_calls", []) or []
         # 某些流式实现会先在中间 chunk 暴露 tool_calls，再在最终聚合对象里补齐。
         if saw_tool_calls or final_tool_calls:
-            if pending_skill_prompts:
-                logger.info(
-                    "技能 prompt 租约已回收: lease_ids=%s",
-                    [
-                        str(item.get("lease_id") or item.get("skill_id") or item.get("source_key") or "")
-                        for item in pending_skill_prompts
-                        if isinstance(item, dict)
-                    ],
-                )
             self.agent_queue_manager.publish(state["task_id"], AgentThought(
                 id=id,
                 task_id=state["task_id"],
@@ -588,6 +576,60 @@ class FunctionCallAgent(BaseAgent):
 
         return injected_messages
 
+    @staticmethod
+    def _build_tool_not_found_result(tool_call_name: str, tools_by_name: dict[str, Any]) -> str:
+        """把可用工具名回灌给模型，促使其基于真实列表重新选择。"""
+        available_tool_names = list(tools_by_name.keys())
+        preview_limit = 30
+        preview = available_tool_names[:preview_limit]
+        suffix = ""
+        if len(available_tool_names) > preview_limit:
+            suffix = f" 等共 {len(available_tool_names)} 个工具"
+        available_text = ", ".join(preview) if preview else "无"
+        return (
+            f"工具未找到: {tool_call_name}。"
+            f"请从当前可用工具列表中重新选择并调用: {available_text}{suffix}。"
+        )
+
+    def _resolve_tool(
+        self,
+        tool_call_name: str,
+        tools_by_name: dict[str, Any],
+        tools_by_alias: dict[str, Any],
+    ) -> Any | None:
+        """按精确名、别名顺序解析工具。"""
+        requested_name = _TOOL_ALIAS_SYNONYMS.get(tool_call_name, tool_call_name)
+
+        candidates = (
+            requested_name,
+        )
+        for candidate in candidates:
+            if not candidate:
+                continue
+            tool = tools_by_name.get(candidate)
+            if tool is not None:
+                return tool
+
+            tool = tools_by_alias.get(candidate)
+            if tool is not None:
+                return tool
+
+        return None
+
+    @staticmethod
+    def _normalize_tool_alias(tool_name: str | None) -> str:
+        if not tool_name:
+            return ""
+
+        normalized = str(tool_name).strip()
+        if not normalized:
+            return ""
+
+        parts = normalized.split("__", 2)
+        if len(parts) == 3:
+            return parts[2]
+        return normalized.replace("-", "_").replace(" ", "_")
+
     @classmethod
     def _tools_condition(cls, state: AgentState) -> Literal["tools", "__end__"]:
         """检测下一个节点是执行tools节点，还是直接结束"""
@@ -622,7 +664,7 @@ class FunctionCallAgent(BaseAgent):
     ) -> tuple[int, int, int, float, float, float, float]:
         """计算输入输出token以及价格"""
         encoding = tiktoken.get_encoding("cl100k_base")
-        input_token_count = len(encoding.encode(normalize_usage_text(messages or state["messages"])))
+        input_token_count = len(encoding.encode(normalize_usage_text(state["messages"])))
         output_token_count = len(encoding.encode(normalize_usage_text(gathered)))
         input_price, output_price, unit = self.llm.get_pricing()
         total_token_count = input_token_count + output_token_count

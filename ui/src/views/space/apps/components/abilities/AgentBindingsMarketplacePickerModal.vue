@@ -6,6 +6,7 @@ import { getErrorMessage } from '@/utils/error'
 import { getAppsWithPage } from '@/services/app'
 import { getPublicApps, type PublicApp } from '@/services/public-app'
 import type { AgentBinding } from '@/models/app'
+import { useI18n } from 'vue-i18n'
 
 type BindingTarget = {
   app_id: string
@@ -39,6 +40,7 @@ const props = defineProps({
   },
 })
 
+const { t } = useI18n()
 const emits = defineEmits(['update:visible', 'select'])
 
 const activeTab = ref<'own' | 'public'>('own')
@@ -179,7 +181,7 @@ const loadOwnApps = async (reset = false) => {
       page_size: PAGE_SIZE,
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载我的已发布应用失败'))
+    Message.error(getErrorMessage(error, t('appStudio.abilities.agents.loadOwnFailed')))
   } finally {
     loadingOwn.value = false
   }
@@ -222,7 +224,7 @@ const loadPublicApps = async (reset = false) => {
       page_size: PAGE_SIZE,
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载应用广场失败'))
+    Message.error(getErrorMessage(error, t('appStudio.abilities.agents.loadMarketplaceFailed')))
   } finally {
     loadingPublic.value = false
   }
@@ -279,8 +281,8 @@ watch(
   >
     <div class="flex w-full h-full flex-col md:flex-row">
       <div class="flex flex-col flex-shrink-0 bg-gray-50 w-full md:w-56 lg:w-64 h-full px-3 py-4 overflow-auto scrollbar-w-none">
-        <div class="text-gray-900 font-bold text-lg mb-2">关联 Agent</div>
-        <div class="text-xs text-gray-500 mb-4">从我的已发布应用或应用广场中选择要绑定的子 Agent</div>
+        <div class="text-gray-900 font-bold text-lg mb-2">{{ t('appStudio.abilities.agents.addTitle') }}</div>
+        <div class="text-xs text-gray-500 mb-4">{{ t('appStudio.abilities.agents.addDescription') }}</div>
         <div class="flex flex-col gap-1 mb-4">
           <div
             data-testid="agent-source-own"
@@ -288,7 +290,7 @@ watch(
             @click="switchActiveTab('own')"
           >
             <icon-apps />
-            我的已发布
+            {{ t('appStudio.abilities.agents.ownPublished') }}
             <span class="ml-auto text-xs text-gray-400">{{ ownPaginator.total_record > 0 ? ownPaginator.total_record : '' }}</span>
           </div>
           <div
@@ -297,23 +299,27 @@ watch(
             @click="switchActiveTab('public')"
           >
             <icon-apps />
-            应用广场
+            {{ t('appStudio.abilities.agents.publicMarketplace') }}
             <span class="ml-auto text-xs text-gray-400">{{ publicPaginator.total_record > 0 ? publicPaginator.total_record : '' }}</span>
           </div>
         </div>
         <div class="text-xs text-gray-500 leading-5">
-          仅展示已发布且可绑定的 Agent。选择后会直接纳入当前应用的运行时工具。
+          {{ t('appStudio.abilities.agents.publishedOnly') }}
         </div>
       </div>
 
       <div class="flex-1 p-4 min-w-0 flex flex-col overflow-hidden">
         <div class="w-full flex items-center justify-between gap-2 mb-7">
           <div class="text-lg font-bold text-gray-700">
-            {{ activeTab === 'own' ? '我的已发布应用' : '应用广场' }}
+            {{
+              activeTab === 'own'
+                ? t('appStudio.abilities.agents.ownPublishedTitle')
+                : t('appStudio.abilities.agents.publicMarketplaceTitle')
+            }}
           </div>
           <a-input-search
             v-model="searchWord"
-            placeholder="搜索应用名称或描述"
+            :placeholder="t('appStudio.abilities.agents.searchPlaceholder')"
             class="w-full sm:w-[280px] bg-white rounded-lg border-gray-300"
             @search="handleSearch"
           />
@@ -343,20 +349,20 @@ watch(
                     <div class="flex items-center gap-2 min-w-0">
                       <div class="text-sm font-semibold text-gray-900 truncate">{{ app.name }}</div>
                       <a-tag size="small" :color="app.invoke_mode === 'a2a' ? 'arcoblue' : 'orange'">
-                        {{ app.invoke_mode === 'a2a' ? 'A2A' : 'Tool' }}
+                        {{ app.invoke_mode === 'a2a' ? t('appStudio.abilities.invokeA2A') : t('appStudio.abilities.invokeTool') }}
                       </a-tag>
                       <a-tag size="small" :color="app.source_scope === 'public' ? 'arcoblue' : 'green'">
-                        {{ app.source_scope === 'public' ? '应用广场' : '我的应用' }}
+                        {{ app.source_scope === 'public' ? t('appStudio.abilities.sourcePublic') : t('appStudio.abilities.sourceOwn') }}
                       </a-tag>
                       <a-tag size="small" color="gray">
-                        {{ app.is_public ? '公开应用' : '私有应用' }}
+                        {{ app.is_public ? t('appStudio.abilities.publicApp') : t('appStudio.abilities.privateApp') }}
                       </a-tag>
                     </div>
                     <div class="text-xs text-gray-500 truncate">
                       {{ app.status || 'published' }}
                     </div>
                     <div class="text-sm text-gray-600 line-clamp-2">
-                      {{ app.description || '未填写描述' }}
+                      {{ app.description || t('appStudio.abilities.emptyDescription') }}
                     </div>
                   </div>
                 </div>
@@ -368,22 +374,30 @@ watch(
                     :disabled="isSelectedBinding(app)"
                     @click.stop="handleSelect(app)"
                   >
-                    {{ isSelectedBinding(app) ? '已添加' : '添加到应用' }}
+                    {{
+                      isSelectedBinding(app)
+                        ? t('appStudio.abilities.agents.added')
+                        : t('appStudio.abilities.agents.addToApp')
+                    }}
                   </a-button>
                 </div>
               </div>
 
-              <a-empty v-if="activeApps.length === 0" description="暂无可绑定的 Agent 应用" class="py-20" />
+              <a-empty
+                v-if="activeApps.length === 0"
+                :description="t('appStudio.abilities.agents.noAvailable')"
+                class="py-20"
+              />
 
               <div v-if="activePaginator.total_page >= 2" class="w-full">
                 <div v-if="activeLoading" class="text-center py-4">
                   <a-space>
                     <a-spin />
-                    <div class="text-gray-400">加载中</div>
+                    <div class="text-gray-400">{{ t('appStudio.list.loading') }}</div>
                   </a-space>
                 </div>
                 <div v-else-if="activePaginator.current_page >= activePaginator.total_page" class="text-center py-4">
-                  <div class="text-gray-400">数据已加载完成</div>
+                  <div class="text-gray-400">{{ t('appStudio.list.loadedAll') }}</div>
                 </div>
               </div>
             </div>

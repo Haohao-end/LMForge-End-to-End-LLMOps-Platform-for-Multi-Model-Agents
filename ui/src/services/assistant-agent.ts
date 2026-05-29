@@ -1,5 +1,6 @@
 import { get, post, ssePost } from '@/utils/request'
 import type { BaseResponse } from '@/models/base'
+import { getAppLocale } from '@/i18n'
 import type {
   GetAssistantAgentCapabilitiesResponse,
   GetAssistantAgentConversationsResponse,
@@ -17,7 +18,13 @@ export const assistantAgentChat = (
 ) => {
   return ssePost(
     `/assistant-agent/chat`,
-    { body: { query, image_urls, conversation_id, enable_deep_thinking } },
+    {
+      body: { query, image_urls, conversation_id, enable_deep_thinking },
+      headers: {
+        'Accept-Language': getAppLocale(),
+        'X-App-Locale': getAppLocale(),
+      },
+    },
     onData,
   )
 }
@@ -27,7 +34,23 @@ export const assistantAgentGenerateIntroduction = (
   onData: (event_response: Record<string, any>) => void,
   signal?: AbortSignal,
 ) => {
-  return ssePost(`/assistant-agent/introduction`, { body: {}, signal }, onData)
+  return ssePost(
+    `/assistant-agent/introduction`,
+    {
+      body: {},
+      signal,
+      headers: {
+        'Accept-Language': getAppLocale(),
+        'X-App-Locale': getAppLocale(),
+      },
+    },
+    onData,
+  )
+}
+
+// 获取辅助 Agent 当前能力
+export const getAssistantAgentCapabilities = () => {
+  return get<GetAssistantAgentCapabilitiesResponse>(`/assistant-agent/capabilities`)
 }
 
 // 获取辅助 Agent 当前能力

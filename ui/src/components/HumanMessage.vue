@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { getUserAvatarUrl } from '@/utils/helper'
 
@@ -15,6 +16,7 @@ const props = defineProps({
   query: { type: String, default: '', required: true },
   image_urls: { type: Array, default: () => [] },
 })
+const { t } = useI18n()
 
 const handleCopyHumanMessage = async () => {
   const imageUrls = props.image_urls.map((image_url) => String(image_url))
@@ -22,7 +24,7 @@ const handleCopyHumanMessage = async () => {
   if (!humanMessage) return
 
   await copyTextToClipboard(humanMessage)
-  Message.success('用户消息已复制')
+  Message.success(t('chat.messages.humanCopied'))
 }
 </script>
 

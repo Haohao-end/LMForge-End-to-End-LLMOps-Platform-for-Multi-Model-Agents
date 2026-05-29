@@ -61,6 +61,10 @@ class AppConfigService(BaseService):
         if self.skill_service is None:
             self.skill_service = SkillService(self.db)
 
+    def __post_init__(self) -> None:
+        if self.skill_service is None:
+            self.skill_service = SkillService(self.db)
+
     @staticmethod
     def _build_agent_runtime_tool_name(app_id: UUID | str) -> str:
         """生成子 Agent 工具名，确保在 LangChain 中唯一且稳定。"""
@@ -317,7 +321,7 @@ class AppConfigService(BaseService):
         mcp_bindings, validate_mcp_bindings = self._process_and_validate_mcp_bindings(
             getattr(draft_app_config, "mcp_bindings", [])
         )
-        if persist_changes and getattr(draft_app_config, "mcp_bindings", []) != validate_mcp_bindings:
+        if getattr(draft_app_config, "mcp_bindings", []) != validate_mcp_bindings:
             self.update(draft_app_config, mcp_bindings=validate_mcp_bindings)
 
         # 9.读取并规范化 MCP 工具快照
@@ -325,28 +329,18 @@ class AppConfigService(BaseService):
             getattr(draft_app_config, "mcp_tool_snapshots", []),
             validate_mcp_bindings,
         )
-        if persist_changes and getattr(draft_app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
+        if getattr(draft_app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
             self.update(draft_app_config, mcp_tool_snapshots=validate_mcp_tool_snapshots)
 
         # 10.读取并规范化 Skills 绑定列表
         skills, validate_skills = self.skill_service.process_and_validate_skill_bindings(
-            getattr(draft_app_config, "skills", []),
-            sync_catalog=persist_changes,
+            getattr(draft_app_config, "skills", [])
         )
-        if persist_changes and getattr(draft_app_config, "skills", []) != validate_skills:
+        if getattr(draft_app_config, "skills", []) != validate_skills:
             self.update(draft_app_config, skills=validate_skills)
 
-        # 11.读取并规范化 Agent 绑定列表
-        agent_bindings, validate_agent_bindings = self.process_and_validate_agent_bindings(
-            getattr(draft_app_config, "agent_bindings", []),
-            current_account_id=getattr(app, "account_id", None),
-            current_app_id=getattr(app, "id", None),
-        )
-        if persist_changes and getattr(draft_app_config, "agent_bindings", []) != validate_agent_bindings:
-            self.update(draft_app_config, agent_bindings=validate_agent_bindings)
-
-        # 12.将数据转换成字典后返回
-        result = self._process_and_transformer_app_config(
+        # 10.将数据转换成字典后返回
+        return self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
@@ -354,7 +348,6 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
-            agent_bindings,
             draft_app_config
         )
         if not persist_changes:
@@ -409,7 +402,7 @@ class AppConfigService(BaseService):
         mcp_bindings, validate_mcp_bindings = self._process_and_validate_mcp_bindings(
             getattr(app_config, "mcp_bindings", [])
         )
-        if persist_changes and getattr(app_config, "mcp_bindings", []) != validate_mcp_bindings:
+        if getattr(app_config, "mcp_bindings", []) != validate_mcp_bindings:
             self.update(app_config, mcp_bindings=validate_mcp_bindings)
 
         # 9.读取并规范化 MCP 工具快照
@@ -417,28 +410,18 @@ class AppConfigService(BaseService):
             getattr(app_config, "mcp_tool_snapshots", []),
             validate_mcp_bindings,
         )
-        if persist_changes and getattr(app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
+        if getattr(app_config, "mcp_tool_snapshots", []) != validate_mcp_tool_snapshots:
             self.update(app_config, mcp_tool_snapshots=validate_mcp_tool_snapshots)
 
         # 10.读取并规范化 Skills 绑定列表
         skills, validate_skills = self.skill_service.process_and_validate_skill_bindings(
-            getattr(app_config, "skills", []),
-            sync_catalog=persist_changes,
+            getattr(app_config, "skills", [])
         )
-        if persist_changes and getattr(app_config, "skills", []) != validate_skills:
+        if getattr(app_config, "skills", []) != validate_skills:
             self.update(app_config, skills=validate_skills)
 
-        # 11.读取并规范化 Agent 绑定列表
-        agent_bindings, validate_agent_bindings = self.process_and_validate_agent_bindings(
-            getattr(app_config, "agent_bindings", []),
-            current_account_id=getattr(app, "account_id", None),
-            current_app_id=getattr(app, "id", None),
-        )
-        if persist_changes and getattr(app_config, "agent_bindings", []) != validate_agent_bindings:
-            self.update(app_config, agent_bindings=validate_agent_bindings)
-
-        # 12.将数据转换成字典后返回
-        result = self._process_and_transformer_app_config(
+        # 10.将数据转换成字典后返回
+        return self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
@@ -446,7 +429,6 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
-            agent_bindings,
             app_config
         )
         if not persist_changes:
@@ -479,15 +461,7 @@ class AppConfigService(BaseService):
             getattr(app_config_version, "mcp_tool_snapshots", []),
             mcp_bindings,
         )
-        skills, _ = self.skill_service.process_and_validate_skill_bindings(
-            getattr(app_config_version, "skills", []),
-            sync_catalog=False,
-        )
-        agent_bindings, _ = self.process_and_validate_agent_bindings(
-            getattr(app_config_version, "agent_bindings", []),
-            current_account_id=current_account_id,
-            current_app_id=current_app_id,
-        )
+        skills, _ = self.skill_service.process_and_validate_skill_bindings(getattr(app_config_version, "skills", []))
 
         result = self._process_and_transformer_app_config(
             validate_model_config,
@@ -497,11 +471,36 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
-            agent_bindings,
             app_config_version,
         )
         self._set_runtime_config_cache(cache_key, result)
         return result
+
+    def get_langchain_tools_by_mcp_bindings(
+        self,
+        mcp_bindings: list[dict],
+        mcp_tool_snapshots: list[dict] | None = None,
+    ) -> list[BaseTool]:
+        """根据传递的 MCP 绑定列表获取 LangChain 工具。"""
+        if not isinstance(mcp_bindings, list):
+            return []
+        return McpToolFactory().get_tools(mcp_bindings, mcp_tool_snapshots=mcp_tool_snapshots)
+
+    def prepare_mcp_tool_snapshots(
+        self,
+        mcp_bindings: list[dict],
+        existing_snapshots: list[dict] | None = None,
+    ) -> list[dict]:
+        """根据 MCP 绑定生成预热快照，不进行远端发现。"""
+        return McpToolFactory().prepare_binding_snapshots(mcp_bindings, existing_snapshots)
+
+    def refresh_mcp_tool_snapshots(
+        self,
+        mcp_bindings: list[dict],
+        existing_snapshots: list[dict] | None = None,
+    ) -> list[dict]:
+        """根据 MCP 绑定刷新远端快照。"""
+        return McpToolFactory().refresh_binding_snapshots(mcp_bindings, existing_snapshots)
 
     def get_langchain_tools_by_mcp_bindings(
         self,
@@ -600,7 +599,6 @@ class AppConfigService(BaseService):
             mcp_bindings: list[dict],
             mcp_tool_snapshots: list[dict],
             skills: list[dict],
-            agent_bindings: list[dict],
             app_config: Union[AppConfig, AppConfigVersion]
     ) -> dict[str, Any]:
         """根据传递的插件列表、工作流列表、知识库列表以及应用配置创建字典信息"""
@@ -613,7 +611,6 @@ class AppConfigService(BaseService):
             "mcp_bindings": mcp_bindings,
             "mcp_tool_snapshots": mcp_tool_snapshots,
             "skills": skills,
-            "agent_bindings": agent_bindings,
             "workflows": workflows,
             "datasets": datasets,
             "retrieval_config": app_config.retrieval_config,
@@ -1003,3 +1000,9 @@ class AppConfigService(BaseService):
             })
 
         return workflows, validate_workflows
+
+
+
+
+
+

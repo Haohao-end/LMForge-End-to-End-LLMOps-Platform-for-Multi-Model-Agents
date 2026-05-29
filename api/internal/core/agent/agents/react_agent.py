@@ -168,7 +168,7 @@ class ReACTAgent(FunctionCallAgent):
                         ))
         # 12.计算LLM的输入+输出的token总数
         encoding = tiktoken.get_encoding("cl100k_base")
-        input_token_count = len(encoding.encode(normalize_usage_text(llm_messages)))
+        input_token_count = len(encoding.encode(normalize_usage_text(state["messages"])))
         output_token_count = len(encoding.encode(normalize_usage_text(gathered)))
 
         # 13.获取输入/输出价格和单位

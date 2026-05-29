@@ -4,6 +4,7 @@ import { useUpdateDraftAppConfig } from '@/hooks/use-app'
 import { cloneDeep, isEqual } from 'lodash'
 import { Message } from '@arco-design/web-vue'
 import { useGetWorkflowsWithPage } from '@/hooks/use-workflow'
+import { useI18n } from 'vue-i18n'
 
 type WorkflowSelection = {
   id: string
@@ -13,6 +14,7 @@ type WorkflowSelection = {
 }
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
   app_id: { type: String, default: '', required: true },
   workflows: {
@@ -70,7 +72,7 @@ const handleSelectWorkflow = (idx: number) => {
   } else {
     // 7.3 检测已关联的工作流数量
     if (activateWorkflows.value.length >= 5) {
-      Message.warning('关联工作流已超过5个，无法继续关联')
+      Message.warning(t('appStudio.abilities.workflows.maxReached'))
       return
     }
     // 7.4 添加数据到激活工作流列表
@@ -148,7 +150,7 @@ watch(
   <div class="">
     <a-collapse-item key="workflows" class="app-ability-item">
       <template #header>
-        <div class="text-gray-700 font-bold">工作流</div>
+        <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.workflows.title') }}</div>
       </template>
       <template #extra>
         <a-button
@@ -216,7 +218,7 @@ watch(
         </div>
       </div>
       <div v-else class="text-xs text-gray-500 leading-[22px]">
-        工作流支持通过可视化的方式，对插件、大语言模型、代码块等功能进行组合，从而实现复杂、稳定的业务流程编排，例如旅行规划、报告分析等。
+        {{ t('appStudio.abilities.workflows.empty') }}
       </div>
     </a-collapse-item>
     <!-- 工作流模态窗 -->
@@ -231,7 +233,9 @@ watch(
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between mb-6">
-        <div class="text-lg font-bold text-gray-700">选择关联工作流</div>
+        <div class="text-lg font-bold text-gray-700">
+          {{ t('appStudio.abilities.workflows.selectTitle') }}
+        </div>
         <a-button
           type="text"
           class="!text-gray-700"
@@ -270,7 +274,7 @@ watch(
             <!-- 无数据UI状态 -->
             <a-empty
               v-if="apiWorkflows.length === 0"
-              description="没有可用的工作流"
+              :description="t('appStudio.abilities.workflows.noAvailable')"
               class="h-[400px] flex flex-col items-center justify-center"
             />
           </div>
@@ -284,12 +288,12 @@ watch(
             >
               <a-space class="my-4">
                 <a-spin />
-                <div class="text-gray-400">加载中</div>
+                <div class="text-gray-400">{{ t('appStudio.list.loading') }}</div>
               </a-space>
             </a-col>
             <!-- 数据加载完成 -->
             <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" class="!text-center">
-              <div class="text-gray-400 my-4">数据已加载完成</div>
+              <div class="text-gray-400 my-4">{{ t('appStudio.list.loadedAll') }}</div>
             </a-col>
           </a-row>
         </a-spin>
@@ -297,17 +301,21 @@ watch(
       <!-- 底部选中工作流及按钮 -->
       <div class="flex items-center justify-between">
         <!-- 左侧提示文字 -->
-        <div class="">{{ activateWorkflows.length }} 个工作流被选中</div>
+        <div class="">
+          {{ t('appStudio.abilities.workflows.selectedCount', { count: activateWorkflows.length }) }}
+        </div>
         <!-- 按钮组 -->
         <a-space :size="12">
-          <a-button class="rounded-lg" @click="handleCancelWorkflowsModal">取消</a-button>
+          <a-button class="rounded-lg" @click="handleCancelWorkflowsModal">
+            {{ t('common.actions.cancel') }}
+          </a-button>
           <a-button
             :loading="updateDraftAppConfigLoading"
             type="primary"
             class="rounded-lg"
             @click="handleSubmitWorkflows"
           >
-            添加
+            {{ t('appStudio.abilities.workflows.add') }}
           </a-button>
         </a-space>
       </div>

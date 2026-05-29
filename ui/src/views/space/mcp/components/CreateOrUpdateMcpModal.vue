@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { type FileItem, Form, Message, type ValidatedError } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import IconUploadGenerator from '@/components/IconUploadGenerator.vue'
 import { useUploadImage } from '@/hooks/use-upload-file'
 import { getErrorMessage } from '@/utils/error'
+import { getStoreCategoryDisplayName } from '@/utils/store-display'
 import { getMcpCategories, getMcpProvider, createMcpProvider, updateMcpProvider, generateMcpIconPreview, regenerateMcpIcon } from '@/services/mcp'
 import { mcpSchemaAssistantChat } from '@/services/ai'
 import type { McpCategory } from '@/models/mcp'
@@ -33,6 +35,7 @@ const props = defineProps({
 })
 
 const emits = defineEmits(['update:visible', 'update:mcp_provider_id'])
+const { t, locale } = useI18n()
 
 const categories = ref<McpCategory[]>([])
 const formRef = ref<InstanceType<typeof Form>>()
@@ -63,6 +66,8 @@ const defaultForm = (): McpForm => ({
 const form = ref<McpForm>(defaultForm())
 
 const isEditMode = computed(() => Boolean(props.mcp_provider_id))
+const getCategoryLabel = (value: string) =>
+  getStoreCategoryDisplayName(value, locale.value as 'zh-CN' | 'en-US')
 
 const hideModal = () => emits('update:visible', false)
 
@@ -80,7 +85,7 @@ const parseJsonArray = (text: string) => {
   if (!normalized) return []
   const parsed = JSON.parse(normalized)
   if (!Array.isArray(parsed)) {
-    throw new Error('必须是数组')
+    throw new Error(t('space.mcp.arrayExpected'))
   }
   return parsed
 }
@@ -90,7 +95,7 @@ const parseJsonObject = (text: string) => {
   if (!normalized) return {}
   const parsed = JSON.parse(normalized)
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('必须是对象')
+    throw new Error(t('space.mcp.objectExpected'))
   }
   return parsed as Record<string, string>
 }
@@ -125,7 +130,7 @@ const applyMcpPayload = (payload: Record<string, any>) => {
   form.value.timeout_seconds = Number(payload.timeout_seconds || 30)
   form.value.icon = String(payload.icon || form.value.icon || '')
   if (form.value.icon) {
-    form.value.fileList = [{ uid: '1', name: 'MCP图标', url: form.value.icon }]
+    form.value.fileList = [{ uid: '1', name: t('space.mcp.iconPlaceholder'), url: form.value.icon }]
   }
 }
 
@@ -140,7 +145,7 @@ const loadProvider = async (providerId: string) => {
     const res = await getMcpProvider(providerId)
     applyMcpPayload(res.data)
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载 MCP 详情失败'))
+    Message.error(getErrorMessage(error, t('space.mcp.detailLoadFailed')))
   } finally {
     loadingProvider.value = false
   }
@@ -149,13 +154,13 @@ const loadProvider = async (providerId: string) => {
 const handleUploadIcon = async (file: File) => {
   await handleUploadImage(file)
   form.value.icon = image_url.value
-  form.value.fileList = [{ uid: '1', name: 'MCP图标', url: image_url.value }]
-  Message.success('图标上传成功')
+  form.value.fileList = [{ uid: '1', name: t('space.mcp.iconPlaceholder'), url: image_url.value }]
+  Message.success(t('space.mcp.iconUploadSuccess'))
 }
 
 const handleGenerateIcon = async () => {
   if (!form.value.name || form.value.name.trim() === '') {
-    Message.warning('请先输入 MCP 名称')
+    Message.warning(t('space.mcp.nameRequired'))
     return
   }
 
@@ -166,19 +171,19 @@ const handleGenerateIcon = async () => {
       const res = await regenerateMcpIcon(providerId)
       if (res.data.icon) {
         form.value.icon = res.data.icon
-        form.value.fileList = [{ uid: '1', name: 'MCP图标', url: res.data.icon }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('space.mcp.iconPlaceholder'), url: res.data.icon }]
+        Message.success(t('space.mcp.iconGenerateSuccess'))
       }
     } else {
       const res = await generateMcpIconPreview(form.value.name, form.value.description)
       if (res.data.icon) {
         form.value.icon = res.data.icon
-        form.value.fileList = [{ uid: '1', name: 'MCP图标', url: res.data.icon }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('space.mcp.iconPlaceholder'), url: res.data.icon }]
+        Message.success(t('space.mcp.iconGenerateSuccess'))
       }
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '图标生成失败'))
+    Message.error(getErrorMessage(error, t('space.mcp.iconGenerateFailed')))
   } finally {
     generateLoading.value = false
   }
@@ -187,7 +192,7 @@ const handleGenerateIcon = async () => {
 const handleGenerateByAI = async () => {
   const question = aiQuestion.value.trim()
   if (!question) {
-    Message.warning('请输入你希望生成的 MCP 描述')
+    Message.warning(t('space.mcp.aiDescriptionRequired'))
     return
   }
 
@@ -203,9 +208,9 @@ const handleGenerateByAI = async () => {
     const jsonText = extractJsonObject(aiAnswer.value)
     const payload = JSON.parse(jsonText)
     applyMcpPayload(payload)
-    Message.success('AI 已生成 MCP 配置')
+    Message.success(t('space.mcp.aiConfigSuccess'))
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, 'AI 生成 MCP 失败，请调整描述后重试'))
+    Message.error(getErrorMessage(error, t('space.mcp.aiConfigFailed')))
   } finally {
     aiLoading.value = false
   }
@@ -225,7 +230,7 @@ const handleSubmit = async ({ errors }: { errors: Record<string, ValidatedError>
       .filter((item) => item.key)
     env = parseJsonObject(form.value.env_text)
   } catch (error: unknown) {
-    Message.warning(`高级配置 JSON 格式错误: ${(error as Error).message}`)
+    Message.warning(t('space.mcp.jsonError', { message: (error as Error).message }))
     return
   }
 
@@ -254,11 +259,11 @@ const handleSubmit = async ({ errors }: { errors: Record<string, ValidatedError>
   }
 
   if (payload.transport === 'stdio' && !payload.command) {
-    Message.warning('stdio 模式需要填写命令')
+    Message.warning(t('space.mcp.stdioCommandRequired'))
     return
   }
   if (['http', 'sse', 'streamable_http', 'streamable-http'].includes(payload.transport) && !payload.url) {
-    Message.warning('请填写 MCP 地址')
+    Message.warning(t('space.mcp.urlRequired'))
     return
   }
 
@@ -266,16 +271,16 @@ const handleSubmit = async ({ errors }: { errors: Record<string, ValidatedError>
   try {
     if (isEditMode.value) {
       await updateMcpProvider(props.mcp_provider_id, payload)
-      Message.success('MCP 更新成功')
+      Message.success(t('space.mcp.updateSuccess'))
     } else {
       await createMcpProvider(payload)
-      Message.success('MCP 创建成功')
+      Message.success(t('space.mcp.createSuccess'))
     }
     emits('update:visible', false)
     emits('update:mcp_provider_id', '')
     props.callback && props.callback()
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '保存 MCP 失败'))
+    Message.error(getErrorMessage(error, t('space.mcp.saveFailed')))
   } finally {
     submitLoading.value = false
   }
@@ -321,10 +326,10 @@ watch(
           <div class="flex items-start justify-between gap-3">
             <div>
               <div class="text-xl font-bold text-gray-800">
-                {{ isEditMode ? '编辑 MCP' : '创建 MCP' }}
+                {{ isEditMode ? t('space.mcp.updateTitle') : t('space.mcp.createTitle') }}
               </div>
               <div class="mt-1 text-xs leading-5 text-gray-500">
-                左侧负责图标和 AI 辅助生成，右侧负责具体表单字段，整体会更紧凑。
+                {{ t('space.mcp.modalDescription') }}
               </div>
             </div>
             <a-button type="text" class="!text-gray-500 hover:!text-gray-700" size="small" @click="hideModal">
@@ -341,7 +346,7 @@ watch(
               :icon="form.icon"
               :file-list="form.fileList"
               :loading="generateLoading"
-              placeholder="MCP"
+              :placeholder="t('space.mcp.iconPlaceholder')"
               :on-upload="handleUploadIcon"
               :on-generate="handleGenerateIcon"
               @update:icon="(val) => (form.icon = val)"
@@ -351,21 +356,21 @@ watch(
 
           <div class="rounded-lg border border-gray-200 bg-white p-4">
             <div class="flex items-center justify-between gap-2 mb-3">
-              <div class="text-sm font-semibold text-gray-800">AI 生成 MCP 配置</div>
+              <div class="text-sm font-semibold text-gray-800">{{ t('space.mcp.aiTitle') }}</div>
               <a-button type="primary" size="small" :loading="aiLoading" @click="handleGenerateByAI">
-                AI 生成
+                {{ t('space.mcp.aiButton') }}
               </a-button>
             </div>
             <a-textarea
               v-model="aiQuestion"
               :auto-size="{ minRows: 4, maxRows: 6 }"
-              placeholder="例如：创建一个天气 MCP，支持查询当前天气和三天天气预报，使用 HTTP 方式，提供 get_current_weather 和 get_forecast 两个工具。"
+              :placeholder="t('space.mcp.aiPlaceholder')"
             />
           </div>
 
           <div class="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">
-            <div class="font-semibold text-blue-900 mb-1">填写提示</div>
-            <div>HTTP / SSE / Streamable HTTP 填地址，stdio 模式填命令。高级配置按需填写即可。</div>
+            <div class="font-semibold text-blue-900 mb-1">{{ t('space.mcp.fillHintTitle') }}</div>
+            <div>{{ t('space.mcp.fillHint') }}</div>
           </div>
         </aside>
 
@@ -374,38 +379,38 @@ watch(
             <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <a-form-item
                 field="name"
-                label="MCP 名称"
+                :label="t('space.mcp.nameLabel')"
                 asterisk-position="end"
                 class="lg:col-span-2"
-                :rules="[{ required: true, message: 'MCP 名称不能为空' }]"
+                :rules="[{ required: true, message: t('space.mcp.nameRequired') }]"
               >
-                <a-input v-model:model-value="form.name" placeholder="请输入 MCP 名称" />
+                <a-input v-model:model-value="form.name" :placeholder="t('space.mcp.namePlaceholder')" />
               </a-form-item>
 
               <a-form-item
                 field="description"
-                label="MCP 描述"
+                :label="t('space.mcp.descriptionLabel')"
                 asterisk-position="end"
                 class="lg:col-span-2"
-                :rules="[{ required: true, message: 'MCP 描述不能为空' }]"
+                :rules="[{ required: true, message: t('space.mcp.descriptionRequired') }]"
               >
                 <a-textarea
                   v-model:model-value="form.description"
                   :auto-size="{ minRows: 3, maxRows: 4 }"
-                  placeholder="请输入该 MCP 的能力描述"
+                  :placeholder="t('space.mcp.descriptionPlaceholder')"
                 />
               </a-form-item>
 
-              <a-form-item field="category" label="分类">
-                <a-select v-model:model-value="form.category" placeholder="请选择分类">
+              <a-form-item field="category" :label="t('space.mcp.categoryLabel')">
+                <a-select v-model:model-value="form.category" :placeholder="t('space.mcp.categoryPlaceholder')">
                   <a-option v-for="category in categories" :key="category.id" :value="category.id">
-                    {{ category.name }}
+                    {{ getCategoryLabel(category.id || category.name) }}
                   </a-option>
                 </a-select>
               </a-form-item>
 
-              <a-form-item field="transport" label="Transport">
-                <a-select v-model:model-value="form.transport" placeholder="请选择 transport">
+              <a-form-item field="transport" :label="t('space.mcp.transportLabel')">
+                <a-select v-model:model-value="form.transport" :placeholder="t('space.mcp.transportPlaceholder')">
                   <a-option value="streamable_http">streamable_http</a-option>
                   <a-option value="http">http</a-option>
                   <a-option value="sse">sse</a-option>
@@ -413,50 +418,50 @@ watch(
                 </a-select>
               </a-form-item>
 
-              <a-form-item field="timeout_seconds" label="超时秒数">
+              <a-form-item field="timeout_seconds" :label="t('space.mcp.timeoutLabel')">
                 <a-input-number v-model:model-value="form.timeout_seconds" :min="1" :max="600" />
               </a-form-item>
 
               <div class="hidden rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-xs leading-5 text-gray-500 lg:block">
-                <div class="font-semibold text-gray-800 mb-1">高级说明</div>
-                <div>tool_names、args、headers 和 env 都是可选项。若是 stdio 模式，优先填写命令。</div>
+                <div class="font-semibold text-gray-800 mb-1">{{ t('space.mcp.advancedHintTitle') }}</div>
+                <div>{{ t('space.mcp.advancedHint') }}</div>
               </div>
 
-              <a-form-item field="url" label="MCP 地址" class="lg:col-span-2">
-                <a-input v-model:model-value="form.url" placeholder="HTTP / SSE / Streamable HTTP 地址" />
+              <a-form-item field="url" :label="t('space.mcp.urlLabel')" class="lg:col-span-2">
+                <a-input v-model:model-value="form.url" :placeholder="t('space.mcp.urlPlaceholder')" />
               </a-form-item>
 
-              <a-form-item field="command" label="stdio 命令" class="lg:col-span-2">
-                <a-input v-model:model-value="form.command" placeholder="stdio 模式命令，例如 uvx" />
+              <a-form-item field="command" :label="t('space.mcp.commandLabel')" class="lg:col-span-2">
+                <a-input v-model:model-value="form.command" :placeholder="t('space.mcp.commandPlaceholder')" />
               </a-form-item>
 
-              <a-form-item field="tool_names_text" label="工具白名单">
-                <a-input v-model:model-value="form.tool_names_text" placeholder="英文逗号分隔，可选" />
+              <a-form-item field="tool_names_text" :label="t('space.mcp.toolNamesLabel')">
+                <a-input v-model:model-value="form.tool_names_text" :placeholder="t('space.mcp.toolNamesPlaceholder')" />
               </a-form-item>
 
-              <a-form-item field="args_text" label="stdio args">
-                <a-input v-model:model-value="form.args_text" placeholder="英文逗号分隔，可选" />
+              <a-form-item field="args_text" :label="t('space.mcp.argsLabel')">
+                <a-input v-model:model-value="form.args_text" :placeholder="t('space.mcp.argsPlaceholder')" />
               </a-form-item>
 
-              <a-form-item field="headers_text" label="请求头 JSON" class="lg:col-span-2">
+              <a-form-item field="headers_text" :label="t('space.mcp.headersLabel')" class="lg:col-span-2">
                 <a-textarea
                   v-model:model-value="form.headers_text"
                   :auto-size="{ minRows: 3, maxRows: 5 }"
-                  placeholder='例如 [{"key":"Authorization","value":"Bearer xxx"}]'
+                  :placeholder="t('space.mcp.headersPlaceholder')"
                 />
               </a-form-item>
 
-              <a-form-item field="env_text" label="stdio env JSON" class="lg:col-span-2">
+              <a-form-item field="env_text" :label="t('space.mcp.envLabel')" class="lg:col-span-2">
                 <a-textarea
                   v-model:model-value="form.env_text"
                   :auto-size="{ minRows: 3, maxRows: 5 }"
-                  placeholder='例如 {"API_KEY":"xxx"}'
+                  :placeholder="t('space.mcp.envPlaceholder')"
                 />
               </a-form-item>
             </div>
 
             <div class="flex items-center justify-end gap-3 pt-4">
-              <a-button html-type="button" size="large" class="rounded-lg px-6" @click="hideModal">取消</a-button>
+              <a-button html-type="button" size="large" class="rounded-lg px-6" @click="hideModal">{{ t('common.actions.cancel') }}</a-button>
               <a-button
                 :loading="submitLoading"
                 type="primary"
@@ -464,7 +469,7 @@ watch(
                 size="large"
                 class="rounded-lg px-6"
               >
-                保存
+                {{ t('common.actions.save') }}
               </a-button>
             </div>
           </a-form>

@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-from copy import deepcopy
+import json
 import logging
 import mimetypes
-import json
-import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from flask import Flask, current_app, g, has_app_context
+from flask import Flask, current_app, has_app_context
 from injector import inject
-from sqlalchemy import String, desc, func, inspect, or_
+from sqlalchemy import desc, func, inspect, or_
 from sqlalchemy.exc import ProgrammingError
-from langchain_core.tools import StructuredTool
-from pydantic import create_model
 
 from internal.core.skills import LocalSkillPackage, SkillCatalogManager, SkillScfClient, SkillToolFactory
 from internal.entity.app_entity import AppStatus
@@ -51,13 +46,6 @@ def _normalize_int(value: Any, default: int = 1) -> int:
     return normalized if normalized > 0 else default
 
 
-def _normalize_tool_name(value: Any) -> str:
-    normalized = _normalize_text(value)
-    normalized = re.sub(r"[^0-9a-zA-Z_]+", "_", normalized)
-    normalized = re.sub(r"_+", "_", normalized).strip("_")
-    return normalized or "skill"
-
-
 @inject
 @dataclass
 class SkillService(BaseService):
@@ -69,49 +57,6 @@ class SkillService(BaseService):
 
     def __post_init__(self) -> None:
         self.tool_factory = SkillToolFactory(self.scf_client)
-
-    @staticmethod
-    def _get_runtime_skill_payload_cache() -> dict[str, dict[str, Any]]:
-        """获取请求级技能运行时缓存，避免同一请求重复查库。"""
-        if not has_app_context():
-            return {}
-
-        cache = getattr(g, "_skill_runtime_payload_cache", None)
-        if not isinstance(cache, dict):
-            cache = {}
-            g._skill_runtime_payload_cache = cache
-        return cache
-
-    def _remember_runtime_skill_payload(
-        self,
-        package: SkillPackage,
-        version_record: SkillPackageVersion,
-    ) -> dict[str, Any]:
-        """缓存技能运行时工具构建所需的包内容，供同请求内复用。"""
-        runtime_payload = {
-            "package_payload": self._build_package_payload(
-                package=package,
-                version_record=version_record,
-                include_bundle=True,
-            ),
-            "tool_definitions": self._get_executable_tool_definitions(package, version_record),
-        }
-        cache = self._get_runtime_skill_payload_cache()
-        cache[str(package.id)] = deepcopy(runtime_payload)
-        return runtime_payload
-
-    def _get_cached_runtime_skill_payload(self, skill_id: UUID | str) -> dict[str, Any] | None:
-        """读取请求级技能运行时缓存。"""
-        try:
-            skill_uuid = skill_id if isinstance(skill_id, UUID) else UUID(str(skill_id))
-        except Exception:
-            return None
-
-        cache = self._get_runtime_skill_payload_cache()
-        cached_payload = cache.get(str(skill_uuid))
-        if not isinstance(cached_payload, dict):
-            return None
-        return deepcopy(cached_payload)
 
     def _has_skill_package_table(self) -> bool:
         try:
@@ -323,7 +268,6 @@ class SkillService(BaseService):
                     SkillPackage.name.ilike(like_word),
                     SkillPackage.label.ilike(like_word),
                     SkillPackage.description.ilike(like_word),
-                    SkillPackage.tags.cast(String).ilike(like_word),
                     SkillPackage.source_key.ilike(like_word),
                     SkillPackage.category.ilike(like_word),
                 )
@@ -372,16 +316,22 @@ class SkillService(BaseService):
         with open(icon_path, "rb") as f:
             return f.read(), mimetype, None
 
+    def get_skill_package_versions(self, skill_id: UUID | str) -> list[dict[str, Any]]:
+        """获取技能包版本历史。"""
+        package = self._get_skill_package_record(skill_id)
+        if not package:
+            raise NotFoundException("该技能包不存在，请核实后重试")
+
+        return [
+            self._build_skill_version_payload(package, version_record)
+            for version_record in package.versions
+        ]
+
     # ------------------------------------------------------------------ #
     #  技能绑定与运行时工具                                                #
     # ------------------------------------------------------------------ #
 
-    def process_and_validate_skill_bindings(
-        self,
-        origin_skills: list[dict[str, Any]],
-        *,
-        sync_catalog: bool = True,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def process_and_validate_skill_bindings(self, origin_skills: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """校验技能绑定并返回展示信息与可落库信息。"""
         if not isinstance(origin_skills, list):
             return [], []
@@ -389,15 +339,7 @@ class SkillService(BaseService):
             return [], []
 
         self._ensure_skill_package_table()
-        try:
-            has_existing_packages = bool(self.db.session.query(SkillPackage.id).limit(1).first())
-        except ProgrammingError as exc:
-            if not self._is_missing_skill_package_table_error(exc):
-                raise
-            has_existing_packages = False
-
-        if sync_catalog and not has_existing_packages:
-            self.ensure_local_catalog_synced()
+        self.ensure_local_catalog_synced()
 
         validate_skills: list[dict[str, Any]] = []
         display_skills: list[dict[str, Any]] = []
@@ -427,7 +369,6 @@ class SkillService(BaseService):
             if not version_record:
                 continue
 
-            self._remember_runtime_skill_payload(package, version_record)
             normalized_binding = {
                 "skill_id": str(package.id),
             }
@@ -466,32 +407,23 @@ class SkillService(BaseService):
             except Exception:
                 continue
 
-            cached_runtime_payload = self._get_cached_runtime_skill_payload(skill_uuid)
-            if cached_runtime_payload:
-                package_payload = cached_runtime_payload.get("package_payload")
-                tool_definitions = cached_runtime_payload.get("tool_definitions")
-                if not isinstance(package_payload, dict) or not isinstance(tool_definitions, list):
-                    cached_runtime_payload = None
-                else:
-                    package_payload = deepcopy(package_payload)
-                    tool_definitions = deepcopy(tool_definitions)
-            if not cached_runtime_payload:
-                package = self._get_skill_package_record(skill_uuid)
-                if not package:
-                    continue
-
-                version_record = self._get_skill_package_version_record(package.id, package.current_version)
-                if not version_record:
-                    continue
-
-                cached_runtime_payload = self._remember_runtime_skill_payload(package, version_record)
-                package_payload = cached_runtime_payload.get("package_payload")
-                tool_definitions = cached_runtime_payload.get("tool_definitions")
-
-            if not isinstance(package_payload, dict) or not isinstance(tool_definitions, list):
+            package = self._get_skill_package_record(skill_uuid)
+            if not package:
                 continue
+
+            version_record = self._get_skill_package_version_record(package.id, package.current_version)
+            if not version_record:
+                continue
+
+            tool_definitions = self._get_executable_tool_definitions(package, version_record)
             if not tool_definitions:
                 continue
+
+            package_payload = self._build_package_payload(
+                package=package,
+                version_record=version_record,
+                include_bundle=True,
+            )
             tools.extend(
                 self.tool_factory.build_tools(
                     package_payload=package_payload,
@@ -502,91 +434,71 @@ class SkillService(BaseService):
 
         return tools
 
-    def get_langchain_prompt_loaders_by_skill_bindings(
-        self,
-        skill_bindings: list[dict[str, Any]] | None,
-        *,
-        runtime_context: dict[str, Any] | None = None,
-    ) -> list[Any]:
-        """为已绑定的 prompt-only 技能生成按需加载全文的运行时工具。"""
-        if not isinstance(skill_bindings, list):
-            return []
+    # ------------------------------------------------------------------ #
+    #  管理动作                                                             #
+    # ------------------------------------------------------------------ #
 
-        if not self._has_skill_package_table():
-            return []
+    def enable_skill_package(self, skill_id: UUID | str) -> dict[str, Any]:
+        self._ensure_skill_package_table()
+        package = self._get_skill_package_record(skill_id)
+        if not package:
+            raise NotFoundException("该技能包不存在，请核实后重试")
+        if package.enabled:
+            return self._build_skill_package_detail(package)
+        self.update(package, enabled=True, updated_at=utc_now_naive())
+        self._sync_current_package(package, action="enable", force=True)
+        return self.get_skill_package(skill_id)
 
-        runtime_context = runtime_context or {}
-        tools: list[Any] = []
-        seen_tool_names: set[str] = set()
+    def disable_skill_package(self, skill_id: UUID | str) -> dict[str, Any]:
+        self._ensure_skill_package_table()
+        package = self._get_skill_package_record(skill_id)
+        if not package:
+            raise NotFoundException("该技能包不存在，请核实后重试")
+        if not package.enabled:
+            return self._build_skill_package_detail(package)
+        self.update(package, enabled=False, updated_at=utc_now_naive())
+        self._sync_current_package(package, action="disable", force=True)
+        return self.get_skill_package(skill_id)
 
-        for binding in skill_bindings:
-            if not isinstance(binding, dict):
-                continue
+    def rollback_skill_package(self, skill_id: UUID | str, version: int) -> dict[str, Any]:
+        self._ensure_skill_package_table()
+        package = self._get_skill_package_record(skill_id)
+        if not package:
+            raise NotFoundException("该技能包不存在，请核实后重试")
 
-            skill_id = _normalize_text(binding.get("skill_id"))
-            if not skill_id:
-                continue
+        version_record = self._get_skill_package_version_record(package.id, version)
+        if not version_record:
+            raise NotFoundException("该技能包历史版本不存在，请核实后重试")
 
-            try:
-                skill_uuid = UUID(skill_id)
-            except Exception:
-                continue
+        self.update(package, current_version=version, updated_at=utc_now_naive())
+        self._sync_package_to_scf(
+            package=package,
+            version_record=version_record,
+            local_package=None,
+            action="rollback",
+            force=True,
+        )
+        return self.get_skill_package(skill_id)
 
-            cached_runtime_payload = self._get_cached_runtime_skill_payload(skill_uuid)
-            if cached_runtime_payload:
-                package_payload = cached_runtime_payload.get("package_payload")
-                if not isinstance(package_payload, dict):
-                    cached_runtime_payload = None
-                else:
-                    package_payload = deepcopy(package_payload)
-            if not cached_runtime_payload:
-                package = self._get_skill_package_record(skill_uuid)
-                if not package:
-                    continue
+    def sync_skill_package(self, skill_id: UUID | str) -> dict[str, Any]:
+        """强制同步技能包到 SCF。"""
+        self._ensure_skill_package_table()
+        package = self._get_skill_package_record(skill_id)
+        if not package:
+            raise NotFoundException("该技能包不存在，请核实后重试")
 
-                if _normalize_text(package.executor_type).lower() == "scf":
-                    continue
+        version_record = self._get_skill_package_version_record(package.id, package.current_version)
+        if not version_record:
+            raise NotFoundException("该技能包当前版本不存在，请核实后重试")
 
-                version_record = self._get_skill_package_version_record(package.id, package.current_version)
-                if not version_record:
-                    continue
-                cached_runtime_payload = self._remember_runtime_skill_payload(package, version_record)
-                package_payload = cached_runtime_payload.get("package_payload")
-
-            if not isinstance(package_payload, dict):
-                continue
-            if _normalize_text(package_payload.get("executor_type")).lower() == "scf":
-                continue
-
-            tool = self._build_prompt_only_skill_loader_tool(
-                package=SimpleNamespace(
-                    id=UUID(str(package_payload["skill_id"])),
-                    source_key=package_payload.get("source_key", ""),
-                    name=package_payload.get("name", ""),
-                    label=package_payload.get("label", ""),
-                    icon=package_payload.get("icon", ""),
-                    description=package_payload.get("description", ""),
-                    category=package_payload.get("category", ""),
-                    tags=package_payload.get("tags", []),
-                    capabilities=package_payload.get("capabilities", {}),
-                    executor_type=package_payload.get("executor_type", ""),
-                    source_path="",
-                    created_at=0,
-                    updated_at=0,
-                    readme=package_payload.get("readme", ""),
-                ),
-                version_record=SimpleNamespace(
-                    bundle=package_payload.get("bundle", {}),
-                    manifest={"readme": package_payload.get("readme", ""), "tools": package_payload.get("tools", [])},
-                ),
-                runtime_context=runtime_context,
-            )
-            if tool.name in seen_tool_names:
-                continue
-            tools.append(tool)
-            seen_tool_names.add(tool.name)
-
-        return tools
+        self._sync_package_to_scf(
+            package=package,
+            version_record=version_record,
+            local_package=None,
+            action="sync",
+            force=True,
+        )
+        return self.get_skill_package(skill_id)
 
     # ------------------------------------------------------------------ #
     #  内部辅助                                                             #
@@ -673,12 +585,35 @@ class SkillService(BaseService):
                 )
         return inputs
 
+    def _build_skill_version_payload(self, package: SkillPackage, version_record: SkillPackageVersion) -> dict[str, Any]:
+        tool_definitions = self._get_executable_tool_definitions(package, version_record)
+        summary = _normalize_text(version_record.manifest.get("description") or package.description)
+        if not summary:
+            summary = f"版本 {version_record.version}"
+
+        return {
+            "id": str(version_record.id),
+            "skill_package_id": str(package.id),
+            "version": version_record.version,
+            "checksum": version_record.checksum,
+            "sync_status": version_record.sync_status,
+            "sync_error": version_record.sync_error,
+            "is_current_version": version_record.version == package.current_version,
+            "summary": summary,
+            "tool_count": len(tool_definitions),
+            "created_at": datetime_to_timestamp(version_record.created_at),
+            "updated_at": datetime_to_timestamp(version_record.updated_at),
+        }
+
     def _build_skill_package_summary(self, package: SkillPackage) -> dict[str, Any]:
         current_version_record = self._get_skill_package_version_record(package.id, package.current_version)
+        tool_definitions = self._get_executable_tool_definitions(package, current_version_record)
         return self._build_package_payload(
             package=package,
             version_record=current_version_record,
+            include_versions=False,
             include_tools=False,
+            version_payload=tool_definitions,
         )
 
     def _build_skill_package_detail(self, package: SkillPackage) -> dict[str, Any]:
@@ -686,6 +621,7 @@ class SkillService(BaseService):
         return self._build_package_payload(
             package=package,
             version_record=current_version_record,
+            include_versions=True,
             include_tools=True,
         )
 
@@ -722,65 +658,19 @@ class SkillService(BaseService):
             "updated_at": datetime_to_timestamp(package.updated_at),
         }
 
-    def _build_prompt_only_skill_loader_tool(
-        self,
-        *,
-        package: SkillPackage,
-        version_record: SkillPackageVersion,
-        runtime_context: dict[str, Any],
-    ) -> StructuredTool:
-        tool_name = f"skill_prompt__{_normalize_tool_name(package.source_key)}"
-        tool_description = (
-            f"按需加载已绑定 prompt-only 技能「{package.label}」的完整 Markdown 正文。"
-            "适合在初始摘要不足以完成任务时临时调用，返回结果仅用于当前会话。"
-        )
-        args_schema = create_model(f"SkillPromptLoaderArgs_{package.id.hex}")
-        package_payload = self._build_package_payload(
-            package=package,
-            version_record=version_record,
-            include_tools=False,
-        )
-
-        def tool_func() -> dict[str, Any]:
-            prompt_text = _normalize_text(package_payload.get("readme") or package_payload.get("description"))
-            result = {
-                "skill_id": package_payload["skill_id"],
-                "source_key": package_payload["source_key"],
-                "name": package_payload["name"],
-                "label": package_payload["label"],
-                "description": package_payload["description"],
-                "category": package_payload["category"],
-                "executor_type": package_payload["executor_type"],
-                "prompt": prompt_text,
-                "readme": prompt_text,
-                "prompt_length": len(prompt_text),
-                "lease_id": str(uuid4()),
-                "ephemeral": True,
-            }
-            logger.info(
-                "技能 prompt 按需加载成功: skill_id=%s source_key=%s prompt_length=%s",
-                package_payload["skill_id"],
-                package_payload["source_key"],
-                len(prompt_text),
-            )
-            return result
-
-        return StructuredTool.from_function(
-            func=tool_func,
-            name=tool_name,
-            description=tool_description,
-            args_schema=args_schema,
-        )
-
     def _build_package_payload(
         self,
         *,
         package: SkillPackage,
         version_record: SkillPackageVersion | None,
+        include_versions: bool = False,
         include_tools: bool = False,
         include_bundle: bool = False,
+        version_payload: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        tool_definitions = self._get_executable_tool_definitions(package, version_record) if version_record else []
+        tool_definitions = version_payload or []
+        if version_record:
+            tool_definitions = self._get_executable_tool_definitions(package, version_record)
 
         tools = []
         if include_tools and version_record:
@@ -816,6 +706,26 @@ class SkillService(BaseService):
             "updated_at": datetime_to_timestamp(package.updated_at),
             **({"bundle": version_record.bundle or {}} if include_bundle and version_record else {}),
         }
+
+    def _build_skill_package_payload(
+        self,
+        *,
+        package: SkillPackage,
+        version_record: SkillPackageVersion | None,
+        include_versions: bool = False,
+        include_tools: bool = False,
+        include_bundle: bool = False,
+        version_payload: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """兼容旧命名，避免内部调用遗漏时直接报错。"""
+        return self._build_package_payload(
+            package=package,
+            version_record=version_record,
+            include_versions=include_versions,
+            include_tools=include_tools,
+            include_bundle=include_bundle,
+            version_payload=version_payload,
+        )
 
     def _extract_skill_readme(
         self,

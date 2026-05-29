@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AgentAppAbilityReadonly from '@/views/space/apps/components/AgentAppAbilityReadonly.vue'
 import ModelConfigReadonly from '@/views/space/apps/components/ModelConfigReadonly.vue'
@@ -30,6 +31,7 @@ type AppPreview = {
 }
 
 const route = useRoute()
+const { t } = useI18n()
 const props = defineProps({
   app: {
     type: Object as () => AppPreview,
@@ -56,7 +58,7 @@ watch(
     <div class="grid min-h-0 grid-cols-[minmax(0,26fr)_minmax(0,14fr)] h-full w-full overflow-hidden">
       <div class="bg-gray-50 flex flex-col h-full min-w-0 overflow-hidden">
         <div class="flex items-center h-16 border-b p-4 gap-4">
-          <div class="text-lg text-gray-700">应用配置</div>
+          <div class="text-lg text-gray-700">{{ t('publicApps.preview.appConfig') }}</div>
           <model-config-readonly
             :model_config="draftAppConfigForm.model_config"
           />
@@ -70,12 +72,12 @@ watch(
       </div>
       <div class="min-w-[404px] h-full min-h-0 flex flex-col overflow-hidden">
         <div class="flex items-center justify-between border-b h-[64px] px-4">
-          <div class="text-lg text-gray-700">预览与调试</div>
+          <div class="text-lg text-gray-700">{{ t('publicApps.preview.previewAndDebug') }}</div>
           <a-button size="mini" type="text" class="rounded-lg px-1 !text-blue-700" disabled>
             <template #icon>
               <icon-save />
             </template>
-            长期记忆
+            {{ t('publicApps.preview.longTermMemory') }}
           </a-button>
         </div>
         <public-preview-debug-chat

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMarkdownRenderer } from '@/hooks/use-markdown-renderer'
 import 'github-markdown-css'
 import 'highlight.js/styles/github.css'
 
 const props = defineProps({
   modelValue: { type: String, default: '', required: true },
-  placeholder: { type: String, default: '请输入内容，支持 Markdown 格式' },
+  placeholder: { type: String, default: '' },
   maxLength: { type: Number, default: 5000 },
   minHeight: { type: String, default: '200px' },
   showToolbar: { type: Boolean, default: true },
@@ -14,6 +15,8 @@ const props = defineProps({
 })
 
 const emits = defineEmits(['update:modelValue', 'blur'])
+const { t } = useI18n()
+const resolvedPlaceholder = computed(() => props.placeholder || t('chat.markdown.placeholder'))
 
 // 编辑模式: edit(编辑), preview(预览), split(分屏)
 const mode = ref<'edit' | 'preview' | 'split'>(props.defaultMode)
@@ -100,7 +103,7 @@ const { renderMarkdownWithPlaceholder, handleMarkdownCopyClick } = useMarkdownRe
 
 // 渲染 Markdown
 const compiledMarkdown = computed(() => {
-  return renderMarkdownWithPlaceholder(props.modelValue, '暂无内容')
+  return renderMarkdownWithPlaceholder(props.modelValue, t('chat.markdown.empty'))
 })
 
 // 字数统计
@@ -148,31 +151,31 @@ const insertMarkdown = (syntax: string, placeholder = '') => {
       cursorOffset = textToInsert ? newText.length : 5
       break
     case 'link':
-      newText = `[${textToInsert || '链接文本'}](url)`
+      newText = `[${textToInsert || t('chat.markdown.linkText')}](url)`
       cursorOffset = textToInsert ? newText.length - 4 : 1
       break
     case 'ul':
-      newText = `\n- ${textToInsert || '列表项'}\n`
+      newText = `\n- ${textToInsert || t('chat.markdown.listItem')}\n`
       cursorOffset = textToInsert ? newText.length : 3
       break
     case 'ol':
-      newText = `\n1. ${textToInsert || '列表项'}\n`
+      newText = `\n1. ${textToInsert || t('chat.markdown.listItem')}\n`
       cursorOffset = textToInsert ? newText.length : 4
       break
     case 'quote':
-      newText = `\n> ${textToInsert || '引用内容'}\n`
+      newText = `\n> ${textToInsert || t('chat.markdown.quoteText')}\n`
       cursorOffset = textToInsert ? newText.length : 3
       break
     case 'h1':
-      newText = `\n# ${textToInsert || '一级标题'}\n`
+      newText = `\n# ${textToInsert || t('chat.markdown.heading1')}\n`
       cursorOffset = textToInsert ? newText.length : 3
       break
     case 'h2':
-      newText = `\n## ${textToInsert || '二级标题'}\n`
+      newText = `\n## ${textToInsert || t('chat.markdown.heading2')}\n`
       cursorOffset = textToInsert ? newText.length : 4
       break
     case 'h3':
-      newText = `\n### ${textToInsert || '三级标题'}\n`
+      newText = `\n### ${textToInsert || t('chat.markdown.heading3')}\n`
       cursorOffset = textToInsert ? newText.length : 5
       break
     default:
@@ -195,7 +198,7 @@ const insertMarkdown = (syntax: string, placeholder = '') => {
 
 // 处理代码块复制
 const handleMarkdownClick = async (event: MouseEvent) => {
-  await handleMarkdownCopyClick(event, { successMessage: '代码已复制' })
+  await handleMarkdownCopyClick(event, { successMessage: t('chat.messages.codeCopied') })
 }
 </script>
 
@@ -291,7 +294,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
             <template #icon>
               <icon-edit />
             </template>
-            编辑
+            {{ t('chat.markdown.modeEdit') }}
           </a-button>
           <a-button
             size="mini"
@@ -302,7 +305,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
             <template #icon>
               <icon-apps />
             </template>
-            对比
+            {{ t('chat.markdown.modeSplit') }}
           </a-button>
           <a-button
             size="mini"
@@ -313,7 +316,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
             <template #icon>
               <icon-eye />
             </template>
-            浏览
+            {{ t('chat.markdown.modePreview') }}
           </a-button>
         </a-space>
       </div>
@@ -326,7 +329,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
         <textarea
           ref="textareaRef"
           :value="props.modelValue"
-          :placeholder="props.placeholder"
+          :placeholder="resolvedPlaceholder"
           :maxlength="props.maxLength"
           class="editor-textarea"
           @input="handleInput"

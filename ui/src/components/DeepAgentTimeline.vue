@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { QueueEvent } from '@/config'
 import { isImageArtifact, type ChatArtifact } from '@/views/shared/chat-output'
 import ChatImageGallery from './ChatImageGallery.vue'
@@ -14,15 +15,16 @@ const props = defineProps({
   },
   loading: { type: Boolean, default: false },
 })
+const { t } = useI18n()
 
 const expanded = ref(true)
 
 const stepTypeLabelMap: Record<string, string> = {
-  plan: '规划',
-  tool: '工具',
-  subagent: '子任务',
-  reflection: '汇总',
-  artifact: '产物',
+  plan: t('chat.deepTimeline.stepTypes.plan'),
+  tool: t('chat.deepTimeline.stepTypes.tool'),
+  subagent: t('chat.deepTimeline.stepTypes.subagent'),
+  reflection: t('chat.deepTimeline.stepTypes.reflection'),
+  artifact: t('chat.deepTimeline.stepTypes.artifact'),
 }
 
 const normalizeTodoStatus = (status: unknown) => {
@@ -112,7 +114,7 @@ const timelineItems = computed(() => {
         renderKey: `${renderKey}-artifact-${index}`,
         event: thought.event,
         position: Number(thought.position ?? index),
-        title: artifact.name || '已生成附件',
+        title: artifact.name || t('chat.deepTimeline.generatedAttachment'),
         detail: artifact.url || '',
         technicalDetail: artifact.path || '',
         stepType: 'artifact',
@@ -126,7 +128,7 @@ const timelineItems = computed(() => {
 
     const stepType = String(timeline.step_type || 'tool')
     const status = String(timeline.status || 'success')
-    const title = String(timeline.title || thought.tool || '深度执行步骤')
+    const title = String(timeline.title || thought.tool || t('chat.deepTimeline.fallbackStepTitle'))
     const detail = String(timeline.detail || thought.thought || thought.observation || '')
     const technicalDetail = String(timeline.technical_detail || thought.observation || '')
 
@@ -188,13 +190,15 @@ const summaryText = computed(() => {
   const count = visibleTimelineItems.value.length + (imageGalleryImages.value.length > 0 ? 1 : 0)
   const activeTodo = [...visibleTimelineItems.value].reverse().find((item) => item.showTodos) || null
   if (activeTodo) {
-    return `共 ${activeTodo.todoCount} 项待办`
+    return t('chat.deepTimeline.todoSummary', { count: activeTodo.todoCount })
   }
   const active = [...visibleTimelineItems.value].reverse().find((item) => item.status === 'start') || null
   if (active) {
     return `${active.title}`
   }
-  return count > 0 ? `共 ${count} 个深度执行步骤` : '深度执行轨迹'
+  return count > 0
+    ? t('chat.deepTimeline.totalSteps', { count })
+    : t('chat.deepTimeline.empty')
 })
 
 const getStepDotClass = (status: string) => {
@@ -222,7 +226,7 @@ const getTodoDotClass = (status: string) => {
     >
       <div class="flex items-center gap-2 min-w-0">
         <div class="min-w-0">
-          <div class="deep-agent-timeline__title">深入思考轨迹</div>
+          <div class="deep-agent-timeline__title">{{ t('chat.deepTimeline.title') }}</div>
           <div class="deep-agent-timeline__summary truncate">{{ summaryText }}</div>
         </div>
       </div>
@@ -230,7 +234,7 @@ const getTodoDotClass = (status: string) => {
         <span
           v-if="loading"
           class="text-[11px] text-amber-700"
-        >执行中</span>
+        >{{ t('chat.deepTimeline.running') }}</span>
         <span
           :class="['deep-agent-timeline__caret', expanded ? 'rotate-180' : '']"
         >⌄</span>
@@ -243,12 +247,12 @@ const getTodoDotClass = (status: string) => {
         class="deep-agent-gallery"
       >
         <div class="deep-agent-gallery__header">
-          <span class="deep-agent-gallery__label">生成图片</span>
-          <span class="deep-agent-gallery__count">{{ imageCount }} 张</span>
+          <span class="deep-agent-gallery__label">{{ t('chat.deepTimeline.generatedImages') }}</span>
+          <span class="deep-agent-gallery__count">{{ t('chat.deepTimeline.imageCount', { count: imageCount }) }}</span>
         </div>
         <chat-image-gallery
           :images="imageGalleryImages"
-          title="生成图片"
+          :title="t('chat.deepTimeline.generatedImages')"
         />
       </div>
 
@@ -301,12 +305,12 @@ const getTodoDotClass = (status: string) => {
               target="_blank"
               rel="noreferrer"
             >
-              下载附件
+              {{ t('chat.deepTimeline.downloadAttachment') }}
             </a>
           </div>
 
           <details v-if="item.technicalDetail && item.technicalDetail !== item.detail" class="deep-agent-step__technical">
-            <summary>查看技术细节</summary>
+            <summary>{{ t('chat.deepTimeline.technicalDetails') }}</summary>
             <pre>{{ item.technicalDetail }}</pre>
           </details>
         </div>

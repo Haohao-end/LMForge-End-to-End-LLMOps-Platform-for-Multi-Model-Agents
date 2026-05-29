@@ -2,6 +2,7 @@
 import { cloneDeep, isEqual } from 'lodash'
 import { nextTick, ref, watch } from 'vue'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
+import { useI18n } from 'vue-i18n'
 
 type TextToSpeechConfig = {
     enable: boolean
@@ -10,6 +11,7 @@ type TextToSpeechConfig = {
 }
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
     app_id: { type: String, default: '', required: true },
     text_to_speech: {
@@ -92,7 +94,7 @@ watch(
     <div class="">
         <a-collapse-item key="text_to_speech" class="app-ability-item text-to-speech-ability-item">
             <template #header>
-                <div class="text-gray-700 font-bold">语音输出</div>
+                <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.textToSpeech.title') }}</div>
             </template>
             <template #extra>
                 <a-dropdown @select="
@@ -113,25 +115,29 @@ watch(
                     }
                 ">
                     <a-button size="mini" class="rounded-lg flex items-center gap-1 px-1" @click.stop>
-                        {{ textToSpeechForm.enable ? '开启' : '关闭' }}
+                        {{
+                          textToSpeechForm.enable
+                            ? t('appStudio.abilities.textToSpeech.on')
+                            : t('appStudio.abilities.textToSpeech.off')
+                        }}
                         <icon-down />
                     </a-button>
                     <template #content>
-                        <a-doption :value="1" class="text-xs py-1.5 text-gray-700">开启</a-doption>
-                        <a-doption :value="0" class="text-xs py-1.5 text-red-700">关闭</a-doption>
+                        <a-doption :value="1" class="text-xs py-1.5 text-gray-700">{{ t('appStudio.abilities.textToSpeech.on') }}</a-doption>
+                        <a-doption :value="0" class="text-xs py-1.5 text-red-700">{{ t('appStudio.abilities.textToSpeech.off') }}</a-doption>
                     </template>
                 </a-dropdown>
             </template>
             <div class="group py-2">
                 <div class="text-xs text-gray-500 leading-[22px] group-hover:hidden">
-                    在Bot回复后，语音播报回复内容。
+                    {{ t('appStudio.abilities.textToSpeech.description') }}
                 </div>
                 <a-button size="small" long class="hidden group-hover:block rounded-lg transition-all"
                     @click="textToSpeechModalVisible = true">
                     <template #icon>
                         <icon-settings />
                     </template>
-                    语音设置
+                    {{ t('appStudio.abilities.textToSpeech.settings') }}
                 </a-button>
             </div>
         </a-collapse-item>
@@ -140,7 +146,7 @@ watch(
             @cancel="handleCancelTextToSpeechModal">
             <!-- 顶部标题 -->
             <div class="flex items-center justify-between">
-                <div class="text-lg font-bold text-gray-700">语音输出</div>
+                <div class="text-lg font-bold text-gray-700">{{ t('appStudio.abilities.textToSpeech.title') }}</div>
                 <a-button type="text" class="!text-gray-700" size="small" @click="handleCancelTextToSpeechModal">
                     <template #icon>
                         <icon-close />
@@ -154,10 +160,10 @@ watch(
                     <div class="flex flex-col gap-2">
                         <div class="flex flex-col">
                             <div class="flex items-center gap-1 text-gray-700">
-                                音色设置
+                                {{ t('appStudio.abilities.textToSpeech.voiceSettings') }}
                                 <div class="text-red-700">*</div>
                             </div>
-                            <div class="text-gray-500 text-xs">不同的音色适用于不同的场景，请结合业务进行选择。</div>
+                            <div class="text-gray-500 text-xs">{{ t('appStudio.abilities.textToSpeech.voiceHelp') }}</div>
                         </div>
                         <a-select v-model:model-value="textToSpeechForm.voice">
                             <a-option value="alex">alex</a-option>
@@ -174,10 +180,10 @@ watch(
                     <div class="flex flex-col gap-2">
                         <div class="flex flex-col">
                             <div class="flex items-center gap-1 text-gray-700">
-                                自动播放
+                                {{ t('appStudio.abilities.textToSpeech.autoPlay') }}
                                 <div class="text-red-700">*</div>
                             </div>
-                            <div class="text-gray-500 text-xs">Agent回复结束后，自动播放音频内容</div>
+                            <div class="text-gray-500 text-xs">{{ t('appStudio.abilities.textToSpeech.autoPlayHelp') }}</div>
                         </div>
                         <div class="">
                             <a-switch v-model:model-value="textToSpeechForm.auto_play" size="small" type="round" />
@@ -189,9 +195,9 @@ watch(
             <div class="flex items-center justify-between">
                 <div class=""></div>
                 <a-space :size="16">
-                    <a-button class="rounded-lg" @click="handleCancelTextToSpeechModal">取消</a-button>
+                    <a-button class="rounded-lg" @click="handleCancelTextToSpeechModal">{{ t('common.actions.cancel') }}</a-button>
                     <a-button :loading="loading" type="primary" class="rounded-lg" @click="handleSubmitTextToSpeech">
-                        保存
+                        {{ t('common.actions.save') }}
                     </a-button>
                 </a-space>
             </div>

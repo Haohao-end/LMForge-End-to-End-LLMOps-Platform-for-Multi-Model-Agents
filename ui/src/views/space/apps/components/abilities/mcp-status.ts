@@ -1,4 +1,5 @@
 import type { McpBinding, McpToolSnapshot } from '@/models/app'
+import { i18n } from '@/i18n'
 
 export type McpBindingStatusKey =
   | 'ready'
@@ -19,6 +20,8 @@ export type McpBindingStatus = {
 type SnapshotLike = McpToolSnapshot | Record<string, unknown>
 
 const normalizeText = (value: unknown) => String(value ?? '').trim()
+const t = (key: string, params?: Record<string, unknown>) =>
+  params ? i18n.global.t(key, params) : i18n.global.t(key)
 
 export const buildMcpBindingIdentity = (
   binding: Pick<McpBinding, 'provider_key' | 'transport' | 'url' | 'command' | 'name'>,
@@ -83,9 +86,9 @@ export const resolveMcpBindingStatus = (
   if (!isEnabled) {
     return {
       key: 'disabled',
-      label: '不可用',
+      label: t('appStudio.abilities.mcp.status.unavailable'),
       color: 'gray',
-      tooltip: '该绑定已停用。',
+      tooltip: t('appStudio.abilities.mcp.status.tooltipDisabled'),
       show_help: true,
     }
   }
@@ -93,9 +96,9 @@ export const resolveMcpBindingStatus = (
   if (!snapshot) {
     return {
       key: 'warming',
-      label: '预热中',
+      label: t('appStudio.abilities.mcp.status.warming'),
       color: 'orange',
-      tooltip: '请稍等，系统正在从远端预热 MCP 工具列表。',
+      tooltip: t('appStudio.abilities.mcp.status.tooltipWarming'),
       show_help: true,
     }
   }
@@ -103,7 +106,7 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'ready') {
     return {
       key: 'ready',
-      label: '已可用',
+      label: t('appStudio.abilities.mcp.status.ready'),
       color: 'green',
       tooltip: '',
       show_help: false,
@@ -113,11 +116,11 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'stale' && hasTools) {
     return {
       key: 'ready',
-      label: '已可用',
+      label: t('appStudio.abilities.mcp.status.ready'),
       color: 'green',
       tooltip: isRetryable
-        ? '当前使用的是上次成功同步的工具快照，后台正在刷新。'
-        : '当前使用的是上次成功同步的工具快照，远端 MCP 已失效，请更新 URL 或重新部署。',
+        ? t('appStudio.abilities.mcp.status.tooltipStaleRetryable')
+        : t('appStudio.abilities.mcp.status.tooltipStaleFailed'),
       show_help: true,
     }
   }
@@ -125,11 +128,11 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'failed' && hasTools) {
     return {
       key: 'ready',
-      label: '已可用',
+      label: t('appStudio.abilities.mcp.status.ready'),
       color: 'green',
       tooltip: isRetryable
-        ? '远端 MCP 暂时不可达，当前使用上次成功同步的工具快照，后台会继续重试。'
-        : '远端 MCP 已失效，当前使用上次成功同步的工具快照，请更新 URL 或重新部署。',
+        ? t('appStudio.abilities.mcp.status.tooltipFailedRetryable')
+        : t('appStudio.abilities.mcp.status.tooltipFailedNoRetry'),
       show_help: true,
     }
   }
@@ -137,9 +140,9 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'failed' && !hasTools && !isRetryable) {
     return {
       key: 'failed',
-      label: '已失效',
+      label: t('appStudio.abilities.mcp.status.failed'),
       color: 'gray',
-      tooltip: '远端 MCP 已失效或已删除，请更新 URL 或重新部署。',
+      tooltip: t('appStudio.abilities.mcp.status.tooltipExpired'),
       show_help: true,
     }
   }
@@ -147,9 +150,9 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'empty') {
     return {
       key: 'empty',
-      label: '不可用',
+      label: t('appStudio.abilities.mcp.status.unavailable'),
       color: 'gray',
-      tooltip: '远端 MCP 暂未返回可用工具。',
+      tooltip: t('appStudio.abilities.mcp.status.tooltipEmpty'),
       show_help: true,
     }
   }
@@ -157,10 +160,10 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'unsupported') {
     return {
       key: 'unsupported',
-      label: '不可用',
+      label: t('appStudio.abilities.mcp.status.unavailable'),
       color: 'gray',
       tooltip: normalizeText((snapshot as Record<string, unknown> | undefined)?.last_error)
-        || '当前运行环境不支持该 MCP 传输方式。',
+        || t('appStudio.abilities.mcp.status.tooltipUnsupported'),
       show_help: true,
     }
   }
@@ -168,9 +171,9 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'disabled') {
     return {
       key: 'disabled',
-      label: '不可用',
+      label: t('appStudio.abilities.mcp.status.unavailable'),
       color: 'gray',
-      tooltip: '该绑定已停用。',
+      tooltip: t('appStudio.abilities.mcp.status.tooltipDisabled'),
       show_help: true,
     }
   }
@@ -178,22 +181,22 @@ export const resolveMcpBindingStatus = (
   if (snapshotStatus === 'warming' || snapshotStatus === 'failed') {
     return {
       key: 'warming',
-      label: '预热中',
+      label: t('appStudio.abilities.mcp.status.warming'),
       color: 'orange',
       tooltip: snapshotStatus === 'failed' && isRetryable
-        ? '工具列表预热失败，后台会自动重试。'
+        ? t('appStudio.abilities.mcp.status.tooltipFailedRetryLater')
         : snapshotStatus === 'failed'
-          ? '远端 MCP 暂时不可达，后台不会继续重试。'
-        : '请稍等，系统正在从远端预热 MCP 工具列表。',
+          ? t('appStudio.abilities.mcp.status.tooltipFailedStopped')
+        : t('appStudio.abilities.mcp.status.tooltipWarming'),
       show_help: true,
     }
   }
 
   return {
     key: 'warming',
-    label: '预热中',
+    label: t('appStudio.abilities.mcp.status.warming'),
     color: 'orange',
-    tooltip: '请稍等，系统正在检查 MCP 工具可用性。',
+    tooltip: t('appStudio.abilities.mcp.status.tooltipWarmingChecking'),
     show_help: true,
   }
 }

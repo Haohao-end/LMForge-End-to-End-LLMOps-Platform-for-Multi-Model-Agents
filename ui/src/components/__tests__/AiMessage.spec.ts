@@ -102,19 +102,14 @@ describe('AiMessage.vue', () => {
         {
           id: 'step-1',
           event: QueueEvent.deepStep,
-          thought: '正在拆解任务',
+          thought: '已规划任务：收集景点 / 规划行程',
           tool: 'write_todos',
           tool_input: {
             timeline: {
               step_type: 'plan',
-              status: 'start',
+              status: 'success',
               title: '拆解任务',
-              detail: '共 3 项待办',
-              todos: [
-                { content: '收集景点', status: 'completed' },
-                { title: '预订酒店', status: 'in_progress' },
-                { content: '确认交通', status: 'pending' },
-              ],
+              detail: '已规划任务：收集景点 / 规划行程',
             },
           },
           latency: 1.8,
@@ -123,49 +118,8 @@ describe('AiMessage.vue', () => {
     })
 
     expect(wrapper.find('.deep-agent-timeline').exists()).toBe(true)
-    expect(wrapper.find('.deep-agent-timeline__brain').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('🧠')
-    expect(wrapper.text()).toContain('共 3 项待办')
-    expect(wrapper.text()).toContain('收集景点')
-    expect(wrapper.text()).toContain('预订酒店')
-    expect(wrapper.text()).toContain('确认交通')
-    expect(wrapper.findAll('.deep-agent-todo-item')).toHaveLength(3)
-  })
-
-  it('keeps the deep agent todo list visible after write_todos resolves successfully', () => {
-    const wrapper = mountAiMessage({
-      agent_thoughts: [
-        {
-          id: 'step-1',
-          event: QueueEvent.deepStep,
-          thought: '拆解完成',
-          tool: 'write_todos',
-          tool_input: {
-            timeline: {
-              step_type: 'plan',
-              status: 'success',
-              title: '拆解任务',
-              detail: '待办已写入',
-              todos: [
-                { content: '收集景点', status: 'completed' },
-                { title: '预订酒店', status: 'completed' },
-                { content: '确认交通', status: 'completed' },
-              ],
-            },
-          },
-          latency: 2.1,
-        },
-      ],
-    })
-
-    expect(wrapper.find('.deep-agent-timeline').exists()).toBe(true)
-    expect(wrapper.find('.deep-agent-timeline__brain').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('🧠')
-    expect(wrapper.text()).toContain('待办已写入')
-    expect(wrapper.text()).toContain('收集景点')
-    expect(wrapper.text()).toContain('预订酒店')
-    expect(wrapper.text()).toContain('确认交通')
-    expect(wrapper.findAll('.deep-agent-todo-item')).toHaveLength(3)
+    expect(wrapper.text()).toContain('拆解任务')
+    expect(wrapper.text()).toContain('已规划任务：收集景点 / 规划行程')
   })
 
   it('renders image previews inside the deep agent timeline for image artifacts', () => {

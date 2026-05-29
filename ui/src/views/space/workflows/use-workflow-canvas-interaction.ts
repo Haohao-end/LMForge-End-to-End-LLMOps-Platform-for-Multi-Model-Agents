@@ -3,6 +3,7 @@ import dagre from 'dagre'
 import { cloneDeep } from 'lodash'
 import { ref, type Ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
+import { i18n } from '@/i18n'
 import { generateRandomString } from '@/utils/helper'
 import type { SelectedWorkflowNode, WorkflowNodeData, WorkflowNodeLike } from '@/views/space/workflows/use-workflow-node-sidebar'
 
@@ -55,7 +56,7 @@ type UseWorkflowCanvasInteractionOptions = {
   findNode: (id: string | null | undefined) => FlowNode | undefined
   isPreviewMode: FlowBooleanState
   isInitializing: FlowBooleanState
-  nodeDataMap: NodeDataMap
+  nodeDataMap: Ref<NodeDataMap>
   triggerDraftGraphSave: () => void
   onPreviewEditBlocked: () => void
   onCanvasSelectionClear: () => void
@@ -65,6 +66,7 @@ type UseWorkflowCanvasInteractionOptions = {
 export const useWorkflowCanvasInteraction = (options: UseWorkflowCanvasInteractionOptions) => {
   const instance = ref<FlowInstanceLike | null>(null)
   const zoomLevel = ref<number>(1)
+  const t = i18n.global.t
   const zoomOptions = [
     { label: '200%', value: 2 },
     { label: '100%', value: 1 },
@@ -114,17 +116,17 @@ export const useWorkflowCanvasInteraction = (options: UseWorkflowCanvasInteracti
 
   const addNode = (nodeType: string) => {
     if (options.isPreviewMode.value) {
-      Message.warning('预览模式下无法编辑，请先添加到个人空间')
+      Message.warning(t('workflowEditor.previewEditBlocked'))
       return
     }
 
     if (nodeType === 'start' && options.allNodes.value.some((node) => node.type === 'start')) {
-      Message.error('工作流中只允许有一个开始节点')
+      Message.error(t('workflowEditor.canvas.onlyOneStartNode'))
       return
     }
 
     if (nodeType === 'end' && options.allNodes.value.some((node) => node.type === 'end')) {
-      Message.error('工作流中只允许有一个结束节点')
+      Message.error(t('workflowEditor.canvas.onlyOneEndNode'))
       return
     }
 
@@ -141,7 +143,7 @@ export const useWorkflowCanvasInteraction = (options: UseWorkflowCanvasInteracti
     const xAverage = nodeCount > 0 ? total.xSum / nodeCount : 0
     const yAverage = nodeCount > 0 ? total.ySum / nodeCount : 0
 
-    const nodeData = cloneDeep(options.nodeDataMap[nodeType])
+    const nodeData = cloneDeep(options.nodeDataMap.value[nodeType])
     if (!nodeData) return
 
     options.nodes.value.push({
@@ -165,13 +167,13 @@ export const useWorkflowCanvasInteraction = (options: UseWorkflowCanvasInteracti
     if (!source || !target) return
 
     if (source === target) {
-      Message.error('不能将节点连接到本身')
+      Message.error(t('workflowEditor.canvas.cannotConnectSelf'))
       return
     }
 
     const sourceNode = options.findNode(source)
     if (sourceNode?.type === 'if_else' && !sourceHandle) {
-      Message.error('条件分支节点必须从绿叉（True）或红叉（False）连接')
+      Message.error(t('workflowEditor.canvas.ifElseConnectionRequired'))
       return
     }
 
@@ -189,7 +191,7 @@ export const useWorkflowCanvasInteraction = (options: UseWorkflowCanvasInteracti
     })
 
     if (isAlreadyConnected) {
-      Message.error('这两个节点已有连接，无需重复添加')
+      Message.error(t('workflowEditor.canvas.duplicateConnection'))
       return
     }
 

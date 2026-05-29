@@ -126,15 +126,9 @@ class OpenAPIService(BaseService):
         tools = AppService._build_runtime_tools_for_config(
             app_config_service=self.app_config_service,
             retrieval_service=self.retrieval_service,
-            app_service=self.app_service,
             account=account,
             draft_app_config=app_config,
             flask_app=current_app._get_current_object() if has_app_context() else None,
-            runtime_context={
-                "root_app_id": str(app.id),
-                "call_stack": [str(app.id)],
-                "account_id": str(account.id),
-            },
         )
 
         # 12.根据LLM是否支持tool_call决定使用不同的Agent

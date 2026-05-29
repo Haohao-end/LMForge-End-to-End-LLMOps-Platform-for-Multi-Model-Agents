@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { type Form, type ValidatedError } from '@arco-design/web-vue'
 import { useGetDocument, useUpdateDocumentName } from '@/hooks/use-dataset'
 
@@ -21,6 +22,7 @@ const { document, loadDocument } = useGetDocument()
 const { loading: updateDocumentNameLoading, handleUpdateDocumentName } = useUpdateDocumentName()
 const form = ref({ name: '' })
 const formRef = ref<InstanceType<typeof Form>>()
+const { t } = useI18n()
 
 // 2.定义关闭模态窗函数，执行关闭模态窗并重置表单操作
 const hideModal = () => {
@@ -68,7 +70,7 @@ watch(
   >
     <!-- 顶部标题 -->
     <div class="flex items-center justify-between">
-      <div class="text-lg font-bold text-gray-700">重命名</div>
+      <div class="text-lg font-bold text-gray-700">{{ t('space.datasets.documents.renameModal.title') }}</div>
       <a-button type="text" class="!text-gray-700" size="small" @click="hideModal">
         <template #icon>
           <icon-close />
@@ -80,13 +82,13 @@ watch(
       <a-form ref="formRef" :model="form" @submit="handleSubmit" layout="vertical">
         <a-form-item
           field="name"
-          label="名称"
+          :label="t('space.datasets.documents.renameModal.nameLabel')"
           asterisk-position="end"
-          :rules="[{ required: true, message: '文档名称不能为空' }]"
+          :rules="[{ required: true, message: t('space.datasets.documents.renameModal.nameRequired') }]"
         >
           <a-input
             v-model="form.name"
-            placeholder="请输入文档名称"
+            :placeholder="t('space.datasets.documents.renameModal.namePlaceholder')"
             show-word-limit
             :max-length="100"
           />
@@ -95,14 +97,14 @@ watch(
         <div class="flex items-center justify-between">
           <div class=""></div>
           <a-space :size="16">
-            <a-button class="rounded-lg" @click="hideModal">取消</a-button>
+            <a-button class="rounded-lg" @click="hideModal">{{ t('space.datasets.documents.renameModal.cancel') }}</a-button>
             <a-button
               :loading="updateDocumentNameLoading"
               type="primary"
               html-type="submit"
               class="rounded-lg"
             >
-              保存
+              {{ t('space.datasets.documents.renameModal.save') }}
             </a-button>
           </a-space>
         </div>

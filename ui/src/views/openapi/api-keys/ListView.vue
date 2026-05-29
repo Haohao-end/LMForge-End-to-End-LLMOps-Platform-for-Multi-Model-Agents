@@ -13,11 +13,13 @@ import { isCredentialLoggedIn } from '@/utils/auth'
 import { getErrorMessage } from '@/utils/error'
 import CreateOrUpdateApiKeyModal from './components/CreateOrUpdateApiKeyModal.vue'
 import { formatTimestampDate } from '@/utils/time-formatter'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义页面所需基础数据
 const route = useRoute()
 const router = useRouter()
 const credentialStore = useCredentialStore()
+const { t } = useI18n()
 const props = defineProps({
   create_api_key: { type: Boolean, default: false, required: true },
 })
@@ -52,7 +54,7 @@ const loadApiKeysSafely = async (init: boolean = false) => {
   } catch (error: unknown) {
     // 授权失效时 request 层会清空凭证并触发登录弹窗，这里不重复提示
     if (!isLoggedIn.value) return
-    Message.error(getErrorMessage(error, '加载 API 密钥失败，请稍后重试'))
+    Message.error(getErrorMessage(error, t('openapi.apiKeys.loadFailed')))
   }
 }
 
@@ -110,15 +112,15 @@ watch(
       <div class="w-24 h-24 mb-6 bg-gray-100 rounded-full flex items-center justify-center">
         <icon-user class="text-5xl text-gray-400" />
       </div>
-      <h3 class="text-lg font-semibold text-gray-900 mb-2">请先登录</h3>
-      <p class="text-gray-500 mb-6 text-center max-w-md">登录后即可查看、创建和管理您的 API 密钥</p>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ t('openapi.apiKeys.loginRequiredTitle') }}</h3>
+      <p class="text-gray-500 mb-6 text-center max-w-md">{{ t('openapi.apiKeys.loginRequiredDescription') }}</p>
       <a-button
         type="primary"
         size="large"
         class="!rounded-lg !bg-gray-900 hover:!bg-gray-800"
         @click="openLoginModal"
       >
-        立即登录
+        {{ t('common.actions.login') }}
       </a-button>
     </div>
 
@@ -130,9 +132,9 @@ watch(
       <div class="w-24 h-24 mb-6 bg-gray-100 rounded-full flex items-center justify-center">
         <icon-safe class="text-5xl text-gray-400" />
       </div>
-      <h3 class="text-lg font-semibold text-gray-900 mb-2">暂无 API 密钥</h3>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ t('openapi.apiKeys.noDataTitle') }}</h3>
       <p class="text-gray-500 mb-6 text-center max-w-md">
-        创建您的第一个 API 密钥以开始使用 OpenAgent 开放 API
+        {{ t('openapi.apiKeys.noDataDescription') }}
       </p>
       <a-button
         type="primary"
@@ -143,7 +145,7 @@ watch(
         <template #icon>
           <icon-plus />
         </template>
-        创建密钥
+        {{ t('openapi.apiKeys.createButton') }}
       </a-button>
     </div>
 
@@ -173,7 +175,7 @@ watch(
       >
         <template #columns>
           <a-table-column
-            title="密钥"
+            :title="t('openapi.apiKeys.columns.key')"
             data-index="api_key"
             :width="320"
             header-cell-class="!bg-gray-50 !text-gray-900 !font-semibold !border-b !border-gray-200"
@@ -190,13 +192,13 @@ watch(
                   <div class="font-mono text-sm text-gray-700">
                     {{ record.api_key }}
                   </div>
-                  <div class="text-xs text-gray-500 mt-1">仅创建时展示完整密钥</div>
+                  <div class="text-xs text-gray-500 mt-1">{{ t('openapi.apiKeys.copyHint') }}</div>
                 </div>
               </div>
             </template>
           </a-table-column>
           <a-table-column
-            title="状态"
+            :title="t('openapi.apiKeys.columns.status')"
             data-index="is_active"
             :width="120"
             header-cell-class="!bg-gray-50 !text-gray-900 !font-semibold !border-b !border-gray-200"
@@ -208,19 +210,19 @@ watch(
                 class="inline-flex items-center gap-2 px-2.5 py-1 bg-green-50 border border-green-200 rounded text-green-700 text-sm font-medium whitespace-nowrap"
               >
                 <div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                可用
+                {{ t('openapi.apiKeys.active') }}
               </div>
               <div
                 v-else
                 class="inline-flex items-center gap-2 px-2.5 py-1 bg-gray-100 border border-gray-200 rounded text-gray-600 text-sm font-medium whitespace-nowrap"
               >
                 <div class="w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
-                已禁用
+                {{ t('openapi.apiKeys.disabledStatus') }}
               </div>
             </template>
           </a-table-column>
           <a-table-column
-            title="创建时间"
+            :title="t('openapi.apiKeys.columns.createdAt')"
             data-index="created_at"
             :width="140"
             header-cell-class="!bg-gray-50 !text-gray-900 !font-semibold !border-b !border-gray-200"
@@ -234,7 +236,7 @@ watch(
             </template>
           </a-table-column>
           <a-table-column
-            title="备注"
+            :title="t('openapi.apiKeys.columns.remark')"
             data-index="remark"
             :width="280"
             header-cell-class="!bg-gray-50 !text-gray-900 !font-semibold !border-b !border-gray-200"
@@ -247,13 +249,13 @@ watch(
                     ? record.remark.length > 35
                       ? record.remark.substring(0, 35) + '...'
                       : record.remark
-                    : '暂无备注'
+                    : t('openapi.apiKeys.noRemark')
                 }}
               </div>
             </template>
           </a-table-column>
           <a-table-column
-            title="操作"
+            :title="t('openapi.apiKeys.columns.actions')"
             data-index="operator"
             header-cell-class="!bg-gray-50 !text-gray-900 !font-semibold !border-b !border-gray-200"
             cell-class="!py-4"
@@ -262,7 +264,7 @@ watch(
             <template #cell="{ record, rowIndex }">
               <div class="flex items-center gap-3">
                 <!-- Switch 开关 -->
-                <a-tooltip :content="record.is_active ? '点击禁用密钥' : '点击启用密钥'">
+                <a-tooltip :content="record.is_active ? t('openapi.apiKeys.disabledStatus') : t('openapi.apiKeys.active')">
                   <a-switch
                     size="small"
                     :model-value="record.is_active"
@@ -278,7 +280,7 @@ watch(
                 </a-tooltip>
 
                 <!-- 编辑 -->
-                <a-tooltip content="编辑备注">
+                <a-tooltip :content="t('openapi.apiKeys.editRemark')">
                   <a-button
                     size="small"
                     class="!rounded !text-gray-600 hover:!text-gray-900 hover:!bg-gray-100"
@@ -298,7 +300,7 @@ watch(
                 </a-tooltip>
 
                 <!-- 删除 -->
-                <a-tooltip content="删除密钥">
+                <a-tooltip :content="t('openapi.apiKeys.deleteKey')">
                   <a-button
                     size="small"
                     class="!rounded !text-red-600 hover:!text-red-700 hover:!bg-red-50"

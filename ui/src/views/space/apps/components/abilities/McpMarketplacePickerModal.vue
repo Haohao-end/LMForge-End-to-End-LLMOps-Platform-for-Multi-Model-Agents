@@ -10,6 +10,8 @@ import {
   getPublicMcpProvidersWithPage,
 } from '@/services/mcp'
 import type { McpBinding, McpCategory, McpProvider } from '@/models/mcp'
+import { useI18n } from 'vue-i18n'
+import { getStoreCategoryDisplayName } from '@/utils/store-display'
 
 type PaginatorState = {
   total_page: number
@@ -28,6 +30,7 @@ const props = defineProps({
   },
 })
 
+const { t, locale } = useI18n()
 const emits = defineEmits(['update:visible', 'select'])
 
 const loading = ref(false)
@@ -52,17 +55,6 @@ const avatarPalettes = [
   ['#be123c', '#e11d48'],
   ['#0f766e', '#14b8a6'],
 ]
-
-const FALLBACK_CATEGORY_NAMES: Record<string, string> = {
-  general: '通用',
-  productivity: '效率工具',
-  coding: '编程工具',
-  content_creation: '内容创作',
-  media: '媒体音视频',
-  data_analysis: '数据分析',
-  observability: '可观测运维',
-  other: '其他',
-}
 
 const getBindingSignatures = (binding: McpBinding) => {
   const signatures = [
@@ -143,12 +135,8 @@ const normalizeIconUrl = (icon: string = '') => {
   return `${apiUrl.origin}${path}`
 }
 
-const categoryNameMap = computed(() => {
-  return new Map(categories.value.map((item) => [item.id, item.name]))
-})
-
 const getCategoryName = (category: string) => {
-  return categoryNameMap.value.get(category) || FALLBACK_CATEGORY_NAMES[category] || category || '其他'
+  return getStoreCategoryDisplayName(category, locale.value as 'zh-CN' | 'en-US')
 }
 
 const loadCategories = async () => {
@@ -193,7 +181,7 @@ const loadProviders = async (reset = false) => {
       page_size: PAGE_SIZE,
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载 MCP 广场失败'))
+    Message.error(getErrorMessage(error, t('appStudio.abilities.mcp.loadMarketplaceFailed')))
   } finally {
     loading.value = false
   }
@@ -211,7 +199,7 @@ const handleCategoryChange = async (category: string) => {
 const handleSelect = (provider: McpProvider) => {
   if (!provider.is_bindable) return
   if (isSelectedBinding(provider.binding)) {
-    Message.warning('该 MCP 已添加到当前应用')
+    Message.warning(t('appStudio.abilities.mcp.duplicateWarning'))
     return
   }
   emits('select', provider.binding)
@@ -253,8 +241,8 @@ onMounted(async () => {
       <div
         class="flex flex-col flex-shrink-0 bg-gray-50 w-full md:w-56 lg:w-64 h-full px-3 py-4 overflow-auto scrollbar-w-none"
       >
-        <div class="text-gray-900 font-bold text-lg mb-2">关联 MCP</div>
-        <div class="text-xs text-gray-500 mb-4">从 MCP 广场中选择要绑定的工具提供方</div>
+        <div class="text-gray-900 font-bold text-lg mb-2">{{ t('appStudio.abilities.mcp.addTitle') }}</div>
+        <div class="text-xs text-gray-500 mb-4">{{ t('appStudio.abilities.mcp.addDescription') }}</div>
         <div class="flex flex-col gap-1 mb-4">
           <div
             data-testid="mcp-category-all"
@@ -262,7 +250,7 @@ onMounted(async () => {
             @click="handleCategoryChange('all')"
           >
             <icon-apps />
-            全部
+            {{ t('appStudio.abilities.tools.all') }}
           </div>
           <div
             v-for="item in categories"
@@ -272,20 +260,20 @@ onMounted(async () => {
             @click="handleCategoryChange(item.id)"
           >
             <icon-apps />
-            {{ item.name }}
+            {{ getCategoryName(item.id || item.name) }}
           </div>
         </div>
         <div class="text-xs text-gray-500 leading-5">
-          仅展示可添加的 MCP。选择后会直接纳入当前应用的 MCP 绑定。
+          {{ t('appStudio.abilities.mcp.addOnlyBindable') }}
         </div>
       </div>
 
       <div class="flex-1 p-4 min-w-0 flex flex-col overflow-hidden">
         <div class="w-full flex items-center justify-between gap-2 mb-7">
-          <div class="text-lg font-bold text-gray-700">MCP 广场</div>
+          <div class="text-lg font-bold text-gray-700">{{ t('appStudio.abilities.mcp.marketplaceTitle') }}</div>
           <a-input-search
             v-model="searchWord"
-            placeholder="搜索 MCP"
+            :placeholder="t('appStudio.abilities.mcp.searchPlaceholder')"
             class="w-full sm:w-[280px] bg-white rounded-lg border-gray-300"
             @search="handleSearch"
           />
@@ -320,11 +308,11 @@ onMounted(async () => {
                     <div class="flex items-center gap-1.5 min-w-0">
                       <div class="text-sm font-bold text-gray-900 truncate">{{ provider.label }}</div>
                       <a-tag size="small" :color="provider.is_bindable ? 'green' : 'gray'">
-                        {{ provider.is_bindable ? '可添加' : '仅查看' }}
+                        {{ provider.is_bindable ? t('appStudio.abilities.mcp.addable') : t('appStudio.abilities.mcp.viewOnly') }}
                       </a-tag>
                     </div>
                     <div class="text-[11px] text-gray-500 line-clamp-1">
-                      {{ provider.name }} · {{ provider.tool_count }} 个工具
+                      {{ provider.name }} · {{ t('appStudio.abilities.readonly.toolCount', { count: provider.tool_count }) }}
                     </div>
                     <resource-card-description :text="provider.description" />
 
@@ -347,10 +335,10 @@ onMounted(async () => {
                         class="bg-blue-700"
                         :image-url="provider.creator_avatar"
                       >
-                        {{ (provider.creator_name || '公开目录')[0] }}
+                        {{ (provider.creator_name || t('appStudio.abilities.mcp.publicDirectory'))[0] }}
                       </a-avatar>
                       <div class="text-[11px] text-gray-400">
-                        {{ provider.creator_name || '公开目录' }} ·
+                        {{ provider.creator_name || t('appStudio.abilities.mcp.publicDirectory') }} ·
                         {{ formatTimestampShort(provider.published_at || provider.created_at) }}
                       </div>
                     </div>
@@ -366,26 +354,30 @@ onMounted(async () => {
                   >
                     {{
                       isSelectedBinding(provider.binding)
-                        ? '已添加'
+                        ? t('appStudio.abilities.mcp.added')
                         : provider.is_bindable
-                          ? '添加到应用'
-                          : '仅查看'
+                          ? t('appStudio.abilities.mcp.addToApp')
+                          : t('appStudio.abilities.mcp.viewOnly')
                     }}
                   </a-button>
                 </div>
               </div>
 
-              <a-empty v-if="providers.length === 0" description="暂无可添加的 MCP" class="py-20" />
+              <a-empty
+                v-if="providers.length === 0"
+                :description="t('appStudio.abilities.mcp.noAvailable')"
+                class="py-20"
+              />
 
               <div v-if="paginator.total_page >= 2" class="w-full">
                 <div v-if="loading" class="text-center py-4">
                   <a-space>
                     <a-spin />
-                    <div class="text-gray-400">加载中</div>
+                    <div class="text-gray-400">{{ t('appStudio.list.loading') }}</div>
                   </a-space>
                 </div>
                 <div v-else-if="paginator.current_page >= paginator.total_page" class="text-center py-4">
-                  <div class="text-gray-400">数据已加载完成</div>
+                  <div class="text-gray-400">{{ t('appStudio.list.loadedAll') }}</div>
                 </div>
               </div>
             </div>

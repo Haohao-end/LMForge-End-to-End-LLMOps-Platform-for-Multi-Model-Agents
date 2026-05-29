@@ -524,7 +524,6 @@ class PublicAgentA2AService(BaseService):
         app = self._get_public_app(app_id)
         request_payload = payload or {}
         image_urls = self._extract_image_urls_from_payload(request_payload)
-        runtime_context = self._extract_runtime_context_from_payload(request_payload)
         if image_urls:
             raise ValidateErrorException(
                 "当前公共应用预览链路暂不支持图片输入，请移除图片后重试",
@@ -548,7 +547,7 @@ class PublicAgentA2AService(BaseService):
             or str(request_payload.get("context_id", "")).strip()
             or str(app.id)
         )
-        agent_result = self._invoke_public_agent(app, query, flask_app=flask_app, runtime_context=runtime_context)
+        agent_result = self._invoke_public_agent(app, query, flask_app=flask_app)
         output_payload = build_output_payload(agent_result.answer, getattr(agent_result, "agent_thoughts", []) or [])
 
         return {
@@ -581,7 +580,6 @@ class PublicAgentA2AService(BaseService):
         app = self._get_public_app(app_id)
         request_payload = payload or {}
         image_urls = self._extract_image_urls_from_payload(request_payload)
-        runtime_context = self._extract_runtime_context_from_payload(request_payload)
         if image_urls:
             raise ValidateErrorException(
                 "当前公共应用预览链路暂不支持图片输入，请移除图片后重试",
@@ -624,11 +622,7 @@ class PublicAgentA2AService(BaseService):
         runtime_context: dict[str, Any] | None = None,
     ) -> Generator[str, None, None]:
         """流式输出公开Agent事件。"""
-        app_config = call_config_loader(
-            self.app_config_service.get_app_config,
-            app,
-            persist_changes=False,
-        )
+        app_config = self.app_config_service.get_app_config(app)
         if hasattr(self.language_model_service, "resolve_runtime_language_model"):
             model_resolution = self.language_model_service.resolve_runtime_language_model(
                 app_config.get("model_config", {}),
@@ -646,6 +640,13 @@ class PublicAgentA2AService(BaseService):
             app_config,
             flask_app=flask_app,
             runtime_context=runtime_context,
+        )
+        agent = self.app_service._create_runtime_agent(
+            llm,
+            owner_account,
+            app_config,
+            tools,
+            flask_app=flask_app,
         )
         agent = self.app_service._create_runtime_agent(
             llm,
@@ -739,11 +740,7 @@ class PublicAgentA2AService(BaseService):
         runtime_context: dict[str, Any] | None = None,
     ):
         """以内存方式调用公开Agent，不落库。"""
-        app_config = call_config_loader(
-            self.app_config_service.get_app_config,
-            app,
-            persist_changes=False,
-        )
+        app_config = self.app_config_service.get_app_config(app)
         if hasattr(self.language_model_service, "resolve_runtime_language_model"):
             model_resolution = self.language_model_service.resolve_runtime_language_model(
                 app_config.get("model_config", {}),
@@ -761,6 +758,13 @@ class PublicAgentA2AService(BaseService):
             app_config,
             flask_app=flask_app,
             runtime_context=runtime_context,
+        )
+        agent = self.app_service._create_runtime_agent(
+            llm,
+            owner_account,
+            app_config,
+            tools,
+            flask_app=flask_app,
         )
         agent = self.app_service._create_runtime_agent(
             llm,
@@ -1004,19 +1008,6 @@ class PublicAgentA2AService(BaseService):
                 image_urls.append(nested_url)
 
         return image_urls
-
-    @classmethod
-    def _extract_runtime_context_from_payload(cls, payload: dict[str, Any]) -> dict[str, Any] | None:
-        """从 A2A payload 的 metadata 中提取运行时上下文。"""
-        metadata = payload.get("metadata", {})
-        if not isinstance(metadata, dict):
-            return None
-
-        runtime_context = metadata.get("runtime_context", {})
-        if not isinstance(runtime_context, dict):
-            return None
-
-        return runtime_context
 
     @classmethod
     def _extract_answer_text(cls, response: dict[str, Any]) -> str:

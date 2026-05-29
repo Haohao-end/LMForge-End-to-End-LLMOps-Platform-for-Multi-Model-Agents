@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/common'
 import { Message } from '@arco-design/web-vue'
+import { i18n } from '@/i18n'
 import { copyTextToClipboard } from '@/utils/clipboard'
 
 type MarkdownRendererOptions = {
@@ -12,6 +13,8 @@ type CopyHandlerOptions = {
 }
 
 const ALLOWED_LINK_PROTOCOLS = new Set(['http:', 'https:'])
+const translate = (key: string, values?: Record<string, unknown>) =>
+  (values ? i18n.global.t(key, values) : i18n.global.t(key)) as string
 
 const escapeHtml = (content: string) =>
   content
@@ -56,7 +59,7 @@ export const useMarkdownRenderer = (options: MarkdownRendererOptions = {}) => {
     return `<div class="md-code-block">
     <div class="md-code-header">
       <span class="md-code-lang">${escapeHtml(languageLabel)}</span>
-      <button type="button" class="md-code-copy-btn" data-copy-code="${encodedCode}">复制代码</button>
+      <button type="button" class="md-code-copy-btn" data-copy-code="${encodedCode}">${escapeHtml(translate('chat.markdown.copyCode'))}</button>
     </div>
     <pre class="hljs"><code>${highlightedCode}</code></pre>
   </div>`
@@ -88,8 +91,10 @@ export const useMarkdownRenderer = (options: MarkdownRendererOptions = {}) => {
     const code = decodeURIComponent(encodedCode)
     await copyTextToClipboard(code)
 
-    const previousText = copyButton.textContent || '复制代码'
-    copyButton.textContent = '已复制'
+    const defaultCopyText = translate('chat.markdown.copyCode')
+    const copiedText = translate('chat.messages.codeCopied')
+    const previousText = copyButton.textContent || defaultCopyText
+    copyButton.textContent = copiedText
     copyButton.setAttribute('disabled', 'true')
 
     const resetTimer = copyButton.getAttribute('data-reset-timer')

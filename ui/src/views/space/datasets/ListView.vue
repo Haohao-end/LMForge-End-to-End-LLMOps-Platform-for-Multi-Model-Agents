@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import moment from 'moment'
 import type { ValidatedError } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import {
   useCreateOrUpdateDataset,
   useDeleteDataset,
@@ -20,12 +21,10 @@ import { getUserAvatarUrl } from '@/utils/helper'
 // 1.定义页面所需数据
 const route = useRoute()
 const router = useRouter()
-const props = defineProps({
-  createType: { type: String, required: true },
-})
-const emits = defineEmits(['update:create-type'])
+const { t } = useI18n()
 const accountStore = useAccountStore()
 let updateDatasetID = ''
+const showCreateModal = ref(false)
 const { dataset, loadDataset } = useGetDataset()
 const { loading, datasets, paginator, loadDatasets } = useGetDatasetsWithPage()
 const { image_url, handleUploadImage } = useUploadImage()
@@ -44,18 +43,27 @@ const search_word = computed(() => {
   return String(route.query?.search_word ?? '')
 })
 
+const clearCreateTypeQuery = async () => {
+  const nextQuery = { ...route.query }
+  delete nextQuery.create_type
+  await router.replace({
+    path: route.path,
+    query: nextQuery,
+  })
+}
+
 // 2.定义上传图标处理器
 const handleUploadIcon = async (file: File) => {
   await handleUploadImage(file)
   form.value.icon = image_url.value
-  form.value.fileList = [{ uid: '1', name: '知识库图标', url: image_url.value }]
-  Message.success('图标上传成功')
+  form.value.fileList = [{ uid: '1', name: t('space.datasets.modal.iconPlaceholder'), url: image_url.value }]
+  Message.success(t('space.datasets.uploadSuccess'))
 }
 
 // 3.定义生成图标处理器
 const handleGenerateIcon = async () => {
   if (!form.value.name || form.value.name.trim() === '') {
-    Message.warning('请先输入知识库名称')
+    Message.warning(t('space.datasets.enterNameFirst'))
     return
   }
 
@@ -65,8 +73,8 @@ const handleGenerateIcon = async () => {
       const iconUrl = await handleRegenerateIcon(updateDatasetID)
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '知识库图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('space.datasets.modal.iconPlaceholder'), url: iconUrl }]
+        Message.success(t('space.datasets.generateSuccess'))
       }
     }
     // 创建模式：调用 generateIconPreview
@@ -74,8 +82,8 @@ const handleGenerateIcon = async () => {
       const iconUrl = await handleGenerateIconPreview(form.value.name, form.value.description)
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '知识库图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('space.datasets.modal.iconPlaceholder'), url: iconUrl }]
+        Message.success(t('space.datasets.generateSuccess'))
       }
     }
   } catch (_error: unknown) {
@@ -104,23 +112,27 @@ const handleUpdate = (dataset_id: string) => {
 
     // 2.更新表单数据
     formRef.value?.resetFields()
-    form.value.fileList = [{ uid: '1', name: '知识库图标', url: dataset.value.icon }]
+    form.value.fileList = [{ uid: '1', name: t('space.datasets.modal.iconPlaceholder'), url: dataset.value.icon }]
     form.value.icon = dataset.value.icon
     form.value.name = dataset.value.name
     form.value.description = dataset.value.description
   })
 }
 
+const openCreateModal = async () => {
+  showCreateModal.value = true
+  await clearCreateTypeQuery()
+}
+
 // 6.定义取消显示模态窗
-const handleCancel = () => {
+const handleCancel = async () => {
+  showCreateModal.value = false
   updateShowUpdateModal(false, async () => {
     // 1.重置整个表单数据
     updateDatasetID = ''
     formRef.value?.resetFields()
-
-    // 2.隐藏表单模态窗
-    emits('update:create-type', '')
   })
+  await clearCreateTypeQuery()
 }
 
 // 7.定义提交模态窗处理器
@@ -140,6 +152,16 @@ const handleSubmit = async ({ errors }: { errors: Record<string, ValidatedError>
 watch(
   () => route.query?.search_word,
   (newValue) => loadDatasets(true, String(newValue)),
+)
+
+watch(
+  () => route.query?.create_type,
+  (newValue) => {
+    if (newValue === 'dataset') {
+      void openCreateModal()
+    }
+  },
+  { immediate: true },
 )
 
 // 9.页面DOM加载后加载数据
@@ -186,9 +208,11 @@ const handleCardClick = (datasetId: string) => {
                   {{ dataset.name }}
                 </div>
                 <div class="text-xs text-gray-500 line-clamp-1">
-                  {{ dataset.document_count }} 文档 ·
-                  {{ Math.round(dataset.character_count / 1000) }} 千字符 ·
-                  {{ dataset.related_app_count }} 关联应用
+                  {{ t('space.datasets.stats', {
+                    documents: dataset.document_count,
+                    characters: Math.round(dataset.character_count / 1000),
+                    apps: dataset.related_app_count,
+                  }) }}
                 </div>
               </div>
               <!-- 操作按钮 -->
@@ -199,12 +223,12 @@ const handleCardClick = (datasetId: string) => {
                   </template>
                 </a-button>
                 <template #content>
-                  <a-doption @click="() => handleUpdate(dataset.id)">设置</a-doption>
+                  <a-doption @click="() => handleUpdate(dataset.id)">{{ t('space.datasets.settings') }}</a-doption>
                   <a-doption
                     class="!text-red-500"
                     @click="() => handleDelete(dataset.id, () => loadDatasets(true))"
                   >
-                    删除
+                    {{ t('space.datasets.delete') }}
                   </a-doption>
                 </template>
               </a-dropdown>
@@ -217,10 +241,10 @@ const handleCardClick = (datasetId: string) => {
           <!-- 知识库的归属者信息 -->
           <div class="flex items-center gap-1.5">
             <a-avatar :size="18" class="bg-blue-700" :image-url="getUserAvatarUrl(accountStore.account.avatar, accountStore.account.name)">
-              {{ (accountStore.account.name || '未知用户')[0] }}
+              {{ (accountStore.account.name || t('space.datasets.unknownUser'))[0] }}
             </a-avatar>
             <div class="text-xs text-gray-400">
-              {{ accountStore.account.name }} · 最近编辑
+              {{ accountStore.account.name || t('space.datasets.unknownUser') }} · {{ t('space.datasets.recentEdited') }}
               {{ moment((dataset.updated_at || dataset.created_at) * 1000).format('MM-DD HH:mm') }}
             </div>
           </div>
@@ -229,7 +253,7 @@ const handleCardClick = (datasetId: string) => {
       <!-- 没数据的UI状态 -->
       <a-col v-if="datasets.length === 0" :span="24">
         <a-empty
-          description="没有可用的知识库"
+          :description="t('space.datasets.empty')"
           class="h-[400px] flex flex-col items-center justify-center"
         />
       </a-col>
@@ -240,18 +264,18 @@ const handleCardClick = (datasetId: string) => {
       <a-col v-if="loading" :span="24" align="center">
         <a-space class="my-4">
           <a-spin />
-          <div class="text-gray-400">加载中</div>
+          <div class="text-gray-400">{{ t('space.datasets.loading') }}</div>
         </a-space>
       </a-col>
       <!-- 数据加载完成 -->
       <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" align="center">
-        <div class="text-gray-400 my-4">数据已加载完成</div>
+        <div class="text-gray-400 my-4">{{ t('space.datasets.loadedAll') }}</div>
       </a-col>
     </a-row>
     <!-- 新建/修改模态窗 -->
     <a-modal
       :width="520"
-      :visible="props.createType === 'dataset' || showUpdateModal"
+      :visible="showCreateModal || showUpdateModal"
       hide-title
       :footer="false"
       modal-class="rounded-xl"
@@ -260,7 +284,11 @@ const handleCardClick = (datasetId: string) => {
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
         <div class="text-lg font-bold text-gray-700">
-          {{ props.createType === 'dataset' ? '新建' : '更新' }}知识库
+          {{
+            showCreateModal
+              ? t('space.datasets.modal.createTitle')
+              : t('space.datasets.modal.updateTitle')
+          }}
         </div>
         <a-button type="text" class="!text-gray-700" size="small" @click="handleCancel">
           <template #icon>
@@ -274,7 +302,7 @@ const handleCardClick = (datasetId: string) => {
           <a-form-item
             field="fileList"
             hide-label
-            :rules="[{ required: true, message: '知识库图标不能为空' }]"
+            :rules="[{ required: true, message: t('space.datasets.modal.iconRequired') }]"
           >
             <IconUploadGenerator
               :name="form.name"
@@ -282,7 +310,7 @@ const handleCardClick = (datasetId: string) => {
               :icon="form.icon"
               :file-list="form.fileList"
               :loading="regenerateIconLoading || generateIconPreviewLoading"
-              placeholder="知识库"
+              :placeholder="t('space.datasets.modal.iconPlaceholder')"
               :on-upload="handleUploadIcon"
               :on-generate="handleGenerateIcon"
               @update:icon="(val) => (form.icon = val)"
@@ -291,36 +319,36 @@ const handleCardClick = (datasetId: string) => {
           </a-form-item>
           <a-form-item
             field="name"
-            label="知识库名称"
+            :label="t('space.datasets.modal.nameLabel')"
             asterisk-position="end"
-            :rules="[{ required: true, message: '知识库名称不能为空' }]"
+            :rules="[{ required: true, message: t('space.datasets.modal.nameRequired') }]"
           >
             <a-input
               v-model="form.name"
-              placeholder="请输入知识库名称"
+              :placeholder="t('space.datasets.modal.namePlaceholder')"
               show-word-limit
               :max-length="60"
             />
           </a-form-item>
-          <a-form-item field="description" label="知识库描述" asterisk-position="end">
+          <a-form-item field="description" :label="t('space.datasets.modal.descriptionLabel')" asterisk-position="end">
             <a-textarea
               v-model="form.description"
               :auto-size="{ minRows: 4, maxRows: 6 }"
-              placeholder="请输入知识库内容的描述"
+              :placeholder="t('space.datasets.modal.descriptionPlaceholder')"
             />
           </a-form-item>
           <!-- 底部按钮 -->
           <div class="flex items-center justify-between">
             <div class=""></div>
             <a-space :size="16">
-              <a-button class="rounded-lg" @click="handleCancel">取消</a-button>
+              <a-button class="rounded-lg" @click="handleCancel">{{ t('common.actions.cancel') }}</a-button>
               <a-button
                 :loading="submitLoading"
                 type="primary"
                 html-type="submit"
                 class="rounded-lg"
               >
-                保存
+                {{ t('common.actions.save') }}
               </a-button>
             </a-space>
           </div>

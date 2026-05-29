@@ -40,6 +40,10 @@ import type {
 } from '@/models/app'
 import { useRouter } from 'vue-router'
 import { getErrorMessage } from '@/utils/error'
+import { i18n } from '@/i18n'
+
+const t = (key: string, params?: Record<string, unknown>) =>
+  params ? i18n.global.t(key, params) : i18n.global.t(key)
 
 export const useGetApp = () => {
   // 1.定义hooks所需的基础数据
@@ -124,7 +128,7 @@ export const useCreateApp = () => {
     try {
       loading.value = true
       const resp = await createApp(req)
-      Message.success('新增Agent应用成功')
+      Message.success(t('appStudio.createModal.createSuccess'))
       await router.push({
         name: 'space-apps-detail',
         params: { app_id: resp.data.id },
@@ -168,7 +172,7 @@ export const useCopyApp = () => {
       const resp = await copyApp(app_id)
 
       // 2.2 成功修改则进行提示并跳转页面
-      Message.success('创建应用副本成功')
+      Message.success(t('appStudio.list.duplicateSuccess'))
       await router.push({ name: 'space-apps-detail', params: { app_id: resp.data.id } })
     } finally {
       loading.value = false
@@ -181,9 +185,8 @@ export const useCopyApp = () => {
 export const useDeleteApp = () => {
   const handleDeleteApp = async (app_id: string, callback?: () => void) => {
     Modal.warning({
-      title: '要删除该应用吗?',
-      content:
-        '删除应用后，发布的WebApp、开放API以及关联的社交媒体平台均无法使用该Agent应用，如果需要暂停应用，可使用取消发布功能。',
+      title: t('appStudio.shell.deleteConfirmTitle'),
+      content: t('appStudio.shell.deleteConfirmContent'),
       hideCancel: false,
       onOk: async () => {
         try {
@@ -211,9 +214,9 @@ export const usePublish = () => {
       loading.value = true
       await publish(app_id, share_to_square)
       if (share_to_square) {
-        Message.success('应用已发布并共享到应用广场！')
+        Message.success(t('appStudio.shell.publishSharedSuccess'))
       } else {
-        Message.success('应用配置已更新！')
+        Message.success(t('appStudio.shell.publishUpdatedSuccess'))
       }
     } finally {
       loading.value = false
@@ -231,16 +234,15 @@ export const useCancelPublish = () => {
   const handleCancelPublish = async (app_id: string, callback?: () => void) => {
     // 2.1打开弹窗提示
     Modal.warning({
-      title: '要取消发布该Agent应用吗?',
-      content:
-        '取消发布后，应用将从应用广场移除，WebApp以及发布的社交平台均无法使用该Agent',
+      title: t('appStudio.shell.cancelPublishConfirmTitle'),
+      content: t('appStudio.shell.cancelPublishConfirmContent'),
       hideCancel: false,
       onOk: async () => {
         try {
           // 2.2 点击确定后向API接口发起请求
           loading.value = true
           await cancelPublish(app_id)
-          Message.success('应用已取消发布并从应用广场移除')
+          Message.success(t('appStudio.shell.cancelPublishSuccess'))
         } finally {
           // 2.3 调用callback函数指定回调功能
           loading.value = false
@@ -358,7 +360,6 @@ export const useGetDraftAppConfig = () => {
         mcp_bindings: data.mcp_bindings || [],
         mcp_tool_snapshots: data.mcp_tool_snapshots || [],
         skills: data.skills,
-        agent_bindings: data.agent_bindings || [],
         workflows: data.workflows,
         speech_to_text: data.speech_to_text,
         text_to_speech: data.text_to_speech,
@@ -385,7 +386,7 @@ export const useUpdateDraftAppConfig = () => {
       const resp = await updateDraftAppConfig(app_id, draft_app_config)
       Message.success(resp.message)
     } catch (error: unknown) {
-      const msg = getErrorMessage(error, '更新应用草稿配置失败')
+      const msg = getErrorMessage(error, t('appStudio.shell.updateDraftFailed'))
       Message.error(msg)
       throw error
     } finally {
@@ -619,7 +620,7 @@ export const useRegenerateWebAppToken = () => {
     try {
       loading.value = true
       const resp = await regenerateWebAppToken(app_id)
-      Message.success('重新生成WebApp访问链接成功')
+      Message.success(t('appStudio.published.web.regenerateSuccess'))
       token.value = resp.data.token
     } finally {
       loading.value = false
@@ -643,14 +644,14 @@ export const useRegenerateIcon = () => {
       return resp.data.icon
     } catch (error: unknown) {
       // 提取错误信息
-      let errorMessage = '重新生成图标失败，请稍后重试'
+      let errorMessage = t('appStudio.createModal.regenerateIconFailed')
 
       const msg = getErrorMessage(error, '')
       if (msg) {
         if (msg.includes('API_KEY')) {
-          errorMessage = '图标生成服务暂时不可用，请联系管理员配置 API Key'
+          errorMessage = t('appStudio.createModal.iconServiceUnavailable')
         } else if (msg.includes('所有服务均不可用')) {
-          errorMessage = '图标生成服务暂时不可用，请稍后重试'
+          errorMessage = t('appStudio.createModal.iconServiceUnavailableRetry')
         } else {
           errorMessage = msg
         }
@@ -680,18 +681,18 @@ export const useGenerateIconPreview = () => {
       return resp.data.icon
     } catch (error: unknown) {
       // 提取错误信息
-      let errorMessage = '生成图标失败，请稍后重试'
+      let errorMessage = t('appStudio.createModal.generateIconFailed')
 
       const msg = getErrorMessage(error, '')
       if (msg) {
         if (msg.includes('SILICONFLOW_API_KEY')) {
-          errorMessage = '图标生成服务暂时不可用，请联系管理员配置 API Key'
+          errorMessage = t('appStudio.createModal.iconServiceUnavailable')
         } else if (msg.includes('DASHSCOPE_API_KEY')) {
-          errorMessage = '图标生成服务暂时不可用，请联系管理员配置 API Key'
+          errorMessage = t('appStudio.createModal.iconServiceUnavailable')
         } else if (msg.includes('OPENAI_API_KEY')) {
-          errorMessage = '图标生成服务暂时不可用，请联系管理员配置 API Key'
+          errorMessage = t('appStudio.createModal.iconServiceUnavailable')
         } else if (msg.includes('所有服务均不可用')) {
-          errorMessage = '图标生成服务暂时不可用，请稍后重试或手动上传图标'
+          errorMessage = t('appStudio.createModal.iconServiceUnavailableUpload')
         } else {
           errorMessage = msg
         }
@@ -716,7 +717,7 @@ export const useShareAppToSquare = () => {
     try {
       loading.value = true
       await shareAppToSquare(app_id, category)
-      Message.success('应用已分享到应用广场')
+      Message.success(t('appStudio.published.square.sharedSuccess'))
     } finally {
       loading.value = false
       callback && callback()
@@ -733,14 +734,14 @@ export const useUnshareAppFromSquare = () => {
   // 2.定义取消分享应用到广场处理器
   const handleUnshareAppFromSquare = async (app_id: string, callback?: () => void) => {
     Modal.warning({
-      title: '要取消分享到广场吗?',
-      content: '取消分享后，应用将从应用广场移除，但不会影响已发布的 WebApp 和 API',
+      title: t('appStudio.published.square.unshareConfirmTitle'),
+      content: t('appStudio.published.square.unshareConfirmContent'),
       hideCancel: false,
       onOk: async () => {
         try {
           loading.value = true
           await unshareAppFromSquare(app_id)
-          Message.success('应用已从应用广场移除')
+          Message.success(t('appStudio.published.square.unsharedSuccess'))
         } finally {
           loading.value = false
           callback && callback()

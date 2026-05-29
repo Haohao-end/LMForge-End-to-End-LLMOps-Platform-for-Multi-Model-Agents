@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { type Form, type ValidatedError, Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import { useCreateApp, useGetApp, useUpdateApp, useRegenerateIcon, useGenerateIconPreview } from '@/hooks/use-app'
 import { useUploadImage } from '@/hooks/use-upload-file'
 import IconUploadGenerator from '@/components/IconUploadGenerator.vue'
@@ -19,6 +20,7 @@ const { app, loadApp } = useGetApp()
 const { image_url, handleUploadImage } = useUploadImage()
 const { loading: regenerateIconLoading, handleRegenerateIcon } = useRegenerateIcon()
 const { loading: generateIconPreviewLoading, handleGenerateIconPreview } = useGenerateIconPreview()
+const { t } = useI18n()
 type IconFileItem = { uid: string; name: string; url: string }
 type AppForm = {
   fileList: IconFileItem[]
@@ -43,10 +45,10 @@ const handleUploadIcon = async (file: File) => {
   try {
     await handleUploadImage(file)
     form.value.icon = image_url.value
-    form.value.fileList = [{ uid: '1', name: '应用图标', url: image_url.value }]
-    Message.success('图标上传成功')
+    form.value.fileList = [{ uid: '1', name: t('appStudio.createModal.iconFileName'), url: image_url.value }]
+    Message.success(t('appStudio.createModal.uploadIconSuccess'))
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '图标上传失败'))
+    Message.error(getErrorMessage(error, t('appStudio.createModal.uploadIconFailed')))
     throw error
   }
 }
@@ -54,7 +56,7 @@ const handleUploadIcon = async (file: File) => {
 // 2.6 定义生成图标处理器
 const handleGenerateIcon = async () => {
   if (!form.value.name || form.value.name.trim() === '') {
-    Message.warning('请先输入应用名称')
+    Message.warning(t('appStudio.createModal.enterNameFirst'))
     return
   }
 
@@ -64,15 +66,15 @@ const handleGenerateIcon = async () => {
       const iconUrl = await handleRegenerateIcon(props.app_id)
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '应用图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('appStudio.createModal.iconFileName'), url: iconUrl }]
+        Message.success(t('appStudio.createModal.generateIconSuccess'))
       }
     } else {
       const iconUrl = await handleGenerateIconPreview(form.value.name, form.value.description)
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '应用图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('appStudio.createModal.iconFileName'), url: iconUrl }]
+        Message.success(t('appStudio.createModal.generateIconSuccess'))
       }
     }
   } catch {
@@ -113,7 +115,7 @@ watch(
 
         // 4.5 更新表单数据
         form.value = {
-          fileList: [{ uid: '1', name: '应用图标', url: app.value.icon }],
+          fileList: [{ uid: '1', name: t('appStudio.createModal.iconFileName'), url: app.value.icon }],
           icon: app.value.icon,
           name: app.value.name,
           description: app.value.description,
@@ -141,7 +143,7 @@ watch(
     <!-- 顶部标题 -->
     <div class="flex items-center justify-between mb-6">
       <div class="text-xl font-bold text-gray-800">
-        {{ props.app_id === '' ? '创建 AI 应用' : '编辑 AI 应用' }}
+        {{ props.app_id === '' ? t('appStudio.createModal.createTitle') : t('appStudio.createModal.editTitle') }}
       </div>
       <a-button type="text" class="!text-gray-500 hover:!text-gray-700" size="small" @click="hideModal">
         <template #icon>
@@ -159,7 +161,7 @@ watch(
             :icon="form.icon"
             :file-list="form.fileList"
             :loading="regenerateIconLoading || generateIconPreviewLoading"
-            placeholder="应用"
+            :placeholder="t('appStudio.createModal.placeholder')"
             :on-upload="handleUploadIcon"
             :on-generate="handleGenerateIcon"
             @update:icon="(val) => (form.icon = val)"
@@ -168,30 +170,30 @@ watch(
         </a-form-item>
         <a-form-item
           field="name"
-          label="应用名称"
+          :label="t('appStudio.createModal.nameLabel')"
           asterisk-position="end"
-          :rules="[{ required: true, message: '应用名称不能为空' }]"
+          :rules="[{ required: true, message: t('appStudio.createModal.nameRequired') }]"
         >
           <a-input
             v-model:model-value="form.name"
-            placeholder="请输入应用名称"
+            :placeholder="t('appStudio.createModal.namePlaceholder')"
             size="large"
             class="rounded-lg"
           />
         </a-form-item>
-        <a-form-item field="description" label="应用描述">
+        <a-form-item field="description" :label="t('appStudio.createModal.descriptionLabel')">
           <a-textarea
             v-model:model-value="form.description"
             :auto-size="{ minRows: 6, maxRows: 8 }"
             :max-length="800"
             show-word-limit
-            placeholder="请输入关于该应用的描述信息"
+            :placeholder="t('appStudio.createModal.descriptionPlaceholder')"
             class="rounded-lg"
           />
         </a-form-item>
         <!-- 底部按钮 -->
         <div class="flex items-center justify-end gap-3 mt-6">
-          <a-button size="large" class="rounded-lg px-6" @click="hideModal">取消</a-button>
+          <a-button size="large" class="rounded-lg px-6" @click="hideModal">{{ t('common.actions.cancel') }}</a-button>
           <a-button
             :loading="createAppLoading || updateAppLoading"
             type="primary"
@@ -199,7 +201,7 @@ watch(
             size="large"
             class="rounded-lg px-6"
           >
-            保存
+            {{ t('common.actions.save') }}
           </a-button>
         </div>
       </a-form>

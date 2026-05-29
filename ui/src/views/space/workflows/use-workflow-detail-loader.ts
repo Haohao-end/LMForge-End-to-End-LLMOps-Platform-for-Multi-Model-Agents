@@ -1,4 +1,5 @@
 import type { Ref } from 'vue'
+import { i18n } from '@/i18n'
 import { getPublicWorkflowDetail, getPublicWorkflowDraftGraph } from '@/services/public-workflow'
 import { getErrorMessage } from '@/utils/error'
 
@@ -40,6 +41,7 @@ const toPreviewWorkflow = (
 }
 
 export const loadWorkflowDetailByMode = async (options: LoadWorkflowDetailOptions) => {
+  const t = i18n.global.t
   if (options.isPreviewMode) {
     try {
       const [workflowRes, graphRes] = await Promise.all([
@@ -51,7 +53,7 @@ export const loadWorkflowDetailByMode = async (options: LoadWorkflowDetailOption
       options.nodes.value = graphRes.data.nodes || []
       options.edges.value = graphRes.data.edges || []
     } catch (error: unknown) {
-      options.onError(getErrorMessage(error, '加载工作流失败'))
+      options.onError(getErrorMessage(error, t('appStudio.shell.loadGraphFailed')))
     }
     return
   }

@@ -5,6 +5,7 @@ import { cloneDeep, isEqual } from 'lodash'
 import { apiPrefix } from '@/config'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
 import type { AgentBinding, AgentBindingRequest } from '@/models/app'
+import { useI18n } from 'vue-i18n'
 import AgentBindingsMarketplacePickerModal from './AgentBindingsMarketplacePickerModal.vue'
 
 type AgentBindingForm = AgentBinding
@@ -41,6 +42,7 @@ const props = defineProps({
   },
 })
 
+const { t } = useI18n()
 const emits = defineEmits(['update:agent_bindings'])
 const { handleUpdateDraftAppConfig } = useUpdateDraftAppConfig()
 const showMarketplacePickerModal = ref(false)
@@ -123,7 +125,7 @@ const handleSelectMarketplaceBinding = async (binding: AgentBindingTarget) => {
 
   const duplicate = activateAgentBindings.value.some((item) => String(item.app_id || '').trim() === appId)
   if (duplicate) {
-    Message.warning('该 Agent 已添加到当前应用')
+    Message.warning(t('appStudio.abilities.agents.duplicateWarning'))
     return
   }
 
@@ -139,7 +141,7 @@ const handleSelectMarketplaceBinding = async (binding: AgentBindingTarget) => {
   })
 
   await persistAgentBindings([...activateAgentBindings.value, nextBinding])
-  Message.success('已添加 Agent 子应用')
+  Message.success(t('appStudio.abilities.agents.addedSuccess'))
 }
 
 watch(
@@ -159,7 +161,7 @@ watch(
 <template>
   <a-collapse-item key="agent_bindings" class="app-ability-item w-full min-w-0">
     <template #header>
-      <div class="text-gray-700 font-bold">Agent 子应用</div>
+      <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.agents.title') }}</div>
     </template>
     <template #extra>
       <a-button size="mini" type="text" class="!text-gray-700" @click.stop="openMarketplacePicker">
@@ -195,12 +197,12 @@ watch(
               </a-tag>
             </div>
             <div class="text-xs text-gray-500 truncate">
-              {{ binding.source_scope === 'public' ? '应用广场' : '我的应用' }}
-              <template v-if="binding.is_public"> · 公开应用</template>
-              <template v-else> · 私有应用</template>
+              {{ binding.source_scope === 'public' ? t('appStudio.abilities.sourcePublic') : t('appStudio.abilities.sourceOwn') }}
+              <template v-if="binding.is_public"> · {{ t('appStudio.abilities.publicApp') }}</template>
+              <template v-else> · {{ t('appStudio.abilities.privateApp') }}</template>
             </div>
             <div class="text-xs text-gray-400 truncate">
-              {{ binding.description || '未填写描述' }}
+              {{ binding.description || t('appStudio.abilities.emptyDescription') }}
             </div>
           </div>
         </div>
@@ -217,7 +219,7 @@ watch(
       </div>
     </div>
     <div v-else class="text-xs text-gray-500 leading-[22px]">
-      点击右上角 + 从我的已发布应用或应用广场添加 Agent 子应用。绑定后会直接纳入当前应用的运行时工具。
+      {{ t('appStudio.abilities.agents.empty') }}
     </div>
   </a-collapse-item>
 

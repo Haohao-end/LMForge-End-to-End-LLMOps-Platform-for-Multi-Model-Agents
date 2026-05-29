@@ -262,36 +262,6 @@ class TestPublicAgentA2AService:
         assert result["metadata"]["app_id"] == str(app_id)
         assert result["metadata"]["status"] == "success"
 
-    def test_get_agent_card_should_read_config_without_persisting_changes(self, monkeypatch):
-        app_id = uuid4()
-        capture = {}
-        app = SimpleNamespace(
-            id=app_id,
-            name="公开 Agent",
-            description="公开说明",
-            account_id=uuid4(),
-        )
-        service = _build_service(
-            public_agent_registry_service=SimpleNamespace(
-                build_agent_message_url=lambda target_app_id: f"/public/apps/{target_app_id}/a2a/messages",
-                build_agent_card_url=lambda target_app_id: f"/public/apps/{target_app_id}/a2a/agent-card",
-            )
-        )
-        monkeypatch.setattr(service, "_get_public_app", lambda _app_id: app)
-        service.app_config_service = SimpleNamespace(
-            get_app_config=lambda _app, persist_changes=True: capture.update({"persist_changes": persist_changes})
-            or {
-                "opening_statement": "欢迎使用",
-                "opening_questions": ["q1", "q2"],
-            }
-        )
-
-        result = service.get_agent_card(app_id)
-
-        assert capture["persist_changes"] is False
-        assert result["skills"][0]["description"] == "公开说明"
-        assert result["skills"][0]["examples"] == ["q1", "q2"]
-
     def test_send_message_should_return_multimodal_parts_and_artifacts(self, monkeypatch):
         app_id = uuid4()
         service = _build_service()
@@ -303,7 +273,7 @@ class TestPublicAgentA2AService:
         monkeypatch.setattr(
             service,
             "_invoke_public_agent",
-            lambda _app, query, flask_app=None, runtime_context=None: SimpleNamespace(
+            lambda _app, query, flask_app=None: SimpleNamespace(
                 answer=f"已处理: {query}",
                 status="success",
                 error="",

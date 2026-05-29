@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { type Form, type ValidatedError } from '@arco-design/web-vue'
 import { useCreateSegment, useGetSegment, useUpdateSegment } from '@/hooks/use-dataset'
 import type { CreateSegmentRequest, UpdateSegmentRequest } from '@/models/dataset'
@@ -16,6 +17,7 @@ const emits = defineEmits(['update:visible'])
 const { loading: createSegmentLoading, handleCreateSegment } = useCreateSegment()
 const { loading: updateSegmentLoading, handleUpdateSegment } = useUpdateSegment()
 const { segment, loadSegment } = useGetSegment()
+const { t } = useI18n()
 const defaultForm: { content: string; keywords: string[] } = {
   content: '',
   keywords: [],
@@ -98,7 +100,7 @@ watch(
     <!-- 顶部标题 -->
     <div class="flex items-center justify-between">
       <div class="text-lg font-bold text-gray-700">
-        {{ isUpdateOperation ? '更新' : '添加' }}片段
+        {{ isUpdateOperation ? t('space.datasets.documents.segmentsModal.updateTitle') : t('space.datasets.documents.segmentsModal.createTitle') }}
       </div>
       <a-button type="text" class="!text-gray-700" size="small" @click="hideModal">
         <template #icon>
@@ -111,35 +113,35 @@ watch(
       <a-form ref="formRef" :model="form" layout="vertical" @submit="saveSegment">
         <a-form-item
           field="content"
-          label="片段内容"
+          :label="t('space.datasets.documents.segmentsModal.contentLabel')"
           asterisk-position="end"
-          :rules="[{ required: true, message: '片段内容不能为空' }]"
+          :rules="[{ required: true, message: t('space.datasets.documents.segmentsModal.contentRequired') }]"
         >
           <a-textarea
             v-model:model-value="form.content"
             :auto-size="{ minRows: 8, maxRows: 8 }"
-            placeholder="在这里添加文档片段内容"
+            :placeholder="t('space.datasets.documents.segmentsModal.contentPlaceholder')"
           />
         </a-form-item>
-        <a-form-item field="keywords" label="关键词">
+        <a-form-item field="keywords" :label="t('space.datasets.documents.segmentsModal.keywordsLabel')">
           <a-input-tag
             v-model:model-value="form.keywords"
             :max-tag-count="10"
-            placeholder="请输入该文档片段关键词，最多不超过10个，按Enter输入"
+            :placeholder="t('space.datasets.documents.segmentsModal.keywordsPlaceholder')"
           />
         </a-form-item>
         <!-- 底部按钮 -->
         <div class="flex items-center justify-between">
           <div class=""></div>
           <a-space :size="16">
-            <a-button class="rounded-lg" @click="hideModal">取消</a-button>
+            <a-button class="rounded-lg" @click="hideModal">{{ t('space.datasets.documents.segmentsModal.cancel') }}</a-button>
             <a-button
               :loading="updateSegmentLoading || createSegmentLoading"
               type="primary"
               html-type="submit"
               class="rounded-lg"
             >
-              保存
+              {{ t('space.datasets.documents.segmentsModal.save') }}
             </a-button>
           </a-space>
         </div>

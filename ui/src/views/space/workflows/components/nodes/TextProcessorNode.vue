@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Handle, type NodeProps, Position } from '@vue-flow/core'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<NodeProps>()
 
-const MODE_LABEL_MAP: Record<string, string> = {
-  trim: '去首尾空格',
-  lower: '转小写',
-  upper: '转大写',
-  title: '标题格式',
-}
+const { t } = useI18n()
+const MODE_LABEL_MAP = computed<Record<string, string>>(() => ({
+  trim: t('workflowEditor.modeOptions.trim'),
+  lower: t('workflowEditor.modeOptions.lower'),
+  upper: t('workflowEditor.modeOptions.upper'),
+  title: t('workflowEditor.modeOptions.title'),
+}))
 </script>
 
 <template>
@@ -28,17 +31,17 @@ const MODE_LABEL_MAP: Record<string, string> = {
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">处理模式</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.mode') }}</div>
       </div>
       <div class="text-xs text-gray-700 break-words w-full">
-        {{ MODE_LABEL_MAP[String(props.data?.mode ?? 'trim')] ?? '去首尾空格' }}
+        {{ MODE_LABEL_MAP[String(props.data?.mode ?? 'trim')] ?? MODE_LABEL_MAP.trim }}
       </div>
     </div>
 
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">输入文本</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.inputText') }}</div>
       </div>
       <div class="w-full flex flex-col gap-2 min-w-0">
         <div
@@ -57,7 +60,7 @@ const MODE_LABEL_MAP: Record<string, string> = {
               v-if="input.value.type == 'ref'"
               class="bg-white text-gray-500 border px-2 py-1 rounded break-words"
             >
-              引用 / {{ input.value.content.ref_var_name }}
+              {{ t('workflowEditor.referencePrefix') }} {{ input.value.content.ref_var_name }}
             </div>
             <div v-else class="text-gray-500 px-2 py-1 bg-white rounded break-words">
               {{ input.value.content || '-' }}
@@ -70,7 +73,7 @@ const MODE_LABEL_MAP: Record<string, string> = {
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">输出数据</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.outputData') }}</div>
       </div>
       <div class="flex flex-wrap gap-2 w-full min-w-0">
         <div

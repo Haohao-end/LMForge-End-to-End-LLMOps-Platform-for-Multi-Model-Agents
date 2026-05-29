@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import { useAccountStore } from '@/stores/account'
 import {
   useGetAccountLoginHistory,
@@ -23,8 +24,9 @@ import { copyTextToClipboard } from '@/utils/clipboard'
 import { type AccountLoginHistoryItem, type AccountSessionItem } from '@/models/account'
 import { getErrorMessage } from '@/utils/error'
 import { buildSessionMetaItems } from '@/views/layouts/components/setting-session-display'
+import { DEFAULT_LOCALE, type AppLocale, isSupportedLocale, setAppLocale } from '@/i18n'
 
-type SettingsTabKey = 'profile' | 'security' | 'bindings' | 'devices'
+type SettingsTabKey = 'profile' | 'security' | 'bindings' | 'devices' | 'language'
 
 const DEFAULT_AVATAR = DEFAULT_AVATAR_URL
 const OAUTH_ACTION_STORAGE_KEY = 'account_oauth_action'
@@ -32,13 +34,6 @@ const providerLabels: Record<string, string> = {
   github: 'GitHub',
   google: 'Google',
 }
-const historyStatusOptions = [
-  { label: '全部状态', value: 'all' },
-  { label: '有效', value: 'active' },
-  { label: '已下线', value: 'revoked' },
-  { label: '已过期', value: 'expired' },
-  { label: '旧凭证', value: 'legacy' },
-]
 
 const props = withDefaults(
   defineProps<{
@@ -54,10 +49,14 @@ const emits = defineEmits<{
   (event: 'update:visible', value: boolean): void
 }>()
 
+const { t, locale } = useI18n()
 const accountStore = useAccountStore()
 const { current_user, loadCurrentUser } = useGetCurrentUser()
-const { loading: loginHistoryLoading, history_state, loadAccountLoginHistory } =
-  useGetAccountLoginHistory()
+const {
+  loading: loginHistoryLoading,
+  history_state,
+  loadAccountLoginHistory,
+} = useGetAccountLoginHistory()
 const { loading: sessionsLoading, session_state, loadAccountSessions } = useGetAccountSessions()
 const { handleUpdateAvatar } = useUpdateAvatar()
 const { handleUpdateName } = useUpdateName()
@@ -88,7 +87,9 @@ const historyFilters = ref({
 })
 
 const normalizeTab = (tab?: string): SettingsTabKey => {
-  if (tab === 'security' || tab === 'bindings' || tab === 'devices') return tab
+  if (tab === 'security' || tab === 'bindings' || tab === 'devices' || tab === 'language') {
+    return tab
+  }
   return 'profile'
 }
 
@@ -98,7 +99,7 @@ const createAccountForm = () => {
   const avatar = resolveAvatar(accountStore.account.avatar)
 
   return {
-    fileList: [{ uid: '1', name: '账号头像', url: avatar }],
+    fileList: [{ uid: '1', name: 'avatar', url: avatar }],
     name: accountStore.account.name,
     avatar,
     email: accountStore.account.email,
@@ -121,9 +122,36 @@ const accountForm = ref(createAccountForm())
 const securityForm = ref(createSecurityForm())
 const emailForm = ref(createEmailForm())
 
+const historyStatusOptions = computed(() => [
+  { label: t('settings.history.statusAll'), value: 'all' },
+  { label: t('common.status.active'), value: 'active' },
+  { label: t('common.status.revoked'), value: 'revoked' },
+  { label: t('common.status.expired'), value: 'expired' },
+  { label: t('common.status.legacy'), value: 'legacy' },
+])
+
+const currentLocale = computed<AppLocale>(() => {
+  return isSupportedLocale(locale.value) ? locale.value : DEFAULT_LOCALE
+})
+
+const languageOptions = computed(() => [
+  {
+    value: 'zh-CN' as AppLocale,
+    label: t('settings.language.options.zhCN'),
+    code: 'zh-CN',
+    isDefault: true,
+  },
+  {
+    value: 'en-US' as AppLocale,
+    label: t('settings.language.options.enUS'),
+    code: 'en-US',
+    isDefault: false,
+  },
+])
+
 const oauthBindings = computed(() => accountStore.account.oauth_bindings ?? [])
-const boundProviderCount = computed(() =>
-  oauthBindings.value.filter((item: { bound: boolean }) => item.bound).length,
+const boundProviderCount = computed(
+  () => oauthBindings.value.filter((item: { bound: boolean }) => item.bound).length,
 )
 const needsPasswordSetup = computed(() => !accountStore.account.password_set)
 const canUnbindWithoutLockout = computed(
@@ -146,12 +174,14 @@ const latestUnusualLogin = computed<AccountLoginHistoryItem | null>(() => {
   return latestItem?.unusual_ip ? latestItem : null
 })
 const emailCodeButtonText = computed(() =>
-  emailCodeCountdown.value > 0 ? `${emailCodeCountdown.value}秒后重发` : '发送验证码',
+  emailCodeCountdown.value > 0
+    ? t('common.actions.resendInSeconds', { count: emailCodeCountdown.value })
+    : t('common.actions.sendCode'),
 )
 
 const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
-const formatIpLocation = (ip?: string, location?: string, emptyText: string = '未知 IP') => {
+const formatIpLocation = (ip?: string, location?: string, emptyText?: string) => {
   const normalizedIp = (ip || '').trim()
   const normalizedLocation = (location || '').trim()
 
@@ -164,7 +194,7 @@ const formatIpLocation = (ip?: string, location?: string, emptyText: string = '�
   if (normalizedLocation) {
     return normalizedLocation
   }
-  return emptyText
+  return emptyText ?? t('common.status.unknownIp')
 }
 
 const clearEmailCodeCountdown = () => {
@@ -204,7 +234,7 @@ const loadDeviceSecurityData = async () => {
     ])
     devicePanelError.value = ''
   } catch (error: unknown) {
-    devicePanelError.value = getErrorMessage(error, '登录设备数据加载失败，请刷新后重试')
+    devicePanelError.value = getErrorMessage(error, t('settings.messages.deviceLoadError'))
   }
 }
 
@@ -228,7 +258,7 @@ const handleCancel = () => emits('update:visible', false)
 
 const handleCopyAccountId = async () => {
   await copyTextToClipboard(accountStore.account.id)
-  Message.success('账号 ID 已复制')
+  Message.success(t('settings.messages.copyAccountIdSuccess'))
 }
 
 const handleAvatarCustomRequest = (option: any) => {
@@ -272,17 +302,17 @@ const handleCancelUpdateEmail = () => {
 const handleSendEmailCode = async () => {
   const email = emailForm.value.email.trim()
   if (!email) {
-    Message.error('请输入新邮箱地址')
+    Message.error(t('settings.messages.enterNewEmail'))
     return
   }
 
   if (!validateEmail(email)) {
-    Message.error('请输入有效的邮箱地址')
+    Message.error(t('settings.messages.invalidEmail'))
     return
   }
 
   if (email === accountStore.account.email) {
-    Message.error('新邮箱不能与当前邮箱相同')
+    Message.error(t('settings.messages.newEmailSameAsCurrent'))
     return
   }
 
@@ -295,22 +325,22 @@ const handleSaveEmail = async () => {
   const code = emailForm.value.code.trim()
   const currentPassword = emailForm.value.current_password.trim()
   if (!email) {
-    Message.error('请输入新邮箱地址')
+    Message.error(t('settings.messages.enterNewEmail'))
     return
   }
 
   if (!validateEmail(email)) {
-    Message.error('请输入有效的邮箱地址')
+    Message.error(t('settings.messages.invalidEmail'))
     return
   }
 
   if (!code) {
-    Message.error('请输入验证码')
+    Message.error(t('settings.messages.enterCode'))
     return
   }
 
   if (!needsPasswordSetup.value && !currentPassword) {
-    Message.error('请输入当前密码以确认换绑邮箱')
+    Message.error(t('settings.messages.enterCurrentPasswordForEmailChange'))
     return
   }
 
@@ -324,18 +354,18 @@ const handleSaveEmail = async () => {
 const handleSavePassword = async () => {
   const { current_password, new_password, confirm_password } = securityForm.value
   if (!new_password) {
-    Message.error('请输入新密码')
+    Message.error(t('settings.messages.enterNewPassword'))
     return
   }
 
   if (new_password !== confirm_password) {
-    Message.error('两次输入的新密码不一致')
+    Message.error(t('settings.messages.passwordMismatch'))
     return
   }
 
   const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,16}$/
   if (!passwordRegex.test(new_password)) {
-    Message.error('密码最少包含一个字母、一个数字，并且长度在8到16位')
+    Message.error(t('settings.messages.passwordRuleInvalid'))
     return
   }
 
@@ -360,11 +390,7 @@ const handleBindProvider = async (providerName: string) => {
 
 const handleUnbindProvider = async (providerName: string) => {
   const providerLabel = providerLabels[providerName] || providerName
-  if (
-    !window.confirm(
-      `确认解绑 ${providerLabel} 吗？解绑后将无法继续使用该方式登录当前账号。`,
-    )
-  ) {
+  if (!window.confirm(t('settings.messages.confirmUnbind', { provider: providerLabel }))) {
     return
   }
 
@@ -381,12 +407,13 @@ const handleRefreshSessions = async () => {
   await loadDeviceSecurityData()
 }
 
+const handleLocaleChange = (nextLocale: AppLocale) => {
+  setAppLocale(nextLocale)
+}
+
 const handleRevokeSessionItem = async (session: AccountSessionItem) => {
-  if (
-    !window.confirm(
-      `确认下线 ${session.device_name || '该设备'} 吗？下线后该设备需要重新登录。`,
-    )
-  ) {
+  const deviceName = session.device_name || t('common.status.unknownDevice')
+  if (!window.confirm(t('settings.messages.confirmRevokeSession', { device: deviceName }))) {
     return
   }
 
@@ -401,16 +428,16 @@ const handleRevokeSessionItem = async (session: AccountSessionItem) => {
 
 const handleRevokeOthers = async () => {
   if (!sessionCapable.value) {
-    Message.warning('当前登录凭证较旧，请重新登录后再管理其他设备')
+    Message.warning(t('settings.devices.currentCredentialLegacy'))
     return
   }
 
   if (!otherSessions.value.length) {
-    Message.info('当前没有其他在线设备')
+    Message.info(t('settings.devices.noOtherSessions'))
     return
   }
 
-  if (!window.confirm('确认下线除当前设备外的其他所有登录设备吗？')) {
+  if (!window.confirm(t('settings.messages.confirmRevokeOthers'))) {
     return
   }
 
@@ -419,10 +446,10 @@ const handleRevokeOthers = async () => {
 }
 
 const getLoginHistoryStatusText = (status: AccountLoginHistoryItem['status']) => {
-  if (status === 'revoked') return '已下线'
-  if (status === 'expired') return '已过期'
-  if (status === 'legacy') return '旧凭证'
-  return '有效'
+  if (status === 'revoked') return t('common.status.revoked')
+  if (status === 'expired') return t('common.status.expired')
+  if (status === 'legacy') return t('common.status.legacy')
+  return t('common.status.active')
 }
 
 const getLoginHistoryStatusColor = (status: AccountLoginHistoryItem['status']) => {
@@ -477,13 +504,10 @@ watch(
   },
 )
 
-watch(
-  selectedTab,
-  async (newValue) => {
-    if (!props.visible || newValue !== 'devices') return
-    await loadDeviceSecurityData()
-  },
-)
+watch(selectedTab, async (newValue) => {
+  if (!props.visible || newValue !== 'devices') return
+  await loadDeviceSecurityData()
+})
 
 onBeforeUnmount(() => {
   clearEmailCodeCountdown()
@@ -512,7 +536,7 @@ onBeforeUnmount(() => {
 
     <div class="flex h-[680px] max-h-[calc(100vh-160px)] overflow-hidden">
       <div class="w-[220px] h-full flex-shrink-0 border-r border-gray-100 pr-5">
-        <div class="text-xl font-bold text-gray-900 mb-5">设置中心</div>
+        <div class="text-xl font-bold text-gray-900 mb-5">{{ $t('settings.title') }}</div>
         <div class="flex flex-col gap-2">
           <button
             type="button"
@@ -524,7 +548,7 @@ onBeforeUnmount(() => {
             ]"
             @click="selectedTab = 'profile'"
           >
-            基本资料
+            {{ $t('settings.tabs.profile') }}
           </button>
           <button
             type="button"
@@ -536,7 +560,7 @@ onBeforeUnmount(() => {
             ]"
             @click="selectedTab = 'security'"
           >
-            安全中心
+            {{ $t('settings.tabs.security') }}
           </button>
           <button
             type="button"
@@ -548,7 +572,7 @@ onBeforeUnmount(() => {
             ]"
             @click="selectedTab = 'bindings'"
           >
-            账号绑定
+            {{ $t('settings.tabs.bindings') }}
           </button>
           <button
             type="button"
@@ -560,21 +584,33 @@ onBeforeUnmount(() => {
             ]"
             @click="selectedTab = 'devices'"
           >
-            登录设备
+            {{ $t('settings.tabs.devices') }}
+          </button>
+          <button
+            type="button"
+            :class="[
+              'text-left rounded-lg px-4 h-10 transition-colors',
+              selectedTab === 'language'
+                ? 'bg-blue-50 text-blue-700'
+                : 'text-gray-700 hover:bg-gray-100',
+            ]"
+            @click="selectedTab = 'language'"
+          >
+            {{ $t('settings.tabs.language') }}
           </button>
         </div>
       </div>
 
       <div class="settings-modal-content flex-1 h-full overflow-y-auto px-8">
         <template v-if="selectedTab === 'profile'">
-          <div class="text-xl font-bold text-gray-900 mb-2">基本资料</div>
-          <div class="text-sm text-gray-500 mb-6">维护你的公开信息、基础账号资料和绑定邮箱。</div>
+          <div class="text-xl font-bold text-gray-900 mb-2">{{ $t('settings.profile.title') }}</div>
+          <div class="text-sm text-gray-500 mb-6">{{ $t('settings.profile.description') }}</div>
 
           <a-form :model="{}" layout="vertical">
             <a-form-item field="avatar">
               <template #label>
                 <div class="flex items-center gap-1">
-                  账号头像
+                  {{ $t('settings.profile.avatar') }}
                   <div class="text-red-700">*</div>
                 </div>
               </template>
@@ -590,14 +626,14 @@ onBeforeUnmount(() => {
             <a-form-item field="name">
               <template #label>
                 <div class="flex items-center gap-1">
-                  账号昵称
+                  {{ $t('settings.profile.name') }}
                   <div class="text-red-700">*</div>
                 </div>
               </template>
               <div v-if="updateName" class="flex items-center gap-2 w-full">
                 <a-input
                   v-model="accountForm.name"
-                  placeholder="请输入账号名称"
+                  :placeholder="t('settings.profile.updateNamePlaceholder')"
                   :max-length="30"
                 />
                 <div class="flex items-center gap-1">
@@ -610,10 +646,10 @@ onBeforeUnmount(() => {
                       }
                     "
                   >
-                    取消
+                    {{ $t('common.actions.cancel') }}
                   </a-button>
                   <a-button type="primary" class="rounded-lg" @click="handleSaveName">
-                    保存
+                    {{ $t('common.actions.save') }}
                   </a-button>
                 </div>
               </div>
@@ -627,26 +663,32 @@ onBeforeUnmount(() => {
               </div>
             </a-form-item>
 
-            <a-form-item field="email" label="绑定邮箱">
+            <a-form-item field="email" :label="t('settings.profile.email')">
               <div class="w-full flex flex-col gap-3">
                 <div v-if="!updateEmailMode" class="flex items-center gap-2">
                   <a-input readonly v-model="accountForm.email" />
                   <a-button class="rounded-lg flex-shrink-0" @click="handleStartUpdateEmail">
-                    换绑邮箱
+                    {{ $t('settings.profile.changeEmail') }}
                   </a-button>
                 </div>
                 <div
                   v-else
                   class="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-4 flex flex-col gap-3"
                 >
-                  <a-input v-model="emailForm.email" placeholder="请输入新邮箱地址" />
+                  <a-input
+                    v-model="emailForm.email"
+                    :placeholder="t('settings.profile.newEmailPlaceholder')"
+                  />
                   <a-input-password
                     v-if="!needsPasswordSetup"
                     v-model="emailForm.current_password"
-                    placeholder="请输入当前密码完成二次确认"
+                    :placeholder="t('settings.profile.currentPasswordPlaceholder')"
                   />
                   <div class="flex items-center gap-2">
-                    <a-input v-model="emailForm.code" placeholder="请输入6位验证码" />
+                    <a-input
+                      v-model="emailForm.code"
+                      :placeholder="t('settings.profile.codePlaceholder')"
+                    />
                     <a-button
                       class="rounded-lg flex-shrink-0"
                       :loading="sendEmailCodeLoading"
@@ -658,7 +700,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="flex items-center gap-2">
                     <a-button class="rounded-lg" @click="handleCancelUpdateEmail">
-                      取消
+                      {{ $t('common.actions.cancel') }}
                     </a-button>
                     <a-button
                       type="primary"
@@ -666,14 +708,14 @@ onBeforeUnmount(() => {
                       :loading="updateEmailLoading"
                       @click="handleSaveEmail"
                     >
-                      确认换绑
+                      {{ $t('settings.profile.confirmChangeEmail') }}
                     </a-button>
                   </div>
                   <div class="text-xs text-gray-500">
                     {{
                       needsPasswordSetup
-                        ? '验证码会发送到新邮箱，验证通过后会立即替换当前绑定邮箱。'
-                        : '验证码会发送到新邮箱；提交时还需要输入当前密码完成二次确认。'
+                        ? $t('settings.profile.emailHintWithoutPassword')
+                        : $t('settings.profile.emailHintWithPassword')
                     }}
                   </div>
                 </div>
@@ -683,10 +725,15 @@ onBeforeUnmount(() => {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
             <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
-              <div class="text-sm text-gray-500 mb-1">账号 ID</div>
+              <div class="text-sm text-gray-500 mb-1">{{ $t('settings.profile.accountId') }}</div>
               <div class="flex items-center gap-2">
                 <div class="text-sm text-gray-900 break-all">{{ accountStore.account.id }}</div>
-                <a-button type="text" size="mini" class="!text-gray-700" @click="handleCopyAccountId">
+                <a-button
+                  type="text"
+                  size="mini"
+                  class="!text-gray-700"
+                  @click="handleCopyAccountId"
+                >
                   <template #icon>
                     <icon-copy />
                   </template>
@@ -695,27 +742,35 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
-              <div class="text-sm text-gray-500 mb-1">注册时间</div>
+              <div class="text-sm text-gray-500 mb-1">
+                {{ $t('settings.profile.registeredAt') }}
+              </div>
               <div class="text-sm text-gray-900">
-                {{ formatTimestampLong(accountStore.account.created_at) || '暂无记录' }}
+                {{
+                  formatTimestampLong(accountStore.account.created_at) ||
+                  $t('common.status.noRecord')
+                }}
               </div>
             </div>
 
             <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
-              <div class="text-sm text-gray-500 mb-1">最近登录时间</div>
+              <div class="text-sm text-gray-500 mb-1">{{ $t('settings.profile.lastLoginAt') }}</div>
               <div class="text-sm text-gray-900">
-                {{ formatTimestampLong(accountStore.account.last_login_at) || '暂无记录' }}
+                {{
+                  formatTimestampLong(accountStore.account.last_login_at) ||
+                  $t('common.status.noRecord')
+                }}
               </div>
             </div>
 
             <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
-              <div class="text-sm text-gray-500 mb-1">最近登录 IP</div>
+              <div class="text-sm text-gray-500 mb-1">{{ $t('settings.profile.lastLoginIp') }}</div>
               <div class="text-sm text-gray-900">
                 {{
                   formatIpLocation(
                     accountStore.account.last_login_ip,
                     accountStore.account.last_login_location,
-                    '暂无记录',
+                    t('common.status.noRecord'),
                   )
                 }}
               </div>
@@ -724,51 +779,87 @@ onBeforeUnmount(() => {
         </template>
 
         <template v-else-if="selectedTab === 'security'">
-          <div class="text-xl font-bold text-gray-900 mb-2">安全中心</div>
-          <div class="text-sm text-gray-500 mb-6">设置登录密码，并查看当前账号的安全状态。</div>
+          <div class="text-xl font-bold text-gray-900 mb-2">
+            {{ $t('settings.security.title') }}
+          </div>
+          <div class="text-sm text-gray-500 mb-6">{{ $t('settings.security.description') }}</div>
 
           <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 mb-5">
-            <div class="text-sm text-gray-500 mb-1">密码状态</div>
+            <div class="text-sm text-gray-500 mb-1">
+              {{ $t('settings.security.passwordStatus') }}
+            </div>
             <div class="text-sm text-gray-900">
-              {{ needsPasswordSetup ? '未设置密码' : '已设置密码' }}
+              {{
+                needsPasswordSetup
+                  ? $t('settings.security.passwordUnset')
+                  : $t('settings.security.passwordSet')
+              }}
             </div>
             <div class="text-xs text-gray-500 mt-2">
-              {{ needsPasswordSetup ? '建议补充登录密码，避免只依赖第三方登录。' : '修改密码后，下次登录将使用新密码。' }}
+              {{
+                needsPasswordSetup
+                  ? $t('settings.security.passwordAdviceWithout')
+                  : $t('settings.security.passwordAdviceWith')
+              }}
             </div>
           </div>
 
           <a-form :model="securityForm" layout="vertical">
-            <a-form-item v-if="!needsPasswordSetup" field="current_password" label="当前密码">
+            <a-form-item
+              v-if="!needsPasswordSetup"
+              field="current_password"
+              :label="t('settings.security.currentPassword')"
+            >
               <a-input-password
                 v-model="securityForm.current_password"
-                placeholder="请输入当前密码"
+                :placeholder="t('settings.security.currentPasswordPlaceholder')"
               />
             </a-form-item>
-            <a-form-item field="new_password" :label="needsPasswordSetup ? '设置登录密码' : '新密码'">
+            <a-form-item
+              field="new_password"
+              :label="
+                needsPasswordSetup
+                  ? t('settings.security.setPassword')
+                  : t('settings.security.newPassword')
+              "
+            >
               <a-input-password
                 v-model="securityForm.new_password"
-                placeholder="至少包含一个字母和一个数字，长度 8 到 16 位"
+                :placeholder="t('settings.security.newPasswordPlaceholder')"
               />
             </a-form-item>
-            <a-form-item field="confirm_password" label="确认新密码">
+            <a-form-item
+              field="confirm_password"
+              :label="t('settings.security.confirmNewPassword')"
+            >
               <a-input-password
                 v-model="securityForm.confirm_password"
-                placeholder="请再次输入新密码"
+                :placeholder="t('settings.security.confirmNewPasswordPlaceholder')"
               />
             </a-form-item>
           </a-form>
 
-          <div class="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 mt-6">
-            <div class="text-sm text-amber-900">忘记密码时，可在登录页使用邮箱验证码完成重置。</div>
+          <div
+            class="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 mt-6"
+          >
+            <div class="text-sm text-amber-900">
+              {{ $t('settings.security.forgotPasswordHint') }}
+            </div>
             <a-button type="primary" class="rounded-lg" @click="handleSavePassword">
-              {{ needsPasswordSetup ? '设置密码' : '更新密码' }}
+              {{
+                needsPasswordSetup
+                  ? $t('settings.security.submitSetPassword')
+                  : $t('settings.security.submitUpdatePassword')
+              }}
             </a-button>
           </div>
         </template>
 
         <template v-else-if="selectedTab === 'bindings'">
-          <div class="text-xl font-bold text-gray-900 mb-2">账号绑定</div>
-          <div class="text-sm text-gray-500 mb-6">管理第三方登录方式，并避免账号被单一路径锁死。</div>
+          <div class="text-xl font-bold text-gray-900 mb-2">
+            {{ $t('settings.bindings.title') }}
+          </div>
+          <div class="text-sm text-gray-500 mb-6">{{ $t('settings.bindings.description') }}</div>
 
           <div class="flex flex-col gap-4">
             <div
@@ -784,21 +875,28 @@ onBeforeUnmount(() => {
                   <div class="text-sm text-gray-500 mt-1">
                     {{
                       binding.bound
-                        ? `已绑定，绑定时间 ${formatTimestampLong(binding.bound_at) || '未知'}`
-                        : '未绑定，可用于快捷登录当前账号'
+                        ? $t('settings.bindings.boundAt', {
+                            time:
+                              formatTimestampLong(binding.bound_at) || $t('common.status.unknown'),
+                          })
+                        : $t('settings.bindings.unboundHint')
                     }}
                   </div>
                   <div
                     v-if="binding.bound && !canUnbindWithoutLockout"
                     class="text-xs text-amber-600 mt-2"
                   >
-                    当前账号没有可用密码，也没有其他已绑定方式。请先设置密码或绑定另一种方式，再解绑。
+                    {{ $t('settings.bindings.lockoutWarning') }}
                   </div>
                 </div>
 
                 <div class="flex items-center gap-2">
                   <a-tag :color="binding.bound ? 'green' : 'gray'">
-                    {{ binding.bound ? '已绑定' : '未绑定' }}
+                    {{
+                      binding.bound
+                        ? $t('settings.bindings.bound')
+                        : $t('settings.bindings.unbound')
+                    }}
                   </a-tag>
                   <a-button
                     v-if="!binding.bound"
@@ -807,7 +905,7 @@ onBeforeUnmount(() => {
                     :loading="bindingLoadingProvider === binding.provider"
                     @click="handleBindProvider(binding.provider)"
                   >
-                    去绑定
+                    {{ $t('settings.bindings.goBind') }}
                   </a-button>
                   <a-button
                     v-else
@@ -817,7 +915,7 @@ onBeforeUnmount(() => {
                     :disabled="!canUnbindWithoutLockout"
                     @click="handleUnbindProvider(binding.provider)"
                   >
-                    解绑
+                    {{ $t('settings.bindings.unbind') }}
                   </a-button>
                 </div>
               </div>
@@ -825,15 +923,60 @@ onBeforeUnmount(() => {
           </div>
         </template>
 
+        <template v-else-if="selectedTab === 'language'">
+          <div class="text-xl font-bold text-gray-900 mb-2">
+            {{ $t('settings.language.title') }}
+          </div>
+          <div class="text-sm text-gray-500 mb-6">
+            {{ $t('settings.language.description') }}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              v-for="option in languageOptions"
+              :key="option.value"
+              type="button"
+              class="rounded-xl border px-4 py-4 text-left transition-colors"
+              :class="
+                currentLocale === option.value
+                  ? 'border-blue-200 bg-blue-50 text-blue-900'
+                  : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:bg-gray-50'
+              "
+              @click="handleLocaleChange(option.value)"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-start gap-3">
+                  <icon-language class="text-base" />
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                      <div class="text-base font-semibold">{{ option.label }}</div>
+                      <a-tag v-if="option.isDefault" size="small" color="arcoblue">
+                        {{ $t('settings.language.defaultTag') }}
+                      </a-tag>
+                    </div>
+                    <div class="text-xs text-gray-500">{{ option.code }}</div>
+                  </div>
+                </div>
+              </div>
+            </button>
+          </div>
+        </template>
+
         <template v-else>
           <div class="flex items-start justify-between gap-4 mb-6">
             <div>
-              <div class="text-xl font-bold text-gray-900 mb-2">登录设备</div>
-              <div class="text-sm text-gray-500">查看在线设备、最近登录历史，以及新 IP 登录风险提醒。</div>
+              <div class="text-xl font-bold text-gray-900 mb-2">
+                {{ $t('settings.devices.title') }}
+              </div>
+              <div class="text-sm text-gray-500">{{ $t('settings.devices.description') }}</div>
             </div>
             <div class="flex items-center gap-2">
-              <a-button class="rounded-lg" :loading="devicePanelLoading" @click="handleRefreshSessions">
-                刷新
+              <a-button
+                class="rounded-lg"
+                :loading="devicePanelLoading"
+                @click="handleRefreshSessions"
+              >
+                {{ $t('common.actions.refresh') }}
               </a-button>
               <a-button
                 type="primary"
@@ -843,7 +986,7 @@ onBeforeUnmount(() => {
                 :disabled="!sessionCapable || otherSessions.length === 0"
                 @click="handleRevokeOthers"
               >
-                下线其他设备
+                {{ $t('settings.devices.revokeOthers') }}
               </a-button>
             </div>
           </div>
@@ -852,14 +995,14 @@ onBeforeUnmount(() => {
             v-if="!sessionCapable"
             class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-5"
           >
-            当前登录凭证较旧，请重新登录后再使用“下线其他设备”能力；你仍然可以查看现有会话并逐个下线。
+            {{ $t('settings.devices.legacySessionCapableWarning') }}
           </div>
 
           <div
             v-if="currentLegacySession"
             class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900 mb-5"
           >
-            当前设备仍在使用旧版登录凭证，系统暂时无法准确展示首次登录时间和会话到期时间；重新登录后可查看完整会话信息。
+            {{ $t('settings.devices.currentLegacyWarning') }}
           </div>
 
           <div
@@ -873,24 +1016,24 @@ onBeforeUnmount(() => {
             v-if="latestUnusualLogin"
             class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-900 mb-5"
           >
-            检测到最近一次登录来自新 IP
-            <span class="font-medium">
-              {{ formatIpLocation(latestUnusualLogin.ip, latestUnusualLogin.location) }}
-            </span>
-            ，时间
-            <span class="font-medium">
-              {{ formatTimestampLong(latestUnusualLogin.created_at) || '未知' }}
-            </span>
-            。如果不是你本人操作，请立即修改密码并下线其他设备；系统也会向绑定邮箱发送提醒。
+            {{
+              $t('settings.devices.latestUnusualLoginAlert', {
+                ip: formatIpLocation(latestUnusualLogin.ip, latestUnusualLogin.location),
+                time:
+                  formatTimestampLong(latestUnusualLogin.created_at) || $t('common.status.unknown'),
+              })
+            }}
           </div>
 
-          <div class="text-base font-semibold text-gray-900 mb-3">在线设备</div>
+          <div class="text-base font-semibold text-gray-900 mb-3">
+            {{ $t('settings.devices.onlineDevices') }}
+          </div>
 
           <div
             v-if="!accountSessions.length"
             class="rounded-xl border border-dashed border-gray-200 px-6 py-10 text-center text-sm text-gray-500"
           >
-            {{ devicePanelError ? '登录设备数据加载失败，请刷新后重试' : '暂无可管理的登录设备' }}
+            {{ devicePanelError || $t('settings.devices.noManageableDevices') }}
           </div>
 
           <div v-else class="flex flex-col gap-4">
@@ -903,18 +1046,24 @@ onBeforeUnmount(() => {
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <div class="text-base font-semibold text-gray-900">
-                      {{ session.device_name || '未知设备' }}
+                      {{ session.device_name || $t('common.status.unknownDevice') }}
                     </div>
                     <a-tag :color="session.current ? 'arcoblue' : 'gray'">
-                      {{ session.current ? '当前设备' : '在线会话' }}
+                      {{
+                        session.current
+                          ? $t('settings.devices.currentDeviceTag')
+                          : $t('settings.devices.onlineSessionTag')
+                      }}
                     </a-tag>
-                    <a-tag v-if="session.legacy" color="arcoblue">旧凭证</a-tag>
+                    <a-tag v-if="session.legacy" color="arcoblue">{{
+                      $t('common.status.legacy')
+                    }}</a-tag>
                   </div>
                   <div class="text-sm text-gray-500 mt-1">
                     {{ formatIpLocation(session.ip, session.location) }}
                   </div>
                   <div class="text-xs text-gray-500 mt-2 break-all">
-                    {{ session.user_agent || 'unknown' }}
+                    {{ session.user_agent || $t('common.status.unknown') }}
                   </div>
                 </div>
 
@@ -925,13 +1074,13 @@ onBeforeUnmount(() => {
                   :loading="revokingSessionId === session.id"
                   @click="handleRevokeSessionItem(session)"
                 >
-                  下线
+                  {{ $t('settings.devices.revoke') }}
                 </a-button>
               </div>
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
                 <div
-                  v-for="meta in buildSessionMetaItems(session)"
+                  v-for="meta in buildSessionMetaItems(session, t)"
                   :key="meta.label"
                   class="rounded-lg bg-gray-50 px-3 py-3"
                 >
@@ -942,13 +1091,15 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="text-base font-semibold text-gray-900 mt-8 mb-3">最近登录历史</div>
+          <div class="text-base font-semibold text-gray-900 mt-8 mb-3">
+            {{ $t('settings.devices.recentLoginHistory') }}
+          </div>
 
           <div class="flex flex-col md:flex-row gap-3 mb-4">
             <a-input-search
               v-model="historyFilters.search"
               allow-clear
-              placeholder="搜索 IP、地点、设备或浏览器"
+              :placeholder="t('settings.devices.searchPlaceholder')"
               class="md:max-w-[320px]"
               @search="handleHistorySearch"
             />
@@ -964,7 +1115,7 @@ onBeforeUnmount(() => {
             v-if="!loginHistory.length"
             class="rounded-xl border border-dashed border-gray-200 px-6 py-10 text-center text-sm text-gray-500"
           >
-            {{ devicePanelError ? '登录历史数据加载失败，请刷新后重试' : '暂无登录历史' }}
+            {{ devicePanelError || $t('settings.devices.noLoginHistory') }}
           </div>
 
           <div v-else class="flex flex-col gap-3">
@@ -977,27 +1128,46 @@ onBeforeUnmount(() => {
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <div class="text-base font-semibold text-gray-900">
-                      {{ history.device_name || '未知设备' }}
+                      {{ history.device_name || $t('common.status.unknownDevice') }}
                     </div>
-                    <a-tag v-if="history.current" color="arcoblue">当前设备</a-tag>
-                    <a-tag v-if="history.legacy" color="arcoblue">旧凭证</a-tag>
+                    <a-tag v-if="history.current" color="arcoblue">
+                      {{ $t('settings.devices.currentDeviceTag') }}
+                    </a-tag>
+                    <a-tag v-if="history.legacy" color="arcoblue">{{
+                      $t('common.status.legacy')
+                    }}</a-tag>
                     <a-tag :color="getLoginHistoryStatusColor(history.status)">
                       {{ getLoginHistoryStatusText(history.status) }}
                     </a-tag>
-                    <a-tag v-if="history.unusual_ip" color="red">新 IP</a-tag>
+                    <a-tag v-if="history.unusual_ip" color="red">
+                      {{ $t('settings.devices.newIpTag') }}
+                    </a-tag>
                   </div>
                   <div class="text-sm text-gray-500 mt-1">
                     {{ formatIpLocation(history.ip, history.location) }}
                   </div>
                   <div class="text-xs text-gray-500 mt-2 break-all">
-                    {{ history.user_agent || 'unknown' }}
+                    {{ history.user_agent || $t('common.status.unknown') }}
                   </div>
                 </div>
 
                 <div class="text-right text-xs text-gray-500 flex-shrink-0">
-                  <div>登录于 {{ formatTimestampLong(history.created_at) || '暂无记录' }}</div>
+                  <div>
+                    {{
+                      $t('settings.devices.loginAt', {
+                        time:
+                          formatTimestampLong(history.created_at) || $t('common.status.noRecord'),
+                      })
+                    }}
+                  </div>
                   <div class="mt-1">
-                    最近活跃 {{ formatTimestampLong(history.last_active_at) || '暂无记录' }}
+                    {{
+                      $t('settings.devices.lastActiveAt', {
+                        time:
+                          formatTimestampLong(history.last_active_at) ||
+                          $t('common.status.noRecord'),
+                      })
+                    }}
                   </div>
                 </div>
               </div>

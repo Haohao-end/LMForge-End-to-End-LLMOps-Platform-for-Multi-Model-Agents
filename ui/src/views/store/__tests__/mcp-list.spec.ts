@@ -197,7 +197,7 @@ describe('store mcp list', () => {
 
     expect(mocks.getPublicMcpCategories).toHaveBeenCalledTimes(1)
     expect(mocks.getPublicMcpProvidersWithPage).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('MCP广场')
+    expect(wrapper.text()).toContain('MCP 广场')
     expect(wrapper.text()).not.toContain('公开免费 MCP 目录')
     expect(wrapper.text()).not.toContain('general')
     expect(wrapper.text()).not.toContain('仅查看')

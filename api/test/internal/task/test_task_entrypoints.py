@@ -218,25 +218,3 @@ def test_app_task_prewarm_mcp_tool_snapshots_should_retry_on_pending_snapshot(mo
     assert len(retry_calls) == 1
     assert isinstance(retry_calls[0][0], RuntimeError)
     assert retry_calls[0][1] == 20
-
-
-def test_app_task_prewarm_mcp_tool_snapshots_should_not_retry_on_permanent_failure(monkeypatch):
-    retry_calls = []
-    service = SimpleNamespace(
-        refresh_mcp_tool_snapshots=lambda _app_id, _config_type: [
-            {"binding_identity": "binding-a", "status": "failed", "retryable": False, "last_error": "record not found"}
-        ],
-    )
-    injector = _RecordingInjector(service)
-
-    def _retry(*args, **kwargs):
-        retry_calls.append((args, kwargs))
-        raise AssertionError("retry should not be called for permanent failures")
-
-    monkeypatch.setattr("app.http.app.injector", injector)
-    monkeypatch.setattr(app_task.prewarm_mcp_tool_snapshots, "retry", _retry)
-
-    app_task.prewarm_mcp_tool_snapshots.run(str(uuid4()), "draft")
-
-    assert injector.requested_classes[-1].__name__ == "AppService"
-    assert retry_calls == []

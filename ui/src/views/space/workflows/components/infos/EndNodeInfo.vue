@@ -4,6 +4,7 @@ import { useVueFlow } from '@vue-flow/core'
 import { cloneDeep, debounce } from 'lodash'
 import { getReferencedVariables } from '@/utils/helper'
 import { type ValidatedError, Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 type NodeOutputField = {
   name: string
   type: string
@@ -45,6 +46,7 @@ const props = defineProps({
 })
 const emits = defineEmits(['update:visible', 'updateNode'])
 const { nodes, edges } = useVueFlow()
+const { t } = useI18n()
 const form = ref<EndNodeForm>({
   id: '',
   type: '',
@@ -62,11 +64,11 @@ const debounceAutoSave = debounce(() => {
   void onSubmit({ errors: undefined })
 }, 800)
 const variableTypes = [
-  { label: '引用', value: 'ref' },
-  { label: 'STRING', value: 'string' },
-  { label: 'INT', value: 'int' },
-  { label: 'FLOAT', value: 'float' },
-  { label: 'BOOLEAN', value: 'boolean' },
+  { label: t('workflowEditor.variableTypes.ref'), value: 'ref' },
+  { label: t('workflowEditor.variableTypes.string'), value: 'string' },
+  { label: t('workflowEditor.variableTypes.int'), value: 'int' },
+  { label: t('workflowEditor.variableTypes.float'), value: 'float' },
+  { label: t('workflowEditor.variableTypes.boolean'), value: 'boolean' },
 ]
 
 // 2.定义输出变量引用选项
@@ -77,7 +79,7 @@ const outputRefOptions = computed(() => {
 // 3.定义添加表单字段函数
 const addFormField = () => {
   form.value?.outputs.push({ name: '', type: 'string', content: '', ref: '' })
-  Message.success('新增输入字段成功')
+  Message.success(t('workflowEditor.addOutputSuccess'))
 }
 
 // 4.定义移除表单字段函数
@@ -191,7 +193,7 @@ onBeforeUnmount(() => {
     <div v-if="isReadonly" class="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
       <div class="flex items-center gap-2 text-orange-700">
         <icon-lock class="flex-shrink-0" />
-        <span class="text-sm font-medium">预览模式：所有配置仅供查看，无法修改</span>
+        <span class="text-sm font-medium">{{ t('workflowEditor.previewMode') }}</span>
       </div>
     </div>
 
@@ -205,7 +207,7 @@ onBeforeUnmount(() => {
         </a-avatar>
         <a-input
           v-model:model-value="form.title"
-          :disabled="isReadonly" placeholder="请输入标题"
+          :disabled="isReadonly" :placeholder="t('workflowEditor.titlePlaceholder')"
           class="!bg-white text-gray-700 font-semibold px-2"
         />
       </div>
@@ -226,7 +228,7 @@ onBeforeUnmount(() => {
       :auto-size="{ minRows: 3, maxRows: 5 }"
       v-model="form.description"
       :disabled="isReadonly" class="rounded-lg text-gray-700 !text-xs"
-      placeholder="输入描述..."
+      :placeholder="t('workflowEditor.descriptionPlaceholder')"
     />
     <!-- 分隔符 -->
     <a-divider class="my-2" />
@@ -238,8 +240,8 @@ onBeforeUnmount(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">输出参数</div>
-            <a-tooltip content="组件运行完成后的最终输出。">
+            <div class="">{{ t('workflowEditor.outputData') }}</div>
+            <a-tooltip :content="t('workflowEditor.outputData')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -252,15 +254,15 @@ onBeforeUnmount(() => {
         </div>
         <!-- 字段名 -->
         <div class="flex items-center gap-1 text-xs text-gray-500 mb-2">
-          <div class="w-[20%]">参数名</div>
-          <div class="w-[25%]">类型</div>
-          <div class="w-[47%]">值</div>
+          <div class="w-[20%]">{{ t('workflowEditor.parameterName') }}</div>
+          <div class="w-[25%]">{{ t('workflowEditor.parameterType') }}</div>
+          <div class="w-[47%]">{{ t('workflowEditor.parameterValue') }}</div>
           <div class="w-[8%]"></div>
         </div>
         <!-- 循环遍历字段列表 -->
         <div v-for="(output, idx) in form?.outputs" :key="idx" class="flex items-center gap-1">
           <div class="w-[20%] flex-shrink-0">
-            <a-input v-model="output.name" size="mini" placeholder="请输入参数名" class="!px-2" />
+            <a-input v-model="output.name" size="mini" :placeholder="t('workflowEditor.parameterName')" class="!px-2" />
           </div>
           <div class="w-[25%] flex-shrink-0">
             <a-select size="mini" v-model="output.type" class="px-2" :options="variableTypes" />
@@ -270,11 +272,11 @@ onBeforeUnmount(() => {
               v-if="output.type !== 'ref'"
               size="mini"
               v-model="output.content"
-              placeholder="请输入参数值"
+              :placeholder="t('workflowEditor.parameterValue')"
             />
             <a-select
               v-else
-              placeholder="请选择引用变量"
+              :placeholder="t('workflowEditor.selectReference')"
               size="mini"
               tag-nowrap
               v-model="output.ref"
@@ -289,7 +291,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <!-- 空数据状态 -->
-        <a-empty v-if="form?.outputs.length <= 0" class="my-4">该节点暂无输入数据</a-empty>
+        <a-empty v-if="form?.outputs.length <= 0" class="my-4">{{ t('workflowEditor.noOutputs') }}</a-empty>
       </div>
     </a-form>
   </div>

@@ -52,8 +52,6 @@ DEFAULT_CONFIG = {
     "ASSISTANT_AGENT_ID": "6774fcef-b594-8008-b30c-a05b8190afe6",
     # 首页助手可用的 MCP 绑定（JSON 字符串或列表，默认空）
     "ASSISTANT_MCP_BINDINGS": [],
-    # 首页助手可用的 MCP 快照（启动期预热后写入，默认空）
-    "ASSISTANT_MCP_TOOL_SNAPSHOTS": [],
     # 多模态请求策略
     "IMAGE_REQUEST_POLICY": "strict",
     "VISION_FALLBACK_PROVIDER": "",

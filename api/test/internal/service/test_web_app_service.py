@@ -166,6 +166,48 @@ class TestWebAppService:
             "entrypoint": "web_app",
         }
 
+    def test_get_web_app_info_should_include_runtime_capabilities_when_available(
+        self, monkeypatch
+    ):
+        service = _build_service()
+        app = SimpleNamespace(
+            id=uuid4(),
+            icon="https://a.com/icon.png",
+            name="WebApp",
+            description="desc",
+        )
+        app_config = {
+            "opening_statement": "hello",
+            "opening_questions": ["q1"],
+            "suggested_after_answer": {"enable": True},
+            "text_to_speech": {"enable": True},
+            "speech_to_text": {"enable": True},
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+        }
+        capture = {}
+        capabilities = {
+            "features": ["tool_call", "image_input"],
+            "image_input": {"enabled": True, "via_fallback": False},
+        }
+
+        monkeypatch.setattr(service, "get_web_app", lambda _token: app)
+        service.app_config_service = SimpleNamespace(get_app_config=lambda _app: app_config)
+        service.language_model_service = SimpleNamespace(
+            describe_runtime_capabilities=lambda model_config, entrypoint: capture.update(
+                {"model_config": model_config, "entrypoint": entrypoint}
+            )
+            or capabilities
+        )
+
+        result = service.get_web_app_info("token")
+
+        assert result["app_config"]["features"] == ["tool_call", "image_input"]
+        assert result["app_config"]["capabilities"] == capabilities
+        assert capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "entrypoint": "web_app",
+        }
+
     def test_stop_web_app_chat_should_validate_token_then_set_stop_flag(self, monkeypatch):
         service = _build_service()
         account = SimpleNamespace(id=uuid4())

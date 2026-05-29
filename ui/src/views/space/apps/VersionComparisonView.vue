@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useGetVersions } from '@/hooks/use-app'
 import { formatTimestampLong } from '@/utils/time-formatter'
 import VersionComparisonSectionContent from './components/VersionComparisonSectionContent.vue'
 
 const route = useRoute()
+const { t } = useI18n()
 const props = defineProps({
   app: {
     type: Object,
@@ -66,26 +68,26 @@ const createSection = (
 }
 
 const comparisonSections = computed(() => [
-  createSection('model_config', '模型配置', (version) => version?.config.model_config),
-  createSection('dialog_round', '上下文轮数', (version) => version?.config.dialog_round),
-  createSection('preset_prompt', '人设与回复逻辑', (version) => version?.config.preset_prompt),
-  createSection('tools', '扩展插件', (version) => version?.config.tools),
-  createSection('mcp_bindings', 'MCP', (version) => version?.config.mcp_bindings),
-  createSection('agent_bindings', 'Agent 子应用', (version) => version?.config.agent_bindings),
-  createSection('workflows', '工作流', (version) => version?.config.workflows),
-  createSection('datasets', '知识库', (version) => version?.config.datasets),
-  createSection('retrieval_config', '检索配置', (version) => version?.config.retrieval_config),
-  createSection('opening', '对话开场白', (version) => ({
+  createSection('model_config', t('appStudio.versions.sectionLabels.modelConfig'), (version) => version?.config.model_config),
+  createSection('dialog_round', t('appStudio.versions.sectionLabels.dialogRound'), (version) => version?.config.dialog_round),
+  createSection('preset_prompt', t('appStudio.versions.sectionLabels.presetPrompt'), (version) => version?.config.preset_prompt),
+  createSection('tools', t('appStudio.versions.sectionLabels.tools'), (version) => version?.config.tools),
+  createSection('mcp_bindings', t('appStudio.versions.sectionLabels.mcpBindings'), (version) => version?.config.mcp_bindings),
+  createSection('agent_bindings', t('appStudio.versions.sectionLabels.agentBindings'), (version) => version?.config.agent_bindings),
+  createSection('workflows', t('appStudio.versions.sectionLabels.workflows'), (version) => version?.config.workflows),
+  createSection('datasets', t('appStudio.versions.sectionLabels.datasets'), (version) => version?.config.datasets),
+  createSection('retrieval_config', t('appStudio.versions.sectionLabels.retrievalConfig'), (version) => version?.config.retrieval_config),
+  createSection('opening', t('appStudio.versions.sectionLabels.opening'), (version) => ({
     opening_statement: version?.config.opening_statement || '',
     opening_questions: version?.config.opening_questions || [],
   })),
-  createSection('experience', '交互体验', (version) => ({
+  createSection('experience', t('appStudio.versions.sectionLabels.experience'), (version) => ({
     long_term_memory: version?.config.long_term_memory || {},
     speech_to_text: version?.config.speech_to_text || {},
     text_to_speech: version?.config.text_to_speech || {},
     suggested_after_answer: version?.config.suggested_after_answer || {},
   })),
-  createSection('review_config', '审核配置', (version) => version?.config.review_config),
+  createSection('review_config', t('appStudio.versions.sectionLabels.reviewConfig'), (version) => version?.config.review_config),
 ])
 
 const visibleSections = computed(() => {
@@ -114,15 +116,26 @@ const getVersionTagColor = (version: Record<string, any> | null) => {
 
 const getVersionTagLabel = (version: Record<string, any> | null) => {
   if (!version) {
-    return '未选择版本'
+    return t('appStudio.versions.unselectedVersion')
   }
 
   if (version.config_type === 'draft') {
-    return '草稿'
+    return t('appStudio.versions.draftVersion')
   }
 
-  return version.is_current_published ? '当前线上版本' : '历史版本'
+  return version.is_current_published
+    ? t('appStudio.versions.currentPublishedVersion')
+    : t('appStudio.versions.historicalVersion')
 }
+
+const formatCollectionSummary = (version: Record<string, any> | null) =>
+  t('appStudio.versions.collectionSummary', {
+    tools: getVersionCollectionCount(version, 'tools'),
+    workflows: getVersionCollectionCount(version, 'workflows'),
+    mcp: getVersionCollectionCount(version, 'mcp_bindings') || 0,
+    agents: getVersionCollectionCount(version, 'agent_bindings') || 0,
+    datasets: getVersionCollectionCount(version, 'datasets'),
+  })
 
 const getVersionCollectionCount = (
   version: Record<string, any> | null,
@@ -178,26 +191,26 @@ onMounted(async () => {
           <div class="overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm">
             <div class="flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 px-6 py-5">
               <div>
-                <div class="text-lg font-semibold text-gray-800">版本对比</div>
+                <div class="text-lg font-semibold text-gray-800">{{ t('appStudio.versions.title') }}</div>
                 <div class="mt-1 text-sm text-gray-500">
-                  对比草稿与历史发布版本的配置差异，快速确认本次改动范围。
+                  {{ t('appStudio.versions.description') }}
                 </div>
                 <div v-if="props.app?.name" class="mt-2 text-sm text-gray-500">
-                  当前应用：{{ props.app.name }}
+                  {{ t('appStudio.versions.currentApp', { name: props.app.name }) }}
                 </div>
               </div>
               <div class="flex flex-wrap items-center gap-3 text-sm text-gray-500">
-                <div>共 {{ versions.length }} 个可选版本</div>
-                <div>差异区块 {{ changedSectionCount }}</div>
+                <div>{{ t('appStudio.versions.versionCount', { count: versions.length }) }}</div>
+                <div>{{ t('appStudio.versions.changedSectionCount', { count: changedSectionCount }) }}</div>
                 <a-switch v-model:model-value="showOnlyChanged" size="small" />
-                <div>仅看差异</div>
+                <div>{{ t('appStudio.versions.showOnlyChanged') }}</div>
               </div>
             </div>
 
             <div class="grid gap-0 lg:grid-cols-2 lg:divide-x lg:divide-gray-100">
               <div class="min-w-0 p-6">
-                <div class="mb-3 text-xs font-medium tracking-wide text-gray-400">对比版本 A</div>
-                <a-select v-model:model-value="leftVersionId" placeholder="请选择版本">
+                <div class="mb-3 text-xs font-medium tracking-wide text-gray-400">{{ t('appStudio.versions.compareVersionA') }}</div>
+                <a-select v-model:model-value="leftVersionId" :placeholder="t('appStudio.versions.selectVersion')">
                   <a-option v-for="version in versions" :key="version.id" :value="version.id">
                     {{ version.label }} · {{ version.summary }}
                   </a-option>
@@ -209,20 +222,16 @@ onMounted(async () => {
                       {{ getVersionTagLabel(leftVersion) }}
                     </a-tag>
                   </div>
-                  <div>更新时间：{{ formatTimestampLong(leftVersion.updated_at) }}</div>
+                  <div>{{ t('appStudio.versions.updatedAt', { time: formatTimestampLong(leftVersion.updated_at) }) }}</div>
                   <div class="text-gray-500">
-                    扩展插件 {{ getVersionCollectionCount(leftVersion, 'tools') }} 个 · 工作流
-                    {{ getVersionCollectionCount(leftVersion, 'workflows') }} 个 · MCP
-                    {{ getVersionCollectionCount(leftVersion, 'mcp_bindings') || 0 }} 个 · Agent
-                    {{ getVersionCollectionCount(leftVersion, 'agent_bindings') || 0 }} 个 · 知识库
-                    {{ getVersionCollectionCount(leftVersion, 'datasets') }} 个
+                    {{ formatCollectionSummary(leftVersion) }}
                   </div>
                 </div>
               </div>
 
               <div class="min-w-0 p-6">
-                <div class="mb-3 text-xs font-medium tracking-wide text-gray-400">对比版本 B</div>
-                <a-select v-model:model-value="rightVersionId" placeholder="请选择版本">
+                <div class="mb-3 text-xs font-medium tracking-wide text-gray-400">{{ t('appStudio.versions.compareVersionB') }}</div>
+                <a-select v-model:model-value="rightVersionId" :placeholder="t('appStudio.versions.selectVersion')">
                   <a-option v-for="version in versions" :key="version.id" :value="version.id">
                     {{ version.label }} · {{ version.summary }}
                   </a-option>
@@ -234,13 +243,9 @@ onMounted(async () => {
                       {{ getVersionTagLabel(rightVersion) }}
                     </a-tag>
                   </div>
-                  <div>更新时间：{{ formatTimestampLong(rightVersion.updated_at) }}</div>
+                  <div>{{ t('appStudio.versions.updatedAt', { time: formatTimestampLong(rightVersion.updated_at) }) }}</div>
                   <div class="text-gray-500">
-                    扩展插件 {{ getVersionCollectionCount(rightVersion, 'tools') }} 个 · 工作流
-                    {{ getVersionCollectionCount(rightVersion, 'workflows') }} 个 · MCP
-                    {{ getVersionCollectionCount(rightVersion, 'mcp_bindings') || 0 }} 个 · Agent
-                    {{ getVersionCollectionCount(rightVersion, 'agent_bindings') || 0 }} 个 · 知识库
-                    {{ getVersionCollectionCount(rightVersion, 'datasets') }} 个
+                    {{ formatCollectionSummary(rightVersion) }}
                   </div>
                 </div>
               </div>
@@ -249,13 +254,13 @@ onMounted(async () => {
 
           <a-empty
             v-if="!versions.length"
-            description="当前应用还没有可对比的版本数据"
+            :description="t('appStudio.versions.noVersions')"
             class="bg-white rounded-2xl border border-dashed border-gray-200 py-24"
           />
 
           <a-empty
             v-else-if="showOnlyChanged && visibleSections.length === 0"
-            description="所选两个版本没有差异"
+            :description="t('appStudio.versions.noDifferences')"
             class="bg-white rounded-2xl border border-dashed border-gray-200 py-24"
           />
 
@@ -271,13 +276,13 @@ onMounted(async () => {
               >
                 <div class="text-sm font-semibold text-gray-800">{{ section.label }}</div>
                 <a-tag :color="section.changed ? 'arcoblue' : 'green'" bordered>
-                  {{ section.changed ? '已变更' : '无变化' }}
+                  {{ section.changed ? t('appStudio.versions.changed') : t('appStudio.versions.unchanged') }}
                 </a-tag>
               </div>
               <div class="grid gap-0 lg:grid-cols-2 lg:divide-x lg:divide-gray-100">
                 <div class="min-w-0 border-b border-gray-100 p-6 lg:border-b-0">
                   <div class="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                    <a-tag size="small" bordered>{{ leftVersion?.label || '未选择版本' }}</a-tag>
+                    <a-tag size="small" bordered>{{ leftVersion?.label || t('appStudio.versions.unselectedVersion') }}</a-tag>
                     <a-tag size="small" :color="getVersionTagColor(leftVersion)" bordered>
                       {{ getVersionTagLabel(leftVersion) }}
                     </a-tag>
@@ -291,7 +296,7 @@ onMounted(async () => {
                 </div>
                 <div class="min-w-0 p-6">
                   <div class="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                    <a-tag size="small" bordered>{{ rightVersion?.label || '未选择版本' }}</a-tag>
+                    <a-tag size="small" bordered>{{ rightVersion?.label || t('appStudio.versions.unselectedVersion') }}</a-tag>
                     <a-tag size="small" :color="getVersionTagColor(rightVersion)" bordered>
                       {{ getVersionTagLabel(rightVersion) }}
                     </a-tag>

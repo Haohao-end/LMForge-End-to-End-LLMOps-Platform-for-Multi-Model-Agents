@@ -77,7 +77,6 @@ DEFAULT_APP_CONFIG = {
     "mcp_bindings": [],
     "mcp_tool_snapshots": [],
     "skills": [],
-    "agent_bindings": [],
     "workflows": [],
     "datasets": [],
     "retrieval_config": {

@@ -34,6 +34,7 @@ import {
   ref,
   watch,
 } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import 'github-markdown-css'
 import FilingIcon from '@/assets/images/FilingIcon.png'
@@ -125,6 +126,7 @@ const HUMAN_NAV_BOTTOM_DISTANCE_THRESHOLD = 500
 const isStreamingResponse = ref(false)
 const route = useRoute()
 const router = useRouter()
+const { t, locale } = useI18n()
 const isHomeRoute = computed(() => route.path === '/home')
 const hasLoginQueryFlag = computed(() => String(route.query.login || '') === '1')
 const introductionAbortController = ref<AbortController | null>(null)
@@ -138,11 +140,15 @@ const isHandlingNewConversationRequest = ref(false)
 const hasCompletedInitialHomeLoad = ref(false)
 const isAuthenticated = computed(() => isCredentialLoggedIn(credentialStore.credential))
 const userDisplayName = computed(() => {
-  return (accountStore.account?.name || '').trim() || '朋友'
+  return (accountStore.account?.name || '').trim() || t('home.greetingFallback')
 })
-const defaultOpeningQuestions = ['你能做什么?', '帮我创建一个天气智能体', '我想做一个应用']
+const defaultOpeningQuestions = computed(() => [
+  t('home.defaultIntroduction.tryQuestion1'),
+  t('home.defaultIntroduction.tryQuestion2'),
+  t('home.defaultIntroduction.tryQuestion3'),
+])
 const HOME_INTRO_AUDIO_STREAM_ID = 'home-introduction-audio'
-const opening_questions = ref<string[]>([...defaultOpeningQuestions])
+const opening_questions = ref<string[]>([...defaultOpeningQuestions.value])
 const homeIntentRequestVersion = ref(0)
 const homeIntentApplied = ref(false)
 const introductionLatency = ref(0)
@@ -153,16 +159,16 @@ const defaultAssistantIntroduction = computed(() => {
   return [
     `### Hi，${userDisplayName.value}`,
     '',
-    '你好，欢迎来到 **OpenAgent** 🎉',
+    t('home.defaultIntroduction.welcome'),
     '',
-    '- 我可以帮你从想法出发，快速创建专属 AI 应用。',
-    '- 我支持根据你的需求执行 `function call`，自动调用工具并生成垂直 Agent 的后端能力代码与配置。',
-    '- 你可以把应用一键发布到 OpenAgent 平台、微信等多个渠道，也可以部署到你自己的网站。',
+    `- ${t('home.defaultIntroduction.capability1')}`,
+    `- ${t('home.defaultIntroduction.capability2')}`,
+    `- ${t('home.defaultIntroduction.capability3')}`,
     '',
-    '**试试这些问题：**',
-    '- 我想做一个应用',
-    '- 帮我创建一个天气智能体',
-    '- 你能做什么？',
+    `**${t('home.defaultIntroduction.tryTitle')}**`,
+    `- ${t('home.defaultIntroduction.tryQuestion1')}`,
+    `- ${t('home.defaultIntroduction.tryQuestion2')}`,
+    `- ${t('home.defaultIntroduction.tryQuestion3')}`,
   ].join('\n')
 })
 const assistantIntroduction = ref('')
@@ -289,7 +295,10 @@ const humanNavItems = computed(() => {
         key: item.id || `${item.created_at}-${index}`,
         label: String(index + 1),
         previewText: truncateHumanNavPreview(
-          query || (imageCount > 0 ? `该消息包含${imageCount}张图片` : '该消息内容为空'),
+          query ||
+            (imageCount > 0
+              ? t('home.messages.imageCount', { count: imageCount })
+              : t('home.messages.empty')),
         ),
         imageCount,
       }
@@ -334,7 +343,7 @@ const normalizeIntroductionMetrics = (
 }
 
 const resetOpeningQuestions = () => {
-  opening_questions.value = [...defaultOpeningQuestions]
+  opening_questions.value = [...defaultOpeningQuestions.value]
 }
 
 const buildIntentIntroduction = (intentData: HomeIntentData) => {
@@ -344,12 +353,12 @@ const buildIntentIntroduction = (intentData: HomeIntentData) => {
   return [
     `### Hi，${userDisplayName.value}`,
     '',
-    '我已经基于你最近的对话识别了一个当前意图：',
+    t('home.intent.title'),
     '',
-    `- ${intent || '继续探索你的需求'}`,
-    `- 置信度：${confidencePercent}%`,
+    `- ${intent || t('home.intent.fallback')}`,
+    `- ${t('home.intent.confidence', { percent: confidencePercent })}`,
     '',
-    '**你可以直接点击下方推荐操作继续：**',
+    `**${t('home.intent.cta')}**`,
   ].join('\n')
 }
 
@@ -361,7 +370,7 @@ const applyHomeIntentResult = (intentData: HomeIntentData) => {
         .filter((item) => item !== '')
         .slice(0, 3)
     : []
-  opening_questions.value = actions.length > 0 ? actions : [...defaultOpeningQuestions]
+  opening_questions.value = actions.length > 0 ? actions : [...defaultOpeningQuestions.value]
   introductionLatency.value = 0
   introductionTotalTokenCount.value = estimateTokenCount(assistantIntroduction.value)
   homeIntentApplied.value = true
@@ -692,7 +701,7 @@ const startNewAssistantConversation = async (
     return true
   } catch (error) {
     console.error('Failed to start new assistant conversation:', error)
-    Message.error(options.errorMessage || '新建会话失败，请重试')
+    Message.error(options.errorMessage || t('home.messages.startNewConversationFailed'))
     return false
   } finally {
     isHandlingNewConversationRequest.value = false
@@ -724,6 +733,19 @@ watch(
   ],
   async () => {
     await handleHomeNewConversationRequest()
+  },
+)
+
+watch(
+  () => locale.value,
+  async () => {
+    if (!isHomeRoute.value) return
+    if (!isAuthenticated.value) {
+      resetAssistantIntroduction()
+      resetOpeningQuestions()
+      return
+    }
+    await loadAssistantIntroduction()
   },
 )
 
@@ -1008,7 +1030,7 @@ const handleScroll = (event: Event) => {
 const handleSubmit = async () => {
   // 5.1 检测是否录入了query，如果没有则结束
   if (query.value.trim() === '') {
-    Message.warning('用户提问不能为空')
+    Message.warning(t('home.messages.emptyQueryWarning'))
     return
   }
 
@@ -1020,7 +1042,11 @@ const handleSubmit = async () => {
 
   // 5.2 检测上次提问是否结束，如果没结束不能发起新提问
   if (assistantAgentChatLoading.value) {
-    Message.warning('上一次提问还未结束，请稍等')
+    Message.warning(t('home.messages.pendingQueryWarning'))
+    return
+  }
+  if (image_urls.value.length > 0 && !canAssistantImageInput.value) {
+    Message.warning(t('home.messages.imageUnsupportedWarning'))
     return
   }
   if (image_urls.value.length > 0 && !canAssistantImageInput.value) {
@@ -1134,7 +1160,7 @@ const handleSubmit = async () => {
 const handleClearConversation = async () => {
   const started = await startNewAssistantConversation({
     showSuccess: true,
-    errorMessage: '清空会话失败，请重试',
+    errorMessage: t('home.messages.clearConversationFailed'),
   })
   if (started) {
     await clearHomeNewConversationQuery()
@@ -1174,9 +1200,9 @@ const handleStartRecord = async () => {
   try {
     isRecording.value = true
     await recorder.start()
-    Message.success('开始录音')
+    Message.success(t('home.messages.startRecordingSuccess'))
   } catch {
-    Message.error('录音失败，请检查麦克风权限后重试')
+    Message.error(t('home.messages.recordingFailed'))
     isRecording.value = false
   }
 }
@@ -1193,7 +1219,7 @@ const handleStopRecord = async () => {
       await handleAudioToText(audioBlob.value)
       query.value = text.value
     } catch {
-      Message.error('录音失败，请检查麦克风权限后重试')
+      Message.error(t('home.messages.recordingFailed'))
     } finally {
       isRecording.value = false // 标记为停止录音
     }
@@ -1364,8 +1390,8 @@ onUnmounted(() => {
                 : { left: '50%', transform: 'translateX(-50%)' }
             "
             @click="scrollToBottomWithEasing"
-            title="滚动到底部"
-            aria-label="滚动到底部"
+            :title="t('home.messages.scrollToBottom')"
+            :aria-label="t('home.messages.scrollToBottom')"
           >
             <icon-down class="text-lg" />
           </button>
@@ -1398,7 +1424,7 @@ onUnmounted(() => {
               <button
                 class="group flex h-6 w-6 items-center justify-center"
                 @click="scrollToHumanMessageByIndex(index)"
-                :aria-label="`跳转到第 ${index + 1} 条用户消息`"
+                :aria-label="t('home.messages.jumpToMessage', { index: index + 1 })"
               >
                 <span
                   class="block transition-all duration-300"
@@ -1425,7 +1451,7 @@ onUnmounted(() => {
             <template #icon>
               <icon-poweroff />
             </template>
-            停止响应
+            {{ t('home.messages.stopResponse') }}
           </a-button>
         </div>
       </div>
@@ -1440,13 +1466,12 @@ onUnmounted(() => {
             Hi，{{ userDisplayName }}
           </div>
           <div class="text-[30px] font-bold text-gray-700 mb-2">
-            你的专属
-            <span class="text-blue-700">AI 原生应用</span>
-            开发平台
+            {{ t('home.hero.titlePrefix') }}
+            <span class="text-blue-700">{{ t('home.hero.titleAccent') }}</span>
+            {{ t('home.hero.titleSuffix') }}
           </div>
           <div class="text-base text-gray-700">
-            说出你的创意，我可以快速帮你创建专属应用，一键轻松分享给朋友，也可以一键发布到 OpenAgent
-            平台、微信等多个渠道。
+            {{ t('home.hero.description') }}
           </div>
         </div>
         <!-- 开场AI对话消息 -->
@@ -1490,8 +1515,8 @@ onUnmounted(() => {
             :is-recording="isRecording"
             :is-input-breathing="isInputBreathing"
             :show-deep-thinking-toggle="true"
-            clear-title="清空会话"
-            placeholder="发送消息或创建AI应用..."
+            :clear-title="t('home.messages.clearConversation')"
+            :placeholder="t('home.messages.sendPlaceholder')"
             @clear="handleClearConversation"
             @upload="handleTriggerFileInput"
             @file-change="(event) => handleFileChange(event)"
@@ -1513,7 +1538,7 @@ onUnmounted(() => {
           <div
             class="flex items-center justify-center gap-2 text-xs text-[#d0d7e0] pb-2 px-2 min-w-0"
           >
-            <span class="whitespace-nowrap">我的内容由AI生成，无法确保真实准确，仅供参考</span>
+            <span class="whitespace-nowrap">{{ t('home.messages.disclaimer') }}</span>
             <span class="whitespace-nowrap">© 2026 OpenAgent</span>
             <a
               href="https://beian.miit.gov.cn"
@@ -1521,7 +1546,7 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               class="inline-flex items-center leading-none hover:opacity-80 transition-opacity whitespace-nowrap"
             >
-              桂ICP备2026003219号
+              {{ t('home.footer.icpLabel') }}2026003219号
             </a>
             <a
               href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=45010202000868"
@@ -1529,15 +1554,19 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               class="inline-flex items-center leading-none hover:opacity-80 transition-opacity whitespace-nowrap"
             >
-              <img :src="FilingIcon" alt="备案图标" class="w-2.5 h-2.5 mr-0.5 block shrink-0" />
-              <span>桂公网安备45010202000868号</span>
+              <img
+                :src="FilingIcon"
+                :alt="t('home.footer.publicSecurityLabel')"
+                class="w-2.5 h-2.5 mr-0.5 block shrink-0"
+              />
+              <span>{{ t('home.footer.publicSecurityLabel') }}45010202000868号</span>
             </a>
             <a
               href="https://github.com/Haohao-end/openagent"
               target="_blank"
               rel="noopener noreferrer"
               class="inline-flex items-center justify-center leading-none hover:opacity-80 transition-opacity"
-              title="GitHub"
+              :title="t('home.footer.github')"
             >
               <svg
                 class="w-3 h-3 block"

@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { createTestI18n } from '@/i18n'
 import { buildSessionMetaItems } from '@/views/layouts/components/setting-session-display'
 
 describe('setting-session-display', () => {
   it('should build normal session meta items', () => {
-    const items = buildSessionMetaItems({
-      legacy: false,
-      created_at: 1704067200,
-      last_active_at: 1704070800,
-      expires_at: 1706659200,
-    })
+    const i18n = createTestI18n()
+    const items = buildSessionMetaItems(
+      {
+        legacy: false,
+        created_at: 1704067200,
+        last_active_at: 1704070800,
+        expires_at: 1706659200,
+      },
+      i18n.global.t,
+    )
 
     expect(items).toEqual([
       { label: '首次登录时间', value: '2024-01-01 08:00:00' },
@@ -18,12 +23,16 @@ describe('setting-session-display', () => {
   })
 
   it('should build legacy session meta items with compatibility copy', () => {
-    const items = buildSessionMetaItems({
-      legacy: true,
-      created_at: 1704067200,
-      last_active_at: 1704067200,
-      expires_at: 0,
-    })
+    const i18n = createTestI18n()
+    const items = buildSessionMetaItems(
+      {
+        legacy: true,
+        created_at: 1704067200,
+        last_active_at: 1704067200,
+        expires_at: 0,
+      },
+      i18n.global.t,
+    )
 
     expect(items).toEqual([
       { label: '凭证类型', value: '旧版登录凭证' },

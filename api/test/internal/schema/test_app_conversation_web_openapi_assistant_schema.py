@@ -359,22 +359,18 @@ def test_conversation_schema_should_promote_artifacts_into_multimodal_output():
         {"type": "text", "text": "已生成图表"},
         {
             "type": "image",
-                "url": "https://cos.example.com/chart.png",
-                "name": "chart.png",
-                "mime_type": "image/png",
-                "extension": "png",
-                "group_id": str(payload["agent_thoughts"][0]["id"]),
-                "group_name": "生成图片",
-            },
-        ]
+            "url": "https://cos.example.com/chart.png",
+            "name": "chart.png",
+            "mime_type": "image/png",
+            "extension": "png",
+        },
+    ]
     assert payload["artifacts"] == [
         {
             "name": "chart.png",
             "url": "https://cos.example.com/chart.png",
             "mime_type": "image/png",
             "extension": "png",
-            "group_id": str(payload["agent_thoughts"][0]["id"]),
-            "group_name": "生成图片",
         }
     ]
 

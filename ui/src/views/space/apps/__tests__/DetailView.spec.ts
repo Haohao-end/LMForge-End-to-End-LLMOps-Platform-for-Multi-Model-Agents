@@ -54,11 +54,10 @@ vi.mock('@/hooks/use-app', async () => {
 describe('DetailView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    const draftAppConfigForm = mocks.draftAppConfigForm
-    if (!draftAppConfigForm) {
+    if (!mocks.draftAppConfigForm) {
       throw new Error('draftAppConfigForm mock not initialized')
     }
-    draftAppConfigForm.value = {
+    mocks.draftAppConfigForm.value = {
       dialog_round: 3,
       model_config: { provider: 'deepseek', model: 'deepseek-chat', parameters: {} },
       capabilities: { image_input: { enabled: false } },
@@ -100,12 +99,7 @@ describe('DetailView', () => {
     await flushPromises()
     expect(mocks.loadDraftAppConfig).toHaveBeenCalledTimes(1)
 
-    const draftAppConfigForm = mocks.draftAppConfigForm
-    if (!draftAppConfigForm) {
-      throw new Error('draftAppConfigForm mock not initialized')
-    }
-
-    draftAppConfigForm.value.model_config = {
+    mocks.draftAppConfigForm.value.model_config = {
       provider: 'openai',
       model: 'gpt-4o-mini',
       parameters: {},

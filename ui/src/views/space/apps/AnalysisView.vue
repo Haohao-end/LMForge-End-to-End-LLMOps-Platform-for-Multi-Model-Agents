@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { LineChart } from 'echarts/charts'
@@ -36,49 +37,50 @@ type TrendInsight = {
 }
 
 const route = useRoute()
+const { t, locale } = useI18n()
 const { loading: getAppAnalysisLoading, app_analysis, loadAppAnalysis } = useGetAppAnalysis()
 
-const trendCards: TrendCard[] = [
+const trendCards = computed<TrendCard[]>(() => [
   {
     key: 'total_messages_trend',
-    title: '全部会话数',
-    help: '反映 AI 每天的会话消息总数，在指定的时间范围内，用户对应用发起的请求总次数，一问一答记一次，用于衡量用户活跃度。',
-    unit: '次',
+    title: t('appStudio.analysis.trendCards.totalMessages.title'),
+    help: t('appStudio.analysis.trendCards.totalMessages.help'),
+    unit: t('appStudio.analysis.trendCards.totalMessages.unit'),
     color: '#2563EB',
     areaColor: 'rgba(37,99,235,0.24)',
     decimals: 0,
   },
   {
     key: 'active_accounts_trend',
-    title: '活跃用户数',
-    help: '指定的发布渠道和时间范围内，至少完成一轮对话的总使用用户数量，用于衡量应用吸引力。',
-    unit: '人',
+    title: t('appStudio.analysis.trendCards.activeAccounts.title'),
+    help: t('appStudio.analysis.trendCards.activeAccounts.help'),
+    unit: t('appStudio.analysis.trendCards.activeAccounts.unit'),
     color: '#059669',
     areaColor: 'rgba(5,150,105,0.24)',
     decimals: 0,
   },
   {
     key: 'avg_of_conversation_messages_trend',
-    title: '平均会话互动数',
-    help: '反映每个会话用户的持续沟通次数，如果用户与 AI 进行了 10 轮对话，即为 10，该指标反映了用户粘性。',
-    unit: '次',
+    title: t('appStudio.analysis.trendCards.avgConversationMessages.title'),
+    help: t('appStudio.analysis.trendCards.avgConversationMessages.help'),
+    unit: t('appStudio.analysis.trendCards.avgConversationMessages.unit'),
     color: '#D97706',
     areaColor: 'rgba(217,119,6,0.24)',
     decimals: 2,
   },
   {
     key: 'cost_consumption_trend',
-    title: '费用消耗',
-    help: '反映每日该应用请求语言模型的 Tokens 花费，用于成本控制。',
-    unit: 'RMB',
+    title: t('appStudio.analysis.trendCards.costConsumption.title'),
+    help: t('appStudio.analysis.trendCards.costConsumption.help'),
+    unit: t('appStudio.analysis.trendCards.costConsumption.unit'),
     color: '#DC2626',
     areaColor: 'rgba(220,38,38,0.22)',
     decimals: 2,
   },
-]
+])
 
 const formatFixed = (value: number, decimals = 0) =>
-  value.toLocaleString('zh-CN', {
+  value.toLocaleString(locale.value, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
@@ -94,17 +96,11 @@ const formatTooltipValue = (value: number, card: TrendCard) => {
 }
 
 const formatAxisValue = (value: number, card: TrendCard) => {
-  const absValue = Math.abs(value)
-  if (absValue >= 10000) {
-    const shortValue = (value / 10000).toFixed(1)
-    return card.key === 'cost_consumption_trend' ? `¥${shortValue}万` : `${shortValue}万`
-  }
-  if (absValue >= 1000) {
-    const shortValue = (value / 1000).toFixed(1)
-    return card.key === 'cost_consumption_trend' ? `¥${shortValue}k` : `${shortValue}k`
-  }
-  const fixed = card.decimals > 0 ? value.toFixed(card.decimals) : value.toFixed(0)
-  return card.key === 'cost_consumption_trend' ? `¥${fixed}` : fixed
+  const compactValue = new Intl.NumberFormat(locale.value, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+  return card.key === 'cost_consumption_trend' ? `¥${compactValue}` : compactValue
 }
 
 const buildTrendOption = (card: TrendCard): EChartsOption => {
@@ -233,7 +229,7 @@ const buildTrendOption = (card: TrendCard): EChartsOption => {
 }
 
 const trendOption = computed(() => {
-  return trendCards.reduce(
+  return trendCards.value.reduce(
     (acc, card) => {
       acc[card.key] = buildTrendOption(card)
       return acc
@@ -243,7 +239,7 @@ const trendOption = computed(() => {
 })
 
 const trendHasData = computed(() => {
-  return trendCards.reduce(
+  return trendCards.value.reduce(
     (acc, card) => {
       const yAxis = app_analysis.value?.[card.key]?.y_axis ?? []
       acc[card.key] = Array.isArray(yAxis) && yAxis.length > 0
@@ -254,7 +250,7 @@ const trendHasData = computed(() => {
 })
 
 const trendInsights = computed(() => {
-  return trendCards.reduce(
+  return trendCards.value.reduce(
     (acc, card) => {
       const values = (app_analysis.value?.[card.key]?.y_axis ?? []).filter((value: unknown) =>
         Number.isFinite(Number(value)),
@@ -290,30 +286,30 @@ onMounted(() => {
   <div class="analysis-page px-6 py-6 h-full overflow-y-auto scrollbar-w-none">
     <div class="analysis-banner mb-6">
       <div>
-        <div class="analysis-banner__title">统计分析看板</div>
+        <div class="analysis-banner__title">{{ t('appStudio.analysis.title') }}</div>
         <div class="analysis-banner__desc">
-          通过近 7 天会话、活跃与成本趋势，快速洞察应用运营质量和资源消耗变化。
+          {{ t('appStudio.analysis.description') }}
         </div>
       </div>
       <a-tag color="arcoblue" bordered>
         <template #icon>
           <icon-schedule />
         </template>
-        数据范围：近 7 天
+        {{ t('appStudio.analysis.recentSevenDays') }}
       </a-tag>
     </div>
 
     <div class="flex flex-col gap-5 mb-6">
       <div class="section-head">
-        <div class="text-base text-gray-700 font-semibold">概览指标</div>
-        <div class="text-xs text-gray-500">过去7天关键业务指标</div>
+        <div class="text-base text-gray-700 font-semibold">{{ t('appStudio.analysis.overviewTitle') }}</div>
+        <div class="text-xs text-gray-500">{{ t('appStudio.analysis.overviewDescription') }}</div>
       </div>
       <a-spin :loading="getAppAnalysisLoading">
         <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
           <overview-indicator
-            title="全部会话数"
-            help="反映 AI 每天的会话消息总数，在指定的时间范围内，用户对应用发起的请求总次数，一问一答记一次，用于衡量用户活跃度。"
-            unit="次"
+            :title="t('appStudio.analysis.trendCards.totalMessages.title')"
+            :help="t('appStudio.analysis.trendCards.totalMessages.help')"
+            :unit="t('appStudio.analysis.trendCards.totalMessages.unit')"
             :data="app_analysis?.total_messages?.data"
             :pop="app_analysis?.total_messages?.pop"
           >
@@ -322,9 +318,9 @@ onMounted(() => {
             </template>
           </overview-indicator>
           <overview-indicator
-            title="活跃用户数"
-            help="指定的发布渠道和时间范围内，至少完成一轮对话的总使用用户数量，用于衡量应用吸引力。"
-            unit="人"
+            :title="t('appStudio.analysis.trendCards.activeAccounts.title')"
+            :help="t('appStudio.analysis.trendCards.activeAccounts.help')"
+            :unit="t('appStudio.analysis.trendCards.activeAccounts.unit')"
             :data="app_analysis?.active_accounts?.data"
             :pop="app_analysis?.active_accounts?.pop"
           >
@@ -333,9 +329,9 @@ onMounted(() => {
             </template>
           </overview-indicator>
           <overview-indicator
-            title="平均会话互动数"
-            help="反映每个会话用户的持续沟通次数，如果用户与 AI 进行了 10 轮对话，即为 10，该指标反映了用户粘性。"
-            unit="次"
+            :title="t('appStudio.analysis.trendCards.avgConversationMessages.title')"
+            :help="t('appStudio.analysis.trendCards.avgConversationMessages.help')"
+            :unit="t('appStudio.analysis.trendCards.avgConversationMessages.unit')"
             :data="app_analysis?.avg_of_conversation_messages?.data"
             :pop="app_analysis?.avg_of_conversation_messages?.pop"
           >
@@ -344,9 +340,9 @@ onMounted(() => {
             </template>
           </overview-indicator>
           <overview-indicator
-            title="Token输出速度"
-            help="衡量 LLM 的性能，统计 LLM 从请求到输出完毕这段期间内的 Tokens 输出速度。"
-            unit="Ts/秒"
+            :title="t('appStudio.analysis.trendCards.tokenOutputRate.title')"
+            :help="t('appStudio.analysis.trendCards.tokenOutputRate.help')"
+            :unit="t('appStudio.analysis.trendCards.tokenOutputRate.unit')"
             :data="app_analysis?.token_output_rate?.data"
             :pop="app_analysis?.token_output_rate?.pop"
           >
@@ -355,9 +351,9 @@ onMounted(() => {
             </template>
           </overview-indicator>
           <overview-indicator
-            title="费用消耗"
-            help="反映每日该应用请求语言模型的 Tokens 花费，用于成本控制。"
-            unit="RMB"
+            :title="t('appStudio.analysis.trendCards.costConsumption.title')"
+            :help="t('appStudio.analysis.trendCards.costConsumption.help')"
+            :unit="t('appStudio.analysis.trendCards.costConsumption.unit')"
             :data="app_analysis?.cost_consumption?.data"
             :pop="app_analysis?.cost_consumption?.pop"
           >
@@ -371,8 +367,8 @@ onMounted(() => {
 
     <div class="flex flex-col gap-5">
       <div class="section-head">
-        <div class="text-base text-gray-700 font-semibold">详细指标</div>
-        <div class="text-xs text-gray-500">趋势分布与关键统计特征</div>
+        <div class="text-base text-gray-700 font-semibold">{{ t('appStudio.analysis.detailsTitle') }}</div>
+        <div class="text-xs text-gray-500">{{ t('appStudio.analysis.detailsDescription') }}</div>
       </div>
       <a-spin :loading="getAppAnalysisLoading">
         <div class="grid gap-4 grid-cols-1 2xl:grid-cols-2">
@@ -391,7 +387,7 @@ onMounted(() => {
                   <icon-question-circle-fill />
                 </a-tooltip>
               </div>
-              <a-tag bordered size="small">近7天</a-tag>
+              <a-tag bordered size="small">{{ t('appStudio.analysis.cardPeriod') }}</a-tag>
             </div>
             <div class="chart-card__summary">
               <div class="chart-card__value">
@@ -399,7 +395,7 @@ onMounted(() => {
                 <span class="chart-card__unit">{{ trend.unit }}</span>
               </div>
               <div class="chart-card__meta">
-                峰值 {{ trendInsights[trend.key].peak }} · 均值 {{ trendInsights[trend.key].average }}
+                {{ t('appStudio.analysis.peakAndAverage', { peak: trendInsights[trend.key].peak, average: trendInsights[trend.key].average }) }}
               </div>
             </div>
             <div class="chart-card__body">
@@ -410,7 +406,7 @@ onMounted(() => {
                 :autoresize="true"
                 class="h-full w-full"
               />
-              <a-empty v-else class="chart-empty" description="暂无趋势数据" />
+              <a-empty v-else class="chart-empty" :description="t('appStudio.analysis.noTrendData')" />
             </div>
           </div>
         </div>

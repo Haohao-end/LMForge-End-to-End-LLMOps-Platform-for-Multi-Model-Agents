@@ -2,6 +2,7 @@ import { computed, ref, type Ref } from 'vue'
 import type { RouteLocationRaw, Router } from 'vue-router'
 import moment from 'moment/moment'
 import { Message } from '@arco-design/web-vue'
+import { i18n } from '@/i18n'
 import { forkPublicWorkflow } from '@/services/public-workflow'
 import { getErrorMessage } from '@/utils/error'
 
@@ -35,6 +36,8 @@ const buildWorkflowId = (workflowId: string): string => {
 
 export const useWorkflowHeader = (options: UseWorkflowHeaderOptions) => {
   const forkLoading = ref(false)
+  const t = i18n.global.t
+  const locale = i18n.global.locale as unknown as Ref<string>
 
   const headerBackRoute = computed<RouteLocationRaw>(() => {
     return {
@@ -43,7 +46,10 @@ export const useWorkflowHeader = (options: UseWorkflowHeaderOptions) => {
   })
 
   const workflowStatusText = computed(() => {
-    return getWorkflowStatus(options.workflow.value) === 'published' ? '已发布' : '草稿'
+    void locale.value
+    return getWorkflowStatus(options.workflow.value) === 'published'
+      ? t('appStudio.shell.published')
+      : t('appStudio.shell.draft')
   })
 
   const showPreviewReadonlyTag = computed(() => options.isPreviewMode.value)
@@ -63,20 +69,20 @@ export const useWorkflowHeader = (options: UseWorkflowHeaderOptions) => {
   const handleAddToMySpace = async () => {
     const currentWorkflowId = buildWorkflowId(options.workflowId.value)
     if (!currentWorkflowId) {
-      Message.error('工作流ID不存在，无法添加')
+      Message.error(t('appStudio.shell.workflowIdMissing'))
       return
     }
 
     try {
       forkLoading.value = true
       const res = await forkPublicWorkflow(currentWorkflowId)
-      Message.success(`已添加到个人空间: ${res.data.name}`)
+      Message.success(t('appStudio.shell.addToMySpaceSuccess', { name: res.data.name }))
       await options.router.push({
         name: 'space-workflows-detail',
         params: { workflow_id: res.data.id },
       })
     } catch (error: unknown) {
-      Message.error(getErrorMessage(error, '添加失败'))
+      Message.error(getErrorMessage(error, t('appStudio.shell.addToMySpaceFailed')))
     } finally {
       forkLoading.value = false
     }

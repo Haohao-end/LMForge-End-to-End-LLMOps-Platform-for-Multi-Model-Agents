@@ -1,0 +1,27 @@
+model: kimi-k2.6
+label: moonshotai/kimi-k2.6
+model_type: chat
+features:
+- tool_call
+- agent_thought
+context_window: 262144
+max_output_tokens: 262144
+attributes:
+  model: moonshotai/kimi-k2.6
+parameters:
+- name: temperature
+  use_template: temperature
+  default: 0.7
+- name: top_p
+  use_template: top_p
+  default: 1
+- name: max_tokens
+  use_template: max_tokens
+  default: 4096
+  max: 262144
+metadata:
+  pricing:
+    input: 0.95
+    output: 4.0
+    unit: 0.001
+    currency: RMB

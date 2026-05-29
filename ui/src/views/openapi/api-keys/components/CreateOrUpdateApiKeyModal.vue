@@ -3,6 +3,7 @@ import { h, ref, resolveComponent, watch } from 'vue'
 import { type ValidatedError, Message, Modal } from '@arco-design/web-vue'
 import { useCreateApiKey, useUpdateApiKey } from '@/hooks/use-api-key'
 import { copyTextToClipboard } from '@/utils/clipboard'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义自定义组件所需数据
 const props = defineProps({
@@ -30,6 +31,7 @@ const formRef = ref(null)
 const { loading: updateApiKeyLoading, handleUpdateApiKey } = useUpdateApiKey()
 const { loading: createApiKeyLoading, handleCreateApiKey } = useCreateApiKey()
 const IconCopy = resolveComponent('icon-copy')
+const { t } = useI18n()
 
 // 2.定义隐藏模态窗函数
 const hideModal = () => {
@@ -56,7 +58,7 @@ const saveApiKey = async ({ errors }: { errors: Record<string, ValidatedError> |
     })
     if (createdApiKey) {
       Modal.info({
-        title: 'API 密钥（仅显示一次）',
+        title: t('openapi.apiKeys.showOnceTitle'),
         width: 860,
         modalClass: 'api-key-once-modal',
         bodyStyle: {
@@ -68,7 +70,7 @@ const saveApiKey = async ({ errors }: { errors: Record<string, ValidatedError> |
             { class: 'api-key-once-content' },
             [
               h('div', { class: 'flex items-center justify-between gap-4' }, [
-                h('p', { class: 'api-key-once-desc' }, '请立即复制并妥善保存，关闭后将无法再次完整查看。'),
+                h('p', { class: 'api-key-once-desc' }, t('openapi.apiKeys.showOnceDescription')),
                 h(
                   'button',
                   {
@@ -77,22 +79,22 @@ const saveApiKey = async ({ errors }: { errors: Record<string, ValidatedError> |
                     onClick: async () => {
                       try {
                         await copyTextToClipboard(createdApiKey)
-                        Message.success('API 密钥已复制到剪贴板')
+                        Message.success(t('openapi.apiKeys.copiedSuccess'))
                       } catch {
-                        Message.warning('复制失败，请手动复制完整密钥')
+                        Message.warning(t('openapi.apiKeys.copyFailed'))
                       }
                     },
                   },
                   [
                     h(IconCopy, { class: 'text-sm' }),
-                    h('span', '复制密钥'),
+                    h('span', t('common.actions.copy')),
                   ],
                 ),
               ]),
               h('div', { class: 'api-key-once-code' }, createdApiKey),
             ],
           ),
-        okText: '我已保存',
+        okText: t('openapi.apiKeys.showOnceSaved'),
       })
     }
   }
@@ -137,8 +139,8 @@ watch(
           <icon-safe class="text-white text-lg" />
         </div>
         <div>
-          <div class="text-lg font-bold text-gray-900">{{ api_key_id ? '编辑' : '创建' }}密钥</div>
-          <div class="text-sm text-gray-500 mt-0.5">{{ api_key_id ? '更新密钥配置信息' : '创建新的 API 访问密钥' }}</div>
+          <div class="text-lg font-bold text-gray-900">{{ api_key_id ? t('openapi.apiKeys.editTitle') : t('openapi.apiKeys.createTitle') }}</div>
+          <div class="text-sm text-gray-500 mt-0.5">{{ api_key_id ? t('openapi.apiKeys.updateDescription') : t('openapi.apiKeys.createDescription') }}</div>
         </div>
       </div>
       <a-button
@@ -156,16 +158,16 @@ watch(
     <a-form ref="formRef" :model="form" layout="vertical" @submit="saveApiKey">
       <a-form-item field="is_active" class="mb-5">
         <template #label>
-          <div class="text-sm font-semibold text-gray-700 mb-2">密钥状态</div>
+          <div class="text-sm font-semibold text-gray-700 mb-2">{{ t('openapi.apiKeys.statusLabel') }}</div>
         </template>
         <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
           <a-switch v-model:model-value="form.is_active" />
           <div class="flex-1">
             <div class="text-sm font-medium text-gray-900">
-              {{ form.is_active ? '启用' : '禁用' }}
+              {{ form.is_active ? t('openapi.apiKeys.enabled') : t('openapi.apiKeys.disabled') }}
             </div>
             <div class="text-xs text-gray-500 mt-0.5">
-              {{ form.is_active ? '密钥可以正常使用' : '密钥将无法访问 API' }}
+              {{ form.is_active ? t('openapi.apiKeys.statusEnabledDesc') : t('openapi.apiKeys.statusDisabledDesc') }}
             </div>
           </div>
         </div>
@@ -173,13 +175,13 @@ watch(
 
       <a-form-item field="remark" class="mb-5">
         <template #label>
-          <div class="text-sm font-semibold text-gray-700 mb-2">密钥备注</div>
+          <div class="text-sm font-semibold text-gray-700 mb-2">{{ t('openapi.apiKeys.remarkLabel') }}</div>
         </template>
         <a-textarea
           v-model:model-value="form.remark"
           :max-length="100"
           show-word-limit
-          placeholder="请输入密钥备注信息,例如:生产环境密钥、测试环境密钥等"
+          :placeholder="t('openapi.apiKeys.remarkPlaceholder')"
           :auto-size="{ minRows: 3, maxRows: 6 }"
           class="!rounded-lg"
         />
@@ -190,7 +192,7 @@ watch(
         <div class="flex items-start gap-2">
           <icon-info-circle class="text-amber-600 text-base flex-shrink-0 mt-0.5" />
           <div class="flex-1 text-sm text-amber-900">
-            密钥创建后将只显示一次,请妥善保管。如果遗失,您需要重新创建新的密钥。
+            {{ t('openapi.apiKeys.noteDescription') }}
           </div>
         </div>
       </div>
@@ -201,7 +203,7 @@ watch(
           class="!rounded-lg"
           @click="() => emits('update:visible', false)"
         >
-          取消
+          {{ t('common.actions.cancel') }}
         </a-button>
         <a-button
           :loading="updateApiKeyLoading || createApiKeyLoading"
@@ -209,7 +211,7 @@ watch(
           html-type="submit"
           class="!rounded-lg !bg-gray-900 hover:!bg-gray-800"
         >
-          {{ api_key_id ? '保存' : '创建' }}
+          {{ api_key_id ? t('common.actions.save') : t('openapi.apiKeys.createButton') }}
         </a-button>
       </div>
     </a-form>

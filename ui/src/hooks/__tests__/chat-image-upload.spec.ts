@@ -34,7 +34,7 @@ describe('useChatImageUpload', () => {
     const result = triggerFileInput()
 
     expect(result).toBe(false)
-    expect(onError).toHaveBeenCalledWith('对话上传图片数量不能超过5张')
+    expect(onError).toHaveBeenCalledWith('对话上传图片数量不能超过 5 张')
     expect(click).not.toHaveBeenCalled()
   })
 

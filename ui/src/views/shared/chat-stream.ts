@@ -1,9 +1,10 @@
 import { QueueEvent } from '@/config'
-import type { ChatConversationMessage } from '@/models/chat'
 import {
   buildChatOutputParts,
   extractInlineImageUrls,
   mergeChatArtifacts,
+  type ChatArtifact,
+  type ChatOutputPart,
 } from './chat-output'
 
 type StreamEventData = {
@@ -39,10 +40,16 @@ export type ChatThought = {
   created_at: number
 }
 
-export type StreamMessage = Pick<
-  ChatConversationMessage,
-  'id' | 'conversation_id' | 'answer' | 'answer_parts' | 'artifacts' | 'latency' | 'total_token_count' | 'agent_thoughts'
->
+export type StreamMessage = {
+  id: string
+  conversation_id: string
+  answer: string
+  answer_parts: ChatOutputPart[]
+  artifacts: ChatArtifact[]
+  latency: number
+  total_token_count: number
+  agent_thoughts: ChatThought[]
+}
 
 export type StreamState = {
   position: number
@@ -113,9 +120,7 @@ const upsertThought = (
       : String(data.thought ?? previous.thought ?? ''),
     observation: String(data.observation ?? previous.observation ?? ''),
     tool: String(data.tool ?? previous.tool ?? ''),
-    tool_input: data.tool_input === undefined
-      ? previous.tool_input
-      : normalizeToolInput(data.tool_input),
+    tool_input: data.tool_input ?? previous.tool_input ?? {},
     latency: toPositiveNumber(data.latency) || previous.latency,
   }
 }
@@ -151,7 +156,7 @@ export const applyChatStreamEvent = (
   } else if (event === QueueEvent.agentAction) {
     upsertThought(thoughts, data, nextState, { appendThought: false })
     const observation = String(data.observation ?? '')
-    const existingUrls = mergeChatArtifacts([], message.artifacts).map(artifact => artifact.url)
+    const existingUrls = message.artifacts.map(artifact => String(artifact.url || '').trim())
     const inlineImageUrls = extractInlineImageUrls(observation, existingUrls)
     if (inlineImageUrls.length > 0) {
       const extractedArtifacts = inlineImageUrls.map((url, index) => ({
@@ -170,9 +175,10 @@ export const applyChatStreamEvent = (
     upsertThought(thoughts, data, nextState, { appendThought: false })
   } else if (event === QueueEvent.deepArtifactCreated) {
     upsertThought(thoughts, data, nextState, { appendThought: false })
-    const toolInput = normalizeToolInput(data.tool_input)
-    const artifactValue = (toolInput as { artifact?: unknown }).artifact ?? null
-    message.artifacts = mergeChatArtifacts(message.artifacts, [artifactValue])
+    const toolInput = (data.tool_input && typeof data.tool_input === 'object')
+      ? data.tool_input as Record<string, unknown>
+      : {}
+    message.artifacts = mergeChatArtifacts(message.artifacts, [toolInput.artifact || null])
     shouldRefreshOutputParts = true
   } else if (event === QueueEvent.error) {
     message.answer = String(data.observation ?? '')
@@ -201,7 +207,7 @@ export const applyChatStreamEvent = (
 
   message.agent_thoughts = thoughts
   if (shouldRefreshOutputParts) {
-    message.answer_parts = buildChatOutputParts(message.answer, mergeChatArtifacts([], message.artifacts))
+    message.answer_parts = buildChatOutputParts(message.answer, message.artifacts)
   }
   return { state: nextState, didUpdate: true }
 }

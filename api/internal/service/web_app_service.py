@@ -24,7 +24,6 @@ from .conversation_service import ConversationService
 from .language_model_service import LanguageModelService
 from .retrieval_service import RetrievalService
 from internal.core.agent.agents import AgentQueueManager
-from .app_config_service import call_config_loader
 
 
 @inject
@@ -57,11 +56,7 @@ class WebAppService(BaseService):
         app = self.get_web_app(token)
 
         # 2.根据App基础信息构建LLM
-        app_config = call_config_loader(
-            self.app_config_service.get_app_config,
-            app,
-            persist_changes=False,
-        )
+        app_config = self.app_config_service.get_app_config(app)
         if hasattr(self.language_model_service, "describe_runtime_capabilities"):
             capabilities = self.language_model_service.describe_runtime_capabilities(
                 app_config.get("model_config", {}),
@@ -163,15 +158,9 @@ class WebAppService(BaseService):
         tools = AppService._build_runtime_tools_for_config(
             app_config_service=self.app_config_service,
             retrieval_service=self.retrieval_service,
-            app_service=self.app_service,
             account=account,
             draft_app_config=app_config,
             flask_app=current_app._get_current_object(),
-            runtime_context={
-                "root_app_id": str(app.id),
-                "call_stack": [str(app.id)],
-                "account_id": str(account.id),
-            },
         )
 
         # 9.复用运行时Agent工厂，确保已发布WebApp与调试态应用共用深度思考链路

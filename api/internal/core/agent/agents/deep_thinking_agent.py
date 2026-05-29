@@ -2,18 +2,13 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass, field
-import json
 import logging
 import mimetypes
 import os
 import re
 import shlex
-import sys
 import time
 import uuid
-from types import ModuleType
-from urllib.parse import urlparse
 from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -47,68 +42,6 @@ _SANDBOX_LOCAL_PATH_PATTERNS = (
     r"/tmp/artifacts/[^\s)>]+",
     r"sandbox:/mnt/data/[^\s)>]+",
 )
-_DEEPAGENTS_EXCLUDED_TOOLS = frozenset({
-    "ls",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "glob",
-    "grep",
-})
-_REGISTERED_DEEPAGENTS_PROFILE_KEYS: set[str] = set()
-_PROVIDER_PROFILE_ALIASES: dict[str, tuple[str, ...]] = {
-    "google": ("google_genai",),
-    "google_genai": ("google",),
-    "wenxin": ("qianfan",),
-    "qianfan": ("wenxin",),
-    "zhipu": ("zhipuai",),
-    "zhipuai": ("zhipu",),
-    "grok": ("xai",),
-    "xai": ("grok",),
-}
-
-
-try:  # pragma: no cover - 仅在本地未安装 deepagents 时启用兜底桩
-    import deepagents as _deepagents_module  # noqa: F401
-except ImportError:  # pragma: no cover - 仅用于单测与本地导入兜底
-    deepagents_stub = ModuleType("deepagents")
-    deepagents_backends_stub = ModuleType("deepagents.backends")
-
-    @dataclass(slots=True)
-    class GeneralPurposeSubagentProfile:
-        enabled: bool = True
-        name: str = "general-purpose"
-        description: str = ""
-        system_prompt: str = ""
-
-    @dataclass(slots=True)
-    class HarnessProfile:
-        excluded_tools: frozenset[str] = frozenset()
-        excluded_middleware: frozenset[Any] = frozenset()
-        extra_middleware: tuple[Any, ...] = ()
-        general_purpose_subagent: Any = field(default_factory=GeneralPurposeSubagentProfile)
-        base_system_prompt: str = ""
-        system_prompt_suffix: str = ""
-        tool_description_overrides: dict[str, str] = field(default_factory=dict)
-
-    @dataclass(slots=True)
-    class StateBackend:
-        """deepagents 未安装时的占位后端。"""
-
-    def create_deep_agent(*_args: Any, **_kwargs: Any) -> Any:
-        raise ImportError("deepagents 未安装")
-
-    def register_harness_profile(*_args: Any, **_kwargs: Any) -> None:
-        return None
-
-    deepagents_stub.create_deep_agent = create_deep_agent
-    deepagents_stub.HarnessProfile = HarnessProfile
-    deepagents_stub.GeneralPurposeSubagentProfile = GeneralPurposeSubagentProfile
-    deepagents_stub.register_harness_profile = register_harness_profile
-    deepagents_backends_stub.StateBackend = StateBackend
-    deepagents_stub.backends = deepagents_backends_stub
-    sys.modules.setdefault("deepagents", deepagents_stub)
-    sys.modules.setdefault("deepagents.backends", deepagents_backends_stub)
 
 
 def _read_positive_int_env(env_name: str, default: int) -> int:
@@ -127,80 +60,6 @@ def _read_positive_int_env(env_name: str, default: int) -> int:
         return default
 
     return parsed_value
-
-
-def _normalize_profile_key(value: Any) -> str:
-    return str(value or "").strip().lower()
-
-
-def _deduplicate_profile_keys(keys: list[str]) -> list[str]:
-    deduplicated: list[str] = []
-    for key in keys:
-        normalized_key = _normalize_profile_key(key)
-        if not normalized_key or normalized_key in deduplicated:
-            continue
-        deduplicated.append(normalized_key)
-    return deduplicated
-
-
-def _infer_deepagents_profile_keys(model: Any) -> list[str]:
-    """根据当前模型实例尽量推断 deepagents profile key。"""
-    provider_candidates: list[str] = []
-    module_name = str(getattr(model.__class__, "__module__", "") or "").strip()
-    if ".providers." in module_name:
-        provider_candidates.append(module_name.split(".providers.", 1)[1].split(".", 1)[0])
-
-    llm_type = _normalize_profile_key(getattr(model, "_llm_type", ""))
-    if llm_type:
-        provider_candidates.append(llm_type)
-
-    provider_attr = _normalize_profile_key(getattr(model, "provider", ""))
-    if provider_attr:
-        provider_candidates.append(provider_attr)
-
-    expanded_candidates: list[str] = []
-    for provider in list(provider_candidates):
-        expanded_candidates.append(provider)
-        expanded_candidates.extend(_PROVIDER_PROFILE_ALIASES.get(provider, ()))
-
-    model_name = _normalize_profile_key(
-        getattr(model, "model_name", "")
-        or getattr(model, "model", "")
-        or getattr(model, "model_id", "")
-    )
-
-    profile_keys: list[str] = []
-    for provider in expanded_candidates:
-        if provider:
-            profile_keys.append(provider)
-            if model_name:
-                profile_keys.append(f"{provider}:{model_name}")
-
-    return _deduplicate_profile_keys(profile_keys)
-
-
-def _register_deepagents_harness_profile(model: Any) -> None:
-    """注册 deepagents harness profile，隐藏文件工具并关闭默认 general-purpose subagent。"""
-    profile_keys = _infer_deepagents_profile_keys(model)
-    if not profile_keys:
-        return
-
-    from deepagents import GeneralPurposeSubagentProfile, HarnessProfile, register_harness_profile  # noqa: PLC0415
-
-    profile = HarnessProfile(
-        excluded_tools=_DEEPAGENTS_EXCLUDED_TOOLS,
-        general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
-    )
-
-    for profile_key in profile_keys:
-        if profile_key in _REGISTERED_DEEPAGENTS_PROFILE_KEYS:
-            continue
-        try:
-            register_harness_profile(profile_key, profile)
-            _REGISTERED_DEEPAGENTS_PROFILE_KEYS.add(profile_key)
-            logger.debug("已注册 deepagents harness profile: %s", profile_key)
-        except Exception as exc:  # pragma: no cover - 仅在 deepagents profile API 异常时触发
-            logger.warning("注册 deepagents harness profile 失败: key=%s, error=%s", profile_key, exc)
 
 
 class DeepRouteDecision(BaseModel):
@@ -241,7 +100,6 @@ class DeepThinkingAgent(FunctionCallAgent):
         start_at = time.perf_counter()
         timeline = DeepTimelineMiddleware(task_id=task_id, publisher=self.agent_queue_manager.publish)
         query = self._extract_query(state["messages"][-1])
-        long_term_memory = str(state.get("long_term_memory", "") or "")
 
         route_step_id = uuid.uuid4()
         timeline.publish_step(
@@ -270,7 +128,6 @@ class DeepThinkingAgent(FunctionCallAgent):
                     task_id=task_id,
                     route_decision=route_decision,
                     timeline=timeline,
-                    long_term_memory=long_term_memory,
                 )
             except Exception as e:
                 logger.warning("deepagents 子 Agent 构建失败，降级为普通模式: %s", e)
@@ -286,7 +143,6 @@ class DeepThinkingAgent(FunctionCallAgent):
 
             deep_answer = ""
             artifacts: list[dict[str, Any]] = []
-            execution_error = ""
             try:
                 result = deep_agent.invoke({
                     "messages": [HumanMessage(content=query)],
@@ -319,7 +175,6 @@ class DeepThinkingAgent(FunctionCallAgent):
                     technical_detail=f"{type(e).__name__}: {e}",
                 )
                 deep_answer = f"深度思考执行时遇到错误: {e}"
-                execution_error = f"{type(e).__name__}: {e}"
             finally:
                 close_method = getattr(backend, "close", None)
                 if callable(close_method):
@@ -330,28 +185,11 @@ class DeepThinkingAgent(FunctionCallAgent):
 
         latency = time.perf_counter() - start_at
         deep_answer = self._sanitize_deep_answer(deep_answer, artifacts=artifacts)
-        self_check = self._build_final_self_check(
-            route_decision=route_decision,
-            used_sandbox=used_sandbox,
-            deep_answer=deep_answer,
-            artifacts=artifacts,
-            execution_error=execution_error,
-        )
-        timeline.publish_step(
-            step_id=uuid.uuid4(),
-            step_type="reflection",
-            status=self_check["status"],
-            title="最终一致性检查",
-            detail=self_check["detail"],
-            technical_detail=self_check["technical_detail"],
-            tool="self_check",
-        )
         completion_summary = self._build_completion_summary(
             route_decision=route_decision,
             used_sandbox=used_sandbox,
             deep_answer=deep_answer,
             artifacts=artifacts,
-            self_check_summary=self_check["summary"],
         )
         timeline.publish_complete(
             completion_summary,
@@ -366,7 +204,6 @@ class DeepThinkingAgent(FunctionCallAgent):
             used_sandbox=used_sandbox,
             deep_answer=deep_answer,
             artifacts=artifacts,
-            self_check=self_check,
         )
         return {"messages": [AIMessage(content=thinking_context)]}
 
@@ -385,10 +222,6 @@ class DeepThinkingAgent(FunctionCallAgent):
         routing_prompt = (
             "你是一个深度执行路由器。请判断这次任务是否需要沙箱执行、文件读写、"
             "代码执行、子任务拆解、产物输出。"
-            "请基于语义判断，不要只看关键词是否完全命中。"
-            "如果用户只是要方案、计划、攻略、总结等文本结果，而没有明确表达保存、导出、下载、附件、另存为、生成文档、导出成 markdown 等意图，就不要把 need_artifact_output 设为 true。"
-            "如果用户确实希望把结果保存为文件、导出、下载、附带附件，或需要可下载的 Markdown/文档，请把 need_artifact_output 设为 true；"
-            "对于方案类任务，若需要附件，优先生成 Markdown，而不是 PDF。"
             "如果需要生成 txt/csv/json/md/html/docx/xlsx/代码文件，need_artifact_output 必须为 true。"
             "如果需要执行 Python/Shell、读写真实文件或生成可下载附件，need_sandbox 必须为 true。"
         )
@@ -428,9 +261,7 @@ class DeepThinkingAgent(FunctionCallAgent):
         normalized_query = query.lower()
         artifact_keywords = [
             "txt", "csv", "json", "markdown", "md", "html", "word", "docx",
-            "excel", "xlsx", "pdf", "文件", "附件", "导出", "导出成 markdown", "导出成md",
-            "导出为 markdown", "导出为md", "输出成 markdown", "输出成md", "生成文档",
-            "生成 markdown", "生成md", "保存", "保存为", "另存为", "下载", "表格",
+            "excel", "xlsx", "pdf", "文件", "附件", "导出", "生成文档", "表格",
         ]
         execute_keywords = [
             "python", "shell", "bash", "脚本", "代码", "运行", "执行", "测试",
@@ -589,7 +420,6 @@ class DeepThinkingAgent(FunctionCallAgent):
         task_id,
         route_decision: DeepRouteDecision,
         timeline: DeepTimelineMiddleware,
-        long_term_memory: str = "",
     ):
         from deepagents import create_deep_agent  # noqa: PLC0415
         from deepagents.backends import StateBackend  # noqa: PLC0415
@@ -673,25 +503,19 @@ class DeepThinkingAgent(FunctionCallAgent):
                 tool="state_backend",
             )
 
-        _register_deepagents_harness_profile(self.llm)
         system_prompt = DEEP_THINKING_SYSTEM_PROMPT.format(
             preset_prompt=self.agent_config.preset_prompt,
-            long_term_memory=long_term_memory,
+            long_term_memory="",
         )
         system_prompt += (
             f"\n\n## 本次运行约束\n"
             f"- 是否允许沙箱执行: {'是' if sandbox_enabled else '否'}\n"
             f"- 产物输出目录: {artifact_root}\n"
-            f"- 优先复用当前应用已经绑定好的工具与 agent_bindings；只有在确实需要上下文隔离时才考虑任务委派。\n"
-            f"- 如需生成最终可下载文件，请只写入该目录，最终交由系统收口为附件链接。\n"
+            f"- 如需生成最终可下载文件，请只写入该目录。\n"
             f"- 生成完文件后，请在最终回答中简要说明文件名称和用途。\n"
-            f"- 只有在用户明确要求配图或视觉材料时才调用图像工具，默认不要生成图片。\n"
-            f"- 方案类任务默认先输出完整文本结论；如果用户明确要保存、导出、下载、附件、另存为、生成文档或导出成 markdown，再额外生成附件。\n"
-            f"- 如果需要附件，优先生成 Markdown，不要默认转成 PDF。\n"
-            f"- 附件是可选补充材料，不得阻塞文本结果的输出。\n"
+            f"- 如需生成配图，默认只保留一张主图；如果已经成功生成且可直接满足需求，不要重复调用图像工具。\n"
             f"- 禁止把沙箱本地路径（如 /workspace、/home/user、/tmp、sandbox:/mnt/data 下的路径）当成下载链接返回给用户。\n"
-            f"- 如果生成了附件，只能说明文件名和用途，真实下载链接由系统注入。\n"
-            f"- 在最终回答前，请做一次轻量自检：确认计划是否完成、附件是否真实可下载、最终答案是否没有泄漏沙箱本地路径。"
+            f"- 如果生成了附件，只能说明文件名和用途，真实下载链接由系统注入。"
         )
         if not sandbox_enabled:
             system_prompt += "\n- 当前未提供沙箱执行能力，不要调用 execute 解决任务。"
@@ -851,7 +675,6 @@ class DeepThinkingAgent(FunctionCallAgent):
         used_sandbox: bool,
         deep_answer: str,
         artifacts: list[dict[str, Any]],
-        self_check_summary: str = "",
     ) -> str:
         summary_parts = [route_decision.summary or "深度思考已完成"]
         if used_sandbox:
@@ -862,8 +685,6 @@ class DeepThinkingAgent(FunctionCallAgent):
             summary_parts.append("生成附件：" + "、".join(artifact["name"] for artifact in artifacts[:5]))
         if deep_answer:
             summary_parts.append("已生成最终答复")
-        if self_check_summary:
-            summary_parts.append(self_check_summary)
         return "；".join(summary_parts)
 
     @staticmethod
@@ -873,7 +694,6 @@ class DeepThinkingAgent(FunctionCallAgent):
         used_sandbox: bool,
         deep_answer: str,
         artifacts: list[dict[str, Any]],
-        self_check: dict[str, Any] | None = None,
     ) -> str:
         artifact_summary = ""
         if artifacts:
@@ -883,19 +703,11 @@ class DeepThinkingAgent(FunctionCallAgent):
             )
             artifact_summary = f"\n\n<generated_artifacts>\n{artifact_lines}\n</generated_artifacts>"
 
-        self_check_summary = ""
-        if self_check:
-            self_check_summary = (
-                "\n\n<deep_self_check>\n"
-                f"{json.dumps(self_check, ensure_ascii=False)}\n"
-                "</deep_self_check>"
-            )
-
         final_answer_instruction = (
             "以上是深度思考阶段的分析结果。请基于此给用户一个简洁、准确的最终回答。"
             "如果 <generated_artifacts> 存在，只能使用其中的真实下载 URL；"
             "绝不要向用户暴露沙箱本地路径（包括 sandbox:/mnt/data），也不要伪造“点击下载”链接。"
-            "如果 <generated_artifacts> 不存在，请直接给出完整文本结果；如果 self_check 提示本次未生成附件，请用一句简短提醒说明附件是可选补充材料，但不要把它描述成失败。"
+            "如果 <generated_artifacts> 不存在，请明确说明当前没有可下载附件。"
         )
 
         return (
@@ -909,81 +721,8 @@ class DeepThinkingAgent(FunctionCallAgent):
             f"</deep_execution_summary>\n\n"
             f"<deep_thinking_result>\n{deep_answer}\n</deep_thinking_result>"
             f"{artifact_summary}\n\n"
-            f"{self_check_summary}"
             f"{final_answer_instruction}"
         )
-
-    @classmethod
-    def _build_final_self_check(
-        cls,
-        *,
-        route_decision: DeepRouteDecision,
-        used_sandbox: bool,
-        deep_answer: str,
-        artifacts: list[dict[str, Any]],
-        execution_error: str = "",
-    ) -> dict[str, Any]:
-        artifact_urls = [str(artifact.get("url", "")).strip() for artifact in artifacts]
-        invalid_artifact_urls = [
-            url for url in artifact_urls
-            if url and urlparse(url).scheme not in {"http", "https"}
-        ]
-        local_path_leaked = any(
-            pattern in deep_answer
-            for pattern in (
-                "/workspace/artifacts/",
-                "/home/user/artifacts/",
-                "/tmp/artifacts/",
-                "sandbox:/mnt/data/",
-            )
-        )
-
-        issues: list[str] = []
-        if execution_error:
-            issues.append("执行阶段出现异常")
-        if local_path_leaked:
-            issues.append("最终答案仍包含沙箱本地路径")
-        if invalid_artifact_urls:
-            issues.append("存在非 HTTP(S) 的附件链接")
-        artifact_missing = not artifacts and route_decision.need_artifact_output
-        if artifact_missing and issues:
-            issues.append("任务需要产物输出但未生成附件")
-
-        if issues:
-            status = "error"
-            summary = "最终自检未通过"
-            detail = "；".join(issues)
-        elif artifact_missing:
-            status = "warning"
-            summary = "最终自检通过（提醒：未生成附件）"
-            detail = "已完成轻量自检：答案未泄漏沙箱本地路径。提醒：本次未生成附件，但附件是可选补充材料，文本结果已可直接使用。"
-        else:
-            status = "success"
-            summary = "最终自检通过"
-            detail = "已完成轻量自检：答案未泄漏沙箱本地路径，附件均为真实下载链接。"
-        technical_detail = json.dumps(
-            {
-                "status": status,
-                "used_sandbox": used_sandbox,
-                "execution_error": execution_error,
-                "artifact_count": len(artifacts),
-                "artifact_missing": artifact_missing,
-                "artifact_urls": artifact_urls,
-                "invalid_artifact_urls": invalid_artifact_urls,
-                "local_path_leaked": local_path_leaked,
-                "route_need_sandbox": route_decision.need_sandbox,
-                "route_need_file_io": route_decision.need_file_io,
-                "route_need_execute": route_decision.need_execute,
-                "route_need_subagent": route_decision.need_subagent,
-            },
-            ensure_ascii=False,
-        )
-        return {
-            "status": status,
-            "summary": summary,
-            "detail": detail,
-            "technical_detail": technical_detail,
-        }
 
     @classmethod
     def _sanitize_deep_answer(cls, deep_answer: str, *, artifacts: list[dict[str, Any]]) -> str:

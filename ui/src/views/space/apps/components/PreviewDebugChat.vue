@@ -21,6 +21,7 @@ import { getErrorMessage } from '@/utils/error'
 import { Message } from '@arco-design/web-vue'
 import AudioRecorder from 'js-audio-recorder'
 import { computed, nextTick, onMounted, onUnmounted, type PropType, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import {
@@ -34,6 +35,7 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 // 1.定义自定义组件所需数据
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const SPACE_APP_DEBUG_QUERY_DRAFT_STORAGE_KEY_PREFIX = 'draft:space-apps:debug-query'
 const props = defineProps({
   app: {
@@ -323,13 +325,17 @@ const handleScroll = async (event: UIEvent) => {
 const handleSubmit = async () => {
   // 5.1 检测是否录入了query，如果没有则结束
   if (query.value.trim() === '') {
-    Message.warning('用户提问不能为空')
+    Message.warning(t('appStudio.debug.emptyQuery'))
     return
   }
 
   // 5.2 检测上次提问是否结束，如果没结束不能发起新提问
   if (debugChatLoading.value) {
-    Message.warning('上一次提问还未结束，请稍等')
+    Message.warning(t('appStudio.debug.previousRequestPending'))
+    return
+  }
+  if (image_urls.value.length > 0 && !canImageInput.value) {
+    Message.warning(t('appStudio.debug.imageInputUnsupported'))
     return
   }
   if (image_urls.value.length > 0 && !canImageInput.value) {
@@ -472,9 +478,9 @@ const handleStartRecord = async () => {
   try {
     isRecording.value = true
     await currentRecorder.start()
-    Message.success('开始录音')
+    Message.success(t('appStudio.debug.recordingStarted'))
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '录音失败'))
+    Message.error(getErrorMessage(error, t('appStudio.debug.recordingFailed')))
     isRecording.value = false
   }
 }
@@ -490,10 +496,10 @@ const handleStopRecord = async () => {
 
       // 11.2 调用语音转文本处理器并将文本填充到query中
       await handleAudioToText(audioBlob.value)
-      Message.success('语音转文本成功')
+      Message.success(t('appStudio.debug.audioToTextSuccess'))
       query.value = text.value
     } catch (error: unknown) {
-      Message.error(getErrorMessage(error, '录音失败'))
+      Message.error(getErrorMessage(error, t('appStudio.debug.recordingFailed')))
     } finally {
       isRecording.value = false // 标记为停止录音
     }
@@ -679,8 +685,8 @@ onUnmounted(() => {
               :submit-loading="debugChatLoading"
               :audio-to-text-loading="audioToTextLoading"
               :is-recording="isRecording"
-              clear-title="清空调试会话"
-              placeholder="发送调试消息"
+              :clear-title="t('appStudio.debug.clearSession')"
+              :placeholder="t('appStudio.debug.placeholder')"
               @clear="handleClearConversation"
               @upload="triggerFileInput"
               @file-change="(event) => handleFileChange(event)"
@@ -698,7 +704,7 @@ onUnmounted(() => {
           </div>
           <!-- 底部提示信息 -->
           <div class="text-center text-gray-500 text-xs py-4">
-            内容由AI生成，无法确保真实准确，仅供参考
+            {{ t('chat.messages.aiGeneratedDisclaimer') }}
           </div>
         </div>
         <!-- 停止会话按钮 -->

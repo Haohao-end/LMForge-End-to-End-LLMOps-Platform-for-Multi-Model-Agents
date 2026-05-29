@@ -167,7 +167,6 @@ class Config:
         # 辅助Agent应用id标识
         self.ASSISTANT_AGENT_ID = _get_env("ASSISTANT_AGENT_ID")
         self.ASSISTANT_MCP_BINDINGS = _get_json_env("ASSISTANT_MCP_BINDINGS", [])
-        self.ASSISTANT_MCP_TOOL_SNAPSHOTS = _get_json_env("ASSISTANT_MCP_TOOL_SNAPSHOTS", [])
         self.IMAGE_REQUEST_POLICY = _get_env("IMAGE_REQUEST_POLICY")
         self.VISION_FALLBACK_PROVIDER = _get_env("VISION_FALLBACK_PROVIDER")
         self.VISION_FALLBACK_MODEL = _get_env("VISION_FALLBACK_MODEL")

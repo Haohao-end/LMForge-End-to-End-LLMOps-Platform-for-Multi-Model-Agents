@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { markRaw, onBeforeUnmount, onMounted, ref, computed, defineAsyncComponent } from 'vue'
+import { markRaw, onBeforeUnmount, onMounted, ref, computed, defineAsyncComponent, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ConnectionMode, Panel, useVueFlow, VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { debounce } from 'lodash'
+import { useI18n } from 'vue-i18n'
 import {
   useCancelPublishWorkflow,
   useGetDraftGraph,
@@ -54,6 +55,7 @@ const CodeNodeInfo = defineAsyncComponent(
 // 1.定义页面所需数据
 const route = useRoute()
 const router = useRouter()
+const { t, locale } = useI18n()
 const workflowId = ref<string>(String(route.params?.workflow_id ?? '')) // 缓存 workflow_id，避免路由切换时丢失
 const isPreviewMode = computed(() => route.name === 'store-workflows-preview') // 判断是否为预览模式
 const NOTE_TYPES = {
@@ -70,15 +72,15 @@ const NOTE_TYPES = {
   if_else: markRaw(IfElseNode),
   end: markRaw(EndNode),
 }
-const NODE_DATA_MAP: Record<string, Record<string, unknown>> = {
+const NODE_DATA_MAP = computed<Record<string, Record<string, unknown>>>(() => ({
   start: {
-    title: '开始节点',
-    description: '工作流的起点节点，支持定义工作流的起点输入等信息',
+    title: t('workflowEditor.nodePalette.start.title'),
+    description: t('workflowEditor.nodePalette.start.description'),
     inputs: [],
   },
   llm: {
-    title: '大语言模型',
-    description: '调用大语言模型，根据输入参数和提示词生成回复。',
+    title: t('workflowEditor.nodePalette.llm.title'),
+    description: t('workflowEditor.nodePalette.llm.description'),
     prompt: '',
     model_config: {
       provider: 'openai',
@@ -95,8 +97,8 @@ const NODE_DATA_MAP: Record<string, Record<string, unknown>> = {
     outputs: [{ name: 'output', type: 'string', value: { type: 'generated', content: '' } }],
   },
   tool: {
-    title: '扩展插件',
-    description: '调用插件广场或自定义API插件，支持能力扩展和复用',
+    title: t('workflowEditor.nodePalette.tool.title'),
+    description: t('workflowEditor.nodePalette.tool.description'),
     tool_type: '',
     provider_id: '',
     tool_id: '',
@@ -110,8 +112,8 @@ const NODE_DATA_MAP: Record<string, Record<string, unknown>> = {
     },
   },
   dataset_retrieval: {
-    title: '知识库检索',
-    description: '根据输入的参数，在选定的知识库中检索相关片段并召回，返回切片列表',
+    title: t('workflowEditor.nodePalette.datasetRetrieval.title'),
+    description: t('workflowEditor.nodePalette.datasetRetrieval.description'),
     dataset_ids: [],
     retrieval_config: {
       retrieval_strategy: 'semantic',
@@ -131,15 +133,15 @@ const NODE_DATA_MAP: Record<string, Record<string, unknown>> = {
     meta: { datasets: [] },
   },
   template_transform: {
-    title: '模板转换',
-    description: '对多个字符串变量的格式进行处理',
+    title: t('workflowEditor.nodePalette.templateTransform.title'),
+    description: t('workflowEditor.nodePalette.templateTransform.description'),
     template: '',
     inputs: [],
     outputs: [{ name: 'output', type: 'string', value: { type: 'generated', content: '' } }],
   },
   http_request: {
-    title: 'HTTP请求',
-    description: '配置外部API服务，并发起请求。',
+    title: t('workflowEditor.nodePalette.httpRequest.title'),
+    description: t('workflowEditor.nodePalette.httpRequest.description'),
     url: '',
     method: 'get',
     inputs: [],
@@ -149,15 +151,15 @@ const NODE_DATA_MAP: Record<string, Record<string, unknown>> = {
     ],
   },
   code: {
-    title: 'Python代码执行',
-    description: '编写代码，处理输入输出变量来生成返回值',
+    title: t('workflowEditor.nodePalette.code.title'),
+    description: t('workflowEditor.nodePalette.code.description'),
     code: '',
     inputs: [],
     outputs: [],
   },
   text_processor: {
-    title: '文本处理',
-    description: '对输入文本执行去空格、大小写等常见处理',
+    title: t('workflowEditor.nodePalette.textProcessor.title'),
+    description: t('workflowEditor.nodePalette.textProcessor.description'),
     mode: 'trim',
     inputs: [{ name: 'text', type: 'string', value: { type: 'literal', content: '' } }],
     outputs: [
@@ -166,32 +168,32 @@ const NODE_DATA_MAP: Record<string, Record<string, unknown>> = {
     ],
   },
   variable_assigner: {
-    title: '变量赋值',
-    description: '设置变量值，可直接填写字面量或引用上游节点变量',
+    title: t('workflowEditor.nodePalette.variableAssigner.title'),
+    description: t('workflowEditor.nodePalette.variableAssigner.description'),
     inputs: [{ name: 'value', type: 'string', value: { type: 'literal', content: '' } }],
     outputs: [{ name: 'value', type: 'string', value: { type: 'generated', content: '' } }],
   },
   parameter_extractor: {
-    title: '参数提取',
-    description: '从文本中提取结构化字段，支持 JSON 和 key=value 格式',
+    title: t('workflowEditor.nodePalette.parameterExtractor.title'),
+    description: t('workflowEditor.nodePalette.parameterExtractor.description'),
     mode: 'auto',
     inputs: [{ name: 'text', type: 'string', value: { type: 'literal', content: '' } }],
     outputs: [{ name: 'param', type: 'string', required: true, value: { type: 'generated', content: '' } }],
   },
   if_else: {
-    title: '条件分支',
-    description: '根据条件判断结果选择不同的执行路径',
+    title: t('workflowEditor.nodePalette.ifElse.title'),
+    description: t('workflowEditor.nodePalette.ifElse.description'),
     logical_operator: 'and',
     conditions: [],
     inputs: [],
     outputs: [{ name: 'result', type: 'boolean', value: { type: 'generated', content: false } }],
   },
   end: {
-    title: '结束节点',
-    description: '工作流的结束节点，支持定义工作流最终输出的变量等信息',
+    title: t('workflowEditor.nodePalette.end.title'),
+    description: t('workflowEditor.nodePalette.end.description'),
     outputs: [],
   },
-}
+}))
 const isInitializing = ref(true) // 数据是否初始化
 const {
   onPaneReady, // 面板加载完毕事件
@@ -251,6 +253,118 @@ const handleDebugSuccess = async () => {
     await loadWorkflow(workflowId.value)
   }, 500)
 }
+
+const NODE_DEFAULT_TEXTS: Record<
+  string,
+  { titles: string[]; descriptions: string[] }
+> = {
+  start: {
+    titles: ['开始节点', 'Start Node'],
+    descriptions: [
+      '工作流的起点节点，支持定义工作流的起点输入等信息',
+      'The workflow entry node, used to define the workflow input and related information.',
+    ],
+  },
+  llm: {
+    titles: ['大语言模型', 'Large Language Model'],
+    descriptions: [
+      '调用大语言模型，根据输入参数和提示词生成回复。',
+      'Call an LLM to generate a reply based on the input parameters and prompt.',
+    ],
+  },
+  tool: {
+    titles: ['扩展插件', 'Plugin'],
+    descriptions: [
+      '调用插件广场或自定义API插件，支持能力扩展和复用',
+      'Call marketplace or custom API plugins to extend and reuse capabilities.',
+    ],
+  },
+  dataset_retrieval: {
+    titles: ['知识库检索', 'Knowledge Search'],
+    descriptions: [
+      '根据输入的参数，在选定的知识库中检索相关片段并召回，返回切片列表',
+      'Retrieve relevant chunks from the selected knowledge base based on the input parameters.',
+    ],
+  },
+  template_transform: {
+    titles: ['模板转换', 'Template Transform'],
+    descriptions: ['对多个字符串变量的格式进行处理', 'Process the format of multiple string variables.'],
+  },
+  http_request: {
+    titles: ['HTTP请求', 'HTTP Request'],
+    descriptions: ['配置外部API服务，并发起请求。', 'Configure an external API service and send a request.'],
+  },
+  code: {
+    titles: ['Python代码执行', 'Python Code'],
+    descriptions: ['编写代码，处理输入输出变量来生成返回值', 'Write code to process input and output variables and generate a result.'],
+  },
+  text_processor: {
+    titles: ['文本处理', 'Text Processing'],
+    descriptions: [
+      '对输入文本执行去空格、大小写等常见处理',
+      'Perform common text cleanup operations such as trimming and case conversion.',
+    ],
+  },
+  variable_assigner: {
+    titles: ['变量赋值', 'Assign Variable'],
+    descriptions: [
+      '设置变量值，可直接填写字面量或引用上游节点变量',
+      'Set variable values with literals or references to upstream nodes.',
+    ],
+  },
+  parameter_extractor: {
+    titles: ['参数提取', 'Parameter Extraction'],
+    descriptions: [
+      '从文本中提取结构化字段，支持 JSON 和 key=value 格式',
+      'Extract structured fields from text. Supports JSON and key=value formats.',
+    ],
+  },
+  if_else: {
+    titles: ['条件分支', 'Condition Branch'],
+    descriptions: ['根据条件判断结果选择不同的执行路径', 'Choose different execution paths based on the condition result.'],
+  },
+  end: {
+    titles: ['结束节点', 'End Node'],
+    descriptions: [
+      '工作流的结束节点，支持定义工作流最终输出的变量等信息',
+      'The workflow exit node, used to define final output variables.',
+    ],
+  },
+}
+
+const syncBuiltInNodeDisplayText = () => {
+  allNodes.value.forEach((node) => {
+    const nodeType = String(node.type || '')
+    const defaults = NODE_DEFAULT_TEXTS[nodeType]
+    const localizedNode = NODE_DATA_MAP.value[nodeType]
+    if (!defaults || !localizedNode) return
+
+    const data = (node.data ?? {}) as Record<string, unknown>
+    const currentTitle = String(data.title ?? '')
+    const currentDescription = String(data.description ?? '')
+    const titleMatches =
+      !currentTitle ||
+      defaults.titles.some((item) => currentTitle === item || currentTitle.startsWith(`${item}_`))
+    const descriptionMatches =
+      !currentDescription || defaults.descriptions.includes(currentDescription)
+
+    if (titleMatches) {
+      data.title = currentTitle.includes('_')
+        ? `${String(localizedNode.title)}_${currentTitle.split('_').slice(-1)[0]}`
+        : localizedNode.title
+    }
+    if (descriptionMatches) {
+      data.description = localizedNode.description
+    }
+    node.data = data
+  })
+}
+
+watch(
+  () => [locale.value, allNodes.value.map((node) => `${node.id}:${String(node.data?.title ?? '')}:${String(node.data?.description ?? '')}`).join('|')],
+  () => syncBuiltInNodeDisplayText(),
+  { immediate: true },
+)
 
 const VARIABLE_NAME_REGEXP = /^[A-Za-z_][A-Za-z0-9_]*$/
 const hasInvalidVariableNames = (variables: Array<Record<string, unknown>> = []) => {
@@ -349,7 +463,7 @@ const {
   isInitializing,
   nodeDataMap: NODE_DATA_MAP,
   triggerDraftGraphSave: () => triggerDraftGraphSave(),
-  onPreviewEditBlocked: () => Message.info('预览模式下无法编辑节点配置'),
+  onPreviewEditBlocked: () => Message.info(t('workflowEditor.previewEditBlocked')),
   onCanvasSelectionClear: clearCanvasSelection,
   onNodeSelected: openNodePanel,
 })
@@ -449,26 +563,26 @@ onBeforeUnmount(() => {
                 class="rounded h-[18px] leading-[18px] bg-blue-100 text-blue-700"
               >
                 <icon-eye />
-                预览模式（只读）
+                {{ t('workflowEditor.previewMode') }}
               </a-tag>
-              <a-tag
-                v-if="showDebugPassedTag"
-                size="small"
-                class="rounded h-[18px] leading-[18px] bg-green-100 text-green-700"
-              >
-                <icon-check-circle />
-                已调试通过
-              </a-tag>
-              <a-tag
-                v-if="showDebugPendingTag"
-                size="small"
-                class="rounded h-[18px] leading-[18px] bg-orange-100 text-orange-700"
-              >
-                <icon-exclamation-circle />
-                未调试
-              </a-tag>
+                <a-tag
+                  v-if="showDebugPassedTag"
+                  size="small"
+                  class="rounded h-[18px] leading-[18px] bg-green-100 text-green-700"
+                >
+                  <icon-check-circle />
+                {{ t('appStudio.shell.debuggedPassed') }}
+                </a-tag>
+                <a-tag
+                  v-if="showDebugPendingTag"
+                  size="small"
+                  class="rounded h-[18px] leading-[18px] bg-orange-100 text-orange-700"
+                >
+                  <icon-exclamation-circle />
+                {{ t('appStudio.shell.notDebugged') }}
+                </a-tag>
               <a-tag v-if="!isPreviewMode" size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
-                已自动保存 {{ autoSavedTimeText }}
+                {{ t('appStudio.shell.autoSavedAt', { time: autoSavedTimeText }) }}
               </a-tag>
             </div>
           </div>
@@ -485,7 +599,7 @@ onBeforeUnmount(() => {
             @click="handleAddToMySpace"
           >
             <template #icon><icon-plus /></template>
-            添加到我的个人空间
+            {{ t('appStudio.shell.personalSpace') }}
           </a-button>
 
           <!-- 编辑模式：发布按钮组 -->
@@ -496,7 +610,7 @@ onBeforeUnmount(() => {
               class="!rounded-tl-lg !rounded-bl-lg"
               @click="handleUpdatePublish"
             >
-              更新发布
+              {{ t('appStudio.shell.publishUpdate') }}
             </a-button>
             <a-dropdown position="br">
               <a-button
@@ -511,7 +625,7 @@ onBeforeUnmount(() => {
                 <a-doption
                   @click="handleUpdateConfig"
                 >
-                  更新配置
+                  {{ t('appStudio.shell.publishConfigOnly') }}
                 </a-doption>
                 <a-doption
                   :disabled="!canOperatePublishedActions"
@@ -524,7 +638,7 @@ onBeforeUnmount(() => {
                   class="!text-red-700"
                   @click="handleCancelPublishAction"
                 >
-                  取消发布
+                  {{ t('appStudio.shell.cancelPublish') }}
                 </a-doption>
               </template>
             </a-dropdown>
@@ -578,7 +692,7 @@ onBeforeUnmount(() => {
                   <template #icon>
                     <icon-plus-circle-fill />
                   </template>
-                  节点
+                  {{ t('workflowEditor.addNodeButton') }}
                 </a-button>
                 <template #content>
                   <div
@@ -595,10 +709,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-blue-700 rounded-lg flex-shrink-0">
                             <icon-home />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">开始节点</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.start.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          工作流的起始节点，支持定义工作流的起点输入等信息。
+                          {{ t('workflowEditor.nodePalette.start.description') }}
                         </div>
                       </div>
 
@@ -611,10 +725,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-sky-500 rounded-lg flex-shrink-0">
                             <icon-language />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">大语言模型</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.llm.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          调用大语言模型，根据输入参数和提示词生成回复
+                          {{ t('workflowEditor.nodePalette.llm.description') }}
                         </div>
                       </div>
 
@@ -627,10 +741,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-orange-500 rounded-lg flex-shrink-0">
                             <icon-tool />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">扩展插件</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.tool.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          添加插件广场内或自定义API插件，支持能力扩展和复用。
+                          {{ t('workflowEditor.nodePalette.tool.description') }}
                         </div>
                       </div>
 
@@ -643,10 +757,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-violet-500 rounded-lg flex-shrink-0">
                             <icon-storage />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">知识库检索</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.datasetRetrieval.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          根据输入的参数，在选定的知识库中检索相关片段并召回，返回切片列表。
+                          {{ t('workflowEditor.nodePalette.datasetRetrieval.description') }}
                         </div>
                       </div>
 
@@ -659,10 +773,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-emerald-400 rounded-lg flex-shrink-0">
                             <icon-branch />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">模板转换</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.templateTransform.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          对多个字符串变量的格式进行处理。
+                          {{ t('workflowEditor.nodePalette.templateTransform.description') }}
                         </div>
                       </div>
 
@@ -675,10 +789,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-rose-500 rounded-lg flex-shrink-0">
                             <icon-link />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">HTTP请求</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.httpRequest.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          配置外部API服务，并发起请求。
+                          {{ t('workflowEditor.nodePalette.httpRequest.description') }}
                         </div>
                       </div>
 
@@ -691,10 +805,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-cyan-500 rounded-lg flex-shrink-0">
                             <icon-code />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">Python代码</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.code.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          编写代码处理输入输出变量来生成返回值。
+                          {{ t('workflowEditor.nodePalette.code.description') }}
                         </div>
                       </div>
 
@@ -707,10 +821,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-teal-500 rounded-lg flex-shrink-0">
                             <icon-branch />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">文本处理</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.textProcessor.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          对输入文本执行去首尾空格、大小写转换等格式处理。
+                          {{ t('workflowEditor.nodePalette.textProcessor.description') }}
                         </div>
                       </div>
 
@@ -723,10 +837,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-lime-600 rounded-lg flex-shrink-0">
                             <icon-branch />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">变量赋值</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.variableAssigner.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          设置变量值，支持直接输入或引用上游节点变量。
+                          {{ t('workflowEditor.nodePalette.variableAssigner.description') }}
                         </div>
                       </div>
 
@@ -739,10 +853,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-indigo-500 rounded-lg flex-shrink-0">
                             <icon-branch />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">参数提取</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.parameterExtractor.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          从文本中提取结构化字段，支持 JSON 或 key=value 格式。
+                          {{ t('workflowEditor.nodePalette.parameterExtractor.description') }}
                         </div>
                       </div>
 
@@ -755,10 +869,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-amber-500 rounded-lg flex-shrink-0">
                             <icon-branch />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">条件分支</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.ifElse.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          根据条件判断结果选择不同的执行路径（True/False）。
+                          {{ t('workflowEditor.nodePalette.ifElse.description') }}
                         </div>
                       </div>
 
@@ -771,10 +885,10 @@ onBeforeUnmount(() => {
                           <a-avatar shape="square" :size="24" class="bg-red-700 rounded-lg flex-shrink-0">
                             <icon-filter />
                           </a-avatar>
-                          <div class="text-gray-700 font-semibold text-sm">结束节点</div>
+                          <div class="text-gray-700 font-semibold text-sm">{{ t('workflowEditor.nodePalette.end.title') }}</div>
                         </div>
                         <div class="text-gray-500 text-xs line-clamp-2">
-                          工作流的结束节点，支持定义工作流最终输出的变量等信息。
+                          {{ t('workflowEditor.nodePalette.end.description') }}
                         </div>
                       </div>
                     </div>
@@ -783,7 +897,7 @@ onBeforeUnmount(() => {
               </a-trigger>
               <!-- 自适应布局&视口大小 -->
               <div class="flex items-center gap-3">
-                <a-tooltip content="自适应布局">
+                <a-tooltip :content="t('appStudio.detail.autoLayout')">
                   <a-button
                     size="small"
                     type="text"
@@ -800,7 +914,7 @@ onBeforeUnmount(() => {
                   @select="handleZoomSelect"
                 >
                   <a-button size="small" class="!text-gray-700 px-2 rounded-lg gap-1 w-[80px]">
-                    {{ (zoomLevel * 100).toFixed(0) }}%
+                {{ (zoomLevel * 100).toFixed(0) }}%
                     <icon-down />
                   </a-button>
                   <template #content>
@@ -821,7 +935,7 @@ onBeforeUnmount(() => {
                 <template #icon>
                   <icon-play-arrow />
                 </template>
-                调试
+                {{ t('workflowEditor.debugTitle') }}
               </a-button>
             </a-space>
           </div>

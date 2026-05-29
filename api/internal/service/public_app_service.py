@@ -29,7 +29,6 @@ from internal.schema.public_app_schema import GetPublicAppsWithPageReq
 from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .base_service import BaseService
-from .app_config_service import AppConfigService
 from .language_model_service import LanguageModelService
 from .public_agent_registry_service import PublicAgentRegistryService
 
@@ -40,7 +39,6 @@ class PublicAppService(BaseService):
     """公共应用服务"""
     db: SQLAlchemy
     builtin_provider_manager: BuiltinProviderManager
-    app_config_service: AppConfigService | None = None
     language_model_service: LanguageModelService | None = None
     public_agent_registry_service: PublicAgentRegistryService | None = None
 
@@ -405,14 +403,6 @@ class PublicAppService(BaseService):
             "preset_prompt": app_config.preset_prompt,
             "tools": app_config.tools,
             "mcp_bindings": getattr(app_config, "mcp_bindings", []),
-            "agent_bindings": [
-                {
-                    "app_id": binding["app_id"],
-                    "invoke_mode": binding.get("invoke_mode", "tool"),
-                }
-                for binding in getattr(app_config, "agent_bindings", [])
-                if isinstance(binding, dict) and str(binding.get("app_id", "")).strip()
-            ],
             "workflows": app_config.workflows,
             "retrieval_config": app_config.retrieval_config,
             "long_term_memory": app_config.long_term_memory,
@@ -548,7 +538,6 @@ class PublicAppService(BaseService):
                 "preset_prompt": app_config.preset_prompt,
                 "tools": self._enrich_tools(app_config.tools),  # 填充完整的 tool 信息
                 "mcp_bindings": getattr(app_config, "mcp_bindings", []),
-                "agent_bindings": agent_bindings,
                 "workflows": self._enrich_workflows(app_config.workflows),
                 "datasets": [],  # 公共应用不暴露知识库详情
                 "retrieval_config": app_config.retrieval_config,

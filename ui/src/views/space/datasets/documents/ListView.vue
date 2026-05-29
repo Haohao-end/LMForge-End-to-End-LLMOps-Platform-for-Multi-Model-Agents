@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
  useDeleteDocument,
@@ -15,6 +16,7 @@ type DocumentRecord = Record<string, any>
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const hitModalVisible = ref(false)
 const updateDocumentNameModalVisible = ref(false)
 const updateDocumentID = ref('')
@@ -63,13 +65,17 @@ const updateRouteQuery = async (patch: Record<string, string | number | undefine
 }
 
 const getProcessingStatusLabel = (status: string) => {
- const normalizedStatus = String(status || '').toLowerCase()
+  const normalizedStatus = String(status || '').toLowerCase()
 
- if (normalizedStatus === 'completed') return '已完成'
- if (normalizedStatus === 'error') return '处理失败'
- if (['parsing', 'splitting', 'indexing', 'processing'].includes(normalizedStatus)) return '处理中'
- if (['waiting', 'pending', 'queued'].includes(normalizedStatus)) return '待处理'
- return '处理中'
+  if (normalizedStatus === 'completed') return t('space.datasets.documents.statuses.completed')
+  if (normalizedStatus === 'error') return t('space.datasets.documents.statuses.error')
+  if (['parsing', 'splitting', 'indexing', 'processing'].includes(normalizedStatus)) {
+    return t('space.datasets.documents.statuses.processing')
+  }
+  if (['waiting', 'pending', 'queued'].includes(normalizedStatus)) {
+    return t('space.datasets.documents.statuses.pending')
+  }
+  return t('space.datasets.documents.statuses.processing')
 }
 
 const getProcessingStatusClass = (status: string) => {
@@ -84,8 +90,8 @@ const getProcessingStatusClass = (status: string) => {
 }
 
 const getAvailabilityLabel = (record: DocumentRecord) => {
- if (record.status !== 'completed') return '不可切换'
- return record.enabled ? '可用' : '已禁用'
+ if (record.status !== 'completed') return t('space.datasets.documents.statuses.unavailable')
+ return record.enabled ? t('space.datasets.documents.statuses.available') : t('space.datasets.documents.statuses.disabled')
 }
 
 const getAvailabilityClass = (record: DocumentRecord) => {
@@ -192,13 +198,13 @@ watch(
  </div>
  <div class="flex flex-wrap items-center gap-2">
  <a-tag class="!m-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-600">
- {{ dataset.character_count ||0 }} 字符
+ {{ dataset.character_count ||0 }} {{ t('space.datasets.documents.columns.characterCount') }}
  </a-tag>
  <a-tag class="!m-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-600">
- {{ dataset.hit_count }} 命中
+ {{ dataset.hit_count }} {{ t('space.datasets.documents.columns.hitCount') }}
  </a-tag>
  <a-tag class="!m-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-600">
- {{ dataset.related_app_count }}关联应用
+ {{ dataset.related_app_count }} {{ t('space.datasets.documents.columns.relatedApps') }}
  </a-tag>
  </div>
  </div>
@@ -206,7 +212,7 @@ watch(
  <div class="flex flex-col gap-2 lg:items-end">
  <div class="flex flex-wrap items-center justify-end gap-3">
  <a-button class="rounded-xl border-slate-200 bg-white px-4 !text-slate-700" @click="hitModalVisible = true">
- 召回测试
+ {{ t('space.datasets.documents.recallTest') }}
  </a-button>
  <router-link
  :to="{
@@ -214,7 +220,7 @@ watch(
  params: { dataset_id: datasetId },
  }"
  >
- <a-button type="primary" class="rounded-xl px-4">添加文件</a-button>
+ <a-button type="primary" class="rounded-xl px-4">{{ t('space.datasets.documents.addFile') }}</a-button>
  </router-link>
  </div>
  <div
@@ -223,7 +229,7 @@ watch(
   <input
   v-model="searchInput"
   type="text"
-  placeholder="搜索文档"
+ :placeholder="t('space.datasets.documents.searchPlaceholder')"
   class="h-full w-full border-0 bg-transparent pl-3 pr-9 text-sm text-slate-700 outline-none placeholder:text-slate-400"
   @keydown.enter="handleSearch(searchInput)"
   />
@@ -273,7 +279,7 @@ watch(
  >
  <template #columns>
  <a-table-column
- title="编号"
+ :title="t('space.datasets.documents.columns.index')"
  data-index="position"
  align="center"
  :width="80"
@@ -287,7 +293,7 @@ watch(
  </template>
  </a-table-column>
  <a-table-column
- title="文档"
+ :title="t('space.datasets.documents.columns.document')"
  data-index="name"
  align="center"
  :width="320"
@@ -312,7 +318,7 @@ watch(
  </template>
  </a-table-column>
  <a-table-column
- title="字符数"
+ :title="t('space.datasets.documents.columns.characterCount')"
  data-index="character_count"
  align="center"
  :width="110"
@@ -324,7 +330,7 @@ watch(
  </template>
  </a-table-column>
 <a-table-column
- title="召回次数"
+ :title="t('space.datasets.documents.columns.hitCount')"
  data-index="hit_count"
  align="center"
  :width="110"
@@ -338,7 +344,7 @@ watch(
  </template>
  </a-table-column>
  <a-table-column
- title="处理状态"
+ :title="t('space.datasets.documents.columns.processingStatus')"
  data-index="status"
  align="center"
  :width="140"
@@ -364,7 +370,7 @@ watch(
  </template>
  </a-table-column>
  <a-table-column
- title="启用状态"
+ :title="t('space.datasets.documents.columns.enabledStatus')"
  data-index="enabled"
  align="center"
  :width="130"
@@ -381,7 +387,7 @@ watch(
  </template>
  </a-table-column>
  <a-table-column
- title="上传时间"
+ :title="t('space.datasets.documents.columns.uploadedAt')"
  data-index="created_at"
  align="center"
  :width="180"
@@ -395,7 +401,7 @@ watch(
  </template>
  </a-table-column>
  <a-table-column
- title="操作"
+ :title="t('space.datasets.documents.columns.actions')"
  data-index="operator"
  align="center"
  :width="220"
@@ -433,7 +439,13 @@ watch(
  />
  </span>
  <span class="text-xs font-medium">
- {{ updatingDocumentId === record.id ? '切换中' : record.status !== 'completed' ? '不可切换' : record.enabled ? '已启用' : '已禁用' }}
+ {{ updatingDocumentId === record.id
+    ? t('space.datasets.documents.statuses.switching')
+    : record.status !== 'completed'
+      ? t('space.datasets.documents.statuses.unavailable')
+      : record.enabled
+        ? t('space.datasets.documents.statuses.enabled')
+        : t('space.datasets.documents.statuses.disabled') }}
  </span>
  </button>
  <a-dropdown position="br">
@@ -451,7 +463,7 @@ watch(
  }
  "
  >
- 重命名
+ {{ t('common.actions.rename') }}
  </a-doption>
  <a-doption
  class="!text-red-700"
@@ -463,7 +475,7 @@ watch(
  })
  "
  >
- 删除
+ {{ t('common.actions.delete') }}
  </a-doption>
  </template>
  </a-dropdown>
@@ -473,7 +485,13 @@ watch(
  </template>
 
  <template #empty>
- <a-empty :description="hasActiveSearch ? '没有匹配的文档结果' : '当前知识库还没有文档'" />
+ <a-empty
+   :description="
+     hasActiveSearch
+       ? t('space.datasets.documents.empty.matched')
+       : t('space.datasets.documents.empty.none')
+   "
+ />
  </template>
  </a-table>
  </div>

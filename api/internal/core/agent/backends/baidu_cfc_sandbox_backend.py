@@ -20,10 +20,8 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import uuid
 from dataclasses import dataclass
-from types import ModuleType
 from typing import TYPE_CHECKING
 
 try:
@@ -50,19 +48,6 @@ except ImportError:
         path: str
         content: bytes | None = None
         error: str | None = None
-
-try:  # pragma: no cover - 仅在本地未安装 e2b_code_interpreter 时启用兜底桩
-    import e2b_code_interpreter as _e2b_module  # noqa: F401
-except ImportError:  # pragma: no cover - 仅用于单测与本地导入兜底
-    e2b_stub = ModuleType("e2b_code_interpreter")
-
-    class Sandbox:
-        @staticmethod
-        def create(*_args, **_kwargs):
-            raise ImportError("e2b_code_interpreter 未安装")
-
-    e2b_stub.Sandbox = Sandbox
-    sys.modules.setdefault("e2b_code_interpreter", e2b_stub)
 
 if TYPE_CHECKING:
     pass

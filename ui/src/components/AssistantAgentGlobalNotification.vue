@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { getAssistantAgentConversations } from '@/services/assistant-agent'
 import type { AssistantAgentConversation } from '@/models/assistant-agent'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const { locale } = useI18n()
+const isEnglish = computed(() => locale.value === 'en-US')
 
 // 通知列表
 const notifications = ref<AssistantAgentConversation[]>([])
@@ -111,7 +114,7 @@ onUnmounted(() => {
               {{ notification.name }}
             </h3>
             <p class="text-xs text-gray-600 mt-1 line-clamp-2">
-              {{ notification.is_active ? '活跃' : '已关闭' }}
+              {{ notification.is_active ? (isEnglish ? 'Active' : '活跃') : (isEnglish ? 'Closed' : '已关闭') }}
             </p>
           </div>
 
@@ -133,7 +136,7 @@ onUnmounted(() => {
             class="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
             @click="handleNotificationClick(notification)"
           >
-            查看详情 →
+            {{ isEnglish ? 'View details →' : '查看详情 →' }}
           </button>
         </div>
       </div>

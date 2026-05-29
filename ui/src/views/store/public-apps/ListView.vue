@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import {
@@ -12,8 +13,10 @@ import {
 import { getErrorMessage } from '@/utils/error'
 import { formatTimestampShort } from '@/utils/time-formatter'
 import ResourceCardDescription from '@/components/ResourceCardDescription.vue'
+import { getPublicAppTagDisplayName } from '@/utils/public-app-tag-display'
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const loading = ref(false)
 const apps = ref<PublicApp[]>([])
 const tags = ref<AppTag[]>([])
@@ -43,7 +46,7 @@ const loadApps = async () => {
     }
     hasMore.value = page.value < res.data.paginator.total_page
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载应用列表失败'))
+    Message.error(getErrorMessage(error, t('publicApps.list.loadAppsFailed')))
   } finally {
     loading.value = false
   }
@@ -54,18 +57,18 @@ const loadTags = async () => {
     const res = await getAppTags()
     tags.value = res.data.tags
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载标签列表失败'))
+    Message.error(getErrorMessage(error, t('publicApps.list.loadTagsFailed')))
   }
 }
 
 const handleFork = async (app: PublicApp) => {
   try {
     const res = await forkPublicApp(app.id)
-    Message.success(`已Fork到个人空间: ${res.data.name}`)
+    Message.success(t('publicApps.list.forkSuccess', { name: res.data.name }))
     await loadApps()
     router.push({ name: 'space-apps-detail', params: { app_id: res.data.id } })
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '操作失败'))
+    Message.error(getErrorMessage(error, t('publicApps.list.actionFailed')))
   }
 }
 
@@ -109,7 +112,8 @@ const getDisplayTags = (appTags: string[]) => {
 
 const getTagName = (tagId: string) => {
   const tag = tags.value.find(t => t.id === tagId)
-  return tag?.name || tagId
+  if (!tag) return tagId
+  return getPublicAppTagDisplayName(tag, locale.value as 'zh-CN' | 'en-US')
 }
 
 const getExtraTagCount = (appTags: string[]) => {
@@ -136,13 +140,15 @@ onMounted(() => {
           <a-avatar :size="32" class="bg-blue-700">
             <icon-apps :size="18" />
           </a-avatar>
-          <div class="text-lg font-medium text-gray-900">应用广场</div>
+          <div class="text-lg font-medium text-gray-900">{{ t('publicApps.list.title') }}</div>
         </div>
       </div>
 
       <div class="flex flex-col gap-4 mb-6">
         <div class="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
-          <span class="text-sm text-gray-500 mr-1 whitespace-nowrap">标签:</span>
+          <span class="text-sm text-gray-500 mr-1 whitespace-nowrap">
+            {{ t('publicApps.list.tags') }}
+          </span>
           <a
             v-for="tag in tags"
             :key="tag.id"
@@ -150,12 +156,12 @@ onMounted(() => {
             :class="selectedTags.includes(tag.id) ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-gray-100 text-gray-700'"
             @click="toggleTag(tag.id)"
           >
-            {{ tag.name }}
+            {{ getTagName(tag.id) }}
           </a>
         </div>
         <a-input-search
           v-model="searchWord"
-          placeholder="搜索应用"
+          :placeholder="t('publicApps.list.searchPlaceholder')"
           class="w-full sm:w-[240px] bg-white rounded-lg border-gray-300"
           @search="handleSearch"
         />
@@ -191,10 +197,10 @@ onMounted(() => {
                 <div class="flex min-w-0 flex-1 items-center gap-1.5">
                   <a-avatar :size="18" :image-url="app.creator_avatar" />
                   <div class="min-w-0 flex-1 truncate text-xs text-gray-400">
-                    {{ app.creator_name }} · 发布于 {{ formatTimestampShort(app.published_at) }}
+                    {{ app.creator_name }} · {{ t('publicApps.list.publishedAt', { time: formatTimestampShort(app.published_at) }) }}
                   </div>
                 </div>
-                <a-tooltip :content="app.is_forked ? '已添加到个人空间' : '添加到个人空间'">
+                <a-tooltip :content="app.is_forked ? t('publicApps.list.addedToSpace') : t('publicApps.list.addToSpace')">
                   <button
                     type="button"
                     class="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105"
@@ -213,16 +219,16 @@ onMounted(() => {
           </a-col>
 
           <a-col v-if="apps.length === 0" :span="24">
-            <a-empty description="暂无应用" class="py-20" />
+            <a-empty :description="t('publicApps.list.empty')" class="py-20" />
           </a-col>
         </a-row>
 
         <div v-if="apps.length > 0" class="py-4 text-center">
           <a-space v-if="loading">
             <a-spin />
-            <div class="text-gray-400">加载中</div>
+            <div class="text-gray-400">{{ t('publicApps.list.loading') }}</div>
           </a-space>
-          <div v-else-if="!hasMore" class="text-gray-400">数据已加载完成</div>
+          <div v-else-if="!hasMore" class="text-gray-400">{{ t('publicApps.list.loadedAll') }}</div>
         </div>
       </div>
     </div>

@@ -39,7 +39,6 @@ const globalStubs = {
   'a-input-number': slotStub,
   'a-switch': slotStub,
   'a-spin': slotStub,
-  'a-avatar': slotStub,
   'mcp-marketplace-picker-modal': true,
   'icon-plus': slotStub,
   'icon-close': slotStub,
@@ -51,7 +50,7 @@ const makeBinding = (overrides: Record<string, unknown> = {}) => ({
   name: '12306-mcp',
   description: '12306 车票查询 MCP',
   transport: 'streamable_http',
-  url: 'https://mcp.api-inference.modelscope.net/fbc1920197624e/mcp',
+  url: 'https://mcp.api-inference.modelscope.net/540c010e843a4e/mcp',
   command: '',
   enabled: true,
   headers: [],
@@ -118,6 +117,7 @@ describe('McpBindingsAbilityItem', () => {
     expect(wrapper.text()).toContain('12306 车票查询 MCP')
     expect(wrapper.text()).toContain('预热中')
   })
+
   it('shows ready status when the binding snapshot is available', async () => {
     const wrapper = mount(McpBindingsAbilityItem, {
       props: {
@@ -136,24 +136,4 @@ describe('McpBindingsAbilityItem', () => {
     expect(wrapper.text()).not.toContain('已启用')
     expect(wrapper.text()).not.toContain('已停用')
   })
-
-  it('renders the bound MCP icon when icon metadata exists', async () => {
-    const wrapper = mount(McpBindingsAbilityItem, {
-      props: {
-        app_id: 'app-1',
-        mcp_bindings: [makeBinding({ icon: 'https://example.com/mcp.png' })],
-        mcp_tool_snapshots: [makeSnapshot()],
-      },
-      global: {
-        stubs: globalStubs,
-      },
-    })
-
-    await flushPromises()
-
-    const img = wrapper.find('img')
-    expect(img.exists()).toBe(true)
-    expect(img.attributes('src')).toContain('https://example.com/mcp.png')
-  })
-
 })

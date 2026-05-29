@@ -2,6 +2,7 @@
 import { cloneDeep, isEqual } from 'lodash'
 import { nextTick, ref, watch } from 'vue'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
+import { useI18n } from 'vue-i18n'
 
 type ReviewConfig = {
   enable: boolean
@@ -28,6 +29,7 @@ type ReviewConfigForm = {
 }
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
   app_id: { type: String, default: '', required: true },
   review_config: {
@@ -125,7 +127,7 @@ watch(
   <div class="">
     <a-collapse-item key="review_config" class="app-ability-item review-config-ability-item">
       <template #header>
-        <div class="text-gray-700 font-bold">内容审查</div>
+        <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.review.title') }}</div>
       </template>
       <template #extra>
         <a-dropdown
@@ -148,18 +150,22 @@ watch(
           "
         >
           <a-button size="mini" class="rounded-lg flex items-center gap-1 px-1" @click.stop>
-            {{ reviewConfigForm.enable ? '开启' : '关闭' }}
+            {{
+              reviewConfigForm.enable
+                ? t('appStudio.abilities.review.on')
+                : t('appStudio.abilities.review.off')
+            }}
             <icon-down />
           </a-button>
           <template #content>
-            <a-doption :value="1" class="text-xs py-1.5 text-gray-700">开启</a-doption>
-            <a-doption :value="0" class="text-xs py-1.5 text-red-700">关闭</a-doption>
+            <a-doption :value="1" class="text-xs py-1.5 text-gray-700">{{ t('appStudio.abilities.review.on') }}</a-doption>
+            <a-doption :value="0" class="text-xs py-1.5 text-red-700">{{ t('appStudio.abilities.review.off') }}</a-doption>
           </template>
         </a-dropdown>
       </template>
       <div class="group py-2">
         <div class="text-xs text-gray-500 leading-[22px] group-hover:hidden">
-          对用户输入以及大语言模型输出内容进行审查。
+          {{ t('appStudio.abilities.review.description') }}
         </div>
         <a-button
           size="small"
@@ -170,7 +176,7 @@ watch(
           <template #icon>
             <icon-settings />
           </template>
-          设置
+          {{ t('appStudio.abilities.review.settings') }}
         </a-button>
       </div>
     </a-collapse-item>
@@ -184,7 +190,7 @@ watch(
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
-        <div class="text-lg font-bold text-gray-700">内容审核</div>
+        <div class="text-lg font-bold text-gray-700">{{ t('appStudio.abilities.review.modalTitle') }}</div>
         <a-button
           type="text"
           class="!text-gray-700"
@@ -203,15 +209,15 @@ watch(
           <div class="flex flex-col gap-2">
             <div class="flex flex-col">
               <div class="flex items-center gap-1 text-gray-700">
-                关键词
+                {{ t('appStudio.abilities.review.keywords') }}
                 <div class="text-red-700">*</div>
               </div>
-              <div class="text-gray-500 text-xs">每行一个，用换行符分割，最多填写100个关键词</div>
+              <div class="text-gray-500 text-xs">{{ t('appStudio.abilities.review.keywordsHelp') }}</div>
             </div>
             <a-textarea
               v-model:model-value="reviewConfigForm.keywords"
               class="bg-white rounded-lg border border-gray-200"
-              placeholder="每行一个，用换行符分隔。"
+              :placeholder="t('appStudio.abilities.review.keywordsPlaceholder')"
               :max-length="100"
               show-word-limit
               :auto-size="{ minRows: 4, maxRows: 4 }"
@@ -236,7 +242,7 @@ watch(
           <!-- 输入审核 -->
           <div class="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
             <div class="flex items-center justify-between">
-              <div class="text-gray-700">输入审查内容</div>
+              <div class="text-gray-700">{{ t('appStudio.abilities.review.inputReview') }}</div>
               <a-switch
                 v-model:model-value="reviewConfigForm.inputs_config.enable"
                 size="small"
@@ -244,10 +250,10 @@ watch(
               />
             </div>
             <div class="flex flex-col gap-2">
-              <div class="text-gray-700 text-xs">预设回复</div>
+              <div class="text-gray-700 text-xs">{{ t('appStudio.abilities.review.presetResponse') }}</div>
               <a-textarea
                 v-model:model-value="reviewConfigForm.inputs_config.preset_response"
-                placeholder="这里是预设回复内容"
+                :placeholder="t('appStudio.abilities.review.presetResponsePlaceholder')"
                 class="bg-white rounded-lg border border-gray-200"
                 :auto-size="{ minRows: 3, maxRows: 3 }"
               />
@@ -256,7 +262,7 @@ watch(
           <!-- 输出审核 -->
           <div class="flex flex-col p-3 bg-gray-50 border border-gray-200 rounded-lg">
             <div class="flex items-center justify-between">
-              <div class="text-gray-700">输出审查内容</div>
+              <div class="text-gray-700">{{ t('appStudio.abilities.review.outputReview') }}</div>
               <a-switch
                 v-model:model-value="reviewConfigForm.outputs_config.enable"
                 size="small"
@@ -270,14 +276,16 @@ watch(
       <div class="flex items-center justify-between">
         <div class=""></div>
         <a-space :size="16">
-          <a-button class="rounded-lg" @click="handleCancelReviewConfigModal">取消</a-button>
+          <a-button class="rounded-lg" @click="handleCancelReviewConfigModal">
+            {{ t('common.actions.cancel') }}
+          </a-button>
           <a-button
             :loading="loading"
             type="primary"
             class="rounded-lg"
             @click="handleSubmitReviewConfig"
           >
-            保存
+            {{ t('common.actions.save') }}
           </a-button>
         </a-space>
       </div>

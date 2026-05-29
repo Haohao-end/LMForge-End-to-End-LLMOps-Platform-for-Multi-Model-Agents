@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, type Ref } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import DocumentIndexNotification from '@/components/DocumentIndexNotification.vue'
 import AgentNotification from '@/components/AgentNotification.vue'
 import { useDocumentIndexNotificationWebSocket } from '@/hooks/use-document-index-notification-websocket'
@@ -8,11 +8,16 @@ import { useAgentNotificationWebSocket } from '@/hooks/use-agent-notification-we
 import { useAgentNotificationPolling } from '@/hooks/use-agent-notification-polling'
 import type { DocumentIndexNotification as DocumentNotificationType } from '@/models/notification'
 import type { AgentNotification as AgentNotificationType } from '@/models/agent-notification'
+import { useI18n } from 'vue-i18n'
+import arcoEnUS from '@arco-design/web-vue/es/locale/lang/en-us'
+import arcoZhCN from '@arco-design/web-vue/es/locale/lang/zh-cn'
 
 // 获取通知组件的引用
 const documentNotificationRef = ref<InstanceType<typeof DocumentIndexNotification>>()
 const agentNotificationRef = ref<InstanceType<typeof AgentNotification>>()
 const POLLING_FALLBACK_DELAY = 3000
+const { locale } = useI18n()
+const arcoLocale = computed(() => (locale.value === 'en-US' ? arcoEnUS : arcoZhCN))
 
 // 初始化文档索引通知 WebSocket 监听
 const {
@@ -32,7 +37,8 @@ const {
 } = useAgentNotificationWebSocket()
 
 // 初始化 Agent 通知轮询备选方案
-const { startPolling: startAgentPolling, stopPolling: stopAgentPolling } = useAgentNotificationPolling()
+const { startPolling: startAgentPolling, stopPolling: stopAgentPolling } =
+  useAgentNotificationPolling()
 
 const handleDocumentNotifications = (notifications: DocumentNotificationType[]) => {
   notifications.forEach((notification) => {
@@ -152,16 +158,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full w-full flex flex-col">
-    <!-- 文档索引完成通知组件 -->
-    <document-index-notification ref="documentNotificationRef" />
+  <a-config-provider :locale="arcoLocale">
+    <div class="h-full w-full flex flex-col">
+      <!-- 文档索引完成通知组件 -->
+      <document-index-notification ref="documentNotificationRef" />
 
-    <!-- Agent 构建完成通知组件 -->
-    <agent-notification ref="agentNotificationRef" />
+      <!-- Agent 构建完成通知组件 -->
+      <agent-notification ref="agentNotificationRef" />
 
-    <!-- 路由视图 -->
-    <router-view />
-  </div>
+      <!-- 路由视图 -->
+      <router-view />
+    </div>
+  </a-config-provider>
 </template>
 
 <style scoped></style>

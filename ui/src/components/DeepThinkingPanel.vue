@@ -9,6 +9,7 @@
  * - 内容过长时内部滚动
  */
 import { computed, ref, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   /** 思考内容文本（流式累积） */
@@ -18,6 +19,7 @@ const props = defineProps({
   /** 是否正在流式输出（控制动画） */
   loading: { type: Boolean, default: false },
 })
+const { t } = useI18n()
 
 const isExpanded = ref(true)
 const contentRef = ref<HTMLElement | null>(null)
@@ -28,8 +30,8 @@ const isFinished = computed(() => !props.loading && props.latency > 0)
 /** 折叠/展开标题文字 */
 const toggleLabel = computed(() =>
   isExpanded.value
-    ? isFinished.value ? '收起思考过程' : '思考中...'
-    : `已深度思考 (${props.latency.toFixed(1)}s)`,
+    ? isFinished.value ? t('chat.deepThinking.collapse') : t('chat.deepThinking.thinking')
+    : t('chat.deepThinking.finished', { latency: props.latency.toFixed(1) }),
 )
 
 /** 内容区 class */
@@ -110,7 +112,7 @@ watch(isFinished, (finished) => {
         ref="contentRef"
         :class="contentClass"
       >
-        <span v-if="!thought" class="text-gray-400 italic">正在深度思考，请稍候...</span>
+        <span v-if="!thought" class="text-gray-400 italic">{{ t('chat.deepThinking.waiting') }}</span>
         <span v-else>{{ thought }}</span>
       </div>
     </Transition>

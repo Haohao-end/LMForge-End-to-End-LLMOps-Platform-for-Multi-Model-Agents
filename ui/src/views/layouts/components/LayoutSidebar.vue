@@ -6,6 +6,7 @@ import { isCredentialLoggedIn } from '@/utils/auth'
 import UpdateConversationNameModal from '@/views/layouts/components/UpdateConversationNameModal.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import IconHomeFull from '@/components/icons/IconHomeFull.vue'
 import IconHome from '@/components/icons/IconHome.vue'
 import IconSpaceFull from '@/components/icons/IconSpaceFull.vue'
@@ -28,6 +29,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const credentialStore = useCredentialStore()
 const isLoggedIn = computed(() => isCredentialLoggedIn(credentialStore.credential))
 const selectedConversationId = computed(() => String(route.query.conversation_id || '').trim())
@@ -112,7 +114,10 @@ const isConversationActive = (conversation: RecentConversation) => {
   }
 
   if (route.path.startsWith('/store/public-apps/')) {
-    return conversation.source_type === 'public_app' && conversation.app_id === String(route.params?.app_id || '').trim()
+    return (
+      conversation.source_type === 'public_app' &&
+      conversation.app_id === String(route.params?.app_id || '').trim()
+    )
   }
 
   return false
@@ -140,15 +145,15 @@ const deleteRecentConversation = (conversation: RecentConversation) => {
       (item) => item.id !== conversation.id,
     )
 
-      if (selectedConversationId.value === conversation.id) {
-        if (conversation.source_type === 'assistant_agent') {
-          await router.replace({ path: '/home' })
-        } else if (conversation.source_type === 'public_app' && conversation.app_id) {
-          await router.replace({ path: `/store/public-apps/${conversation.app_id}/preview` })
-        } else if (conversation.source_type === 'app_debugger' && conversation.app_id) {
-          await router.replace({ path: `/space/apps/${conversation.app_id}` })
-        }
+    if (selectedConversationId.value === conversation.id) {
+      if (conversation.source_type === 'assistant_agent') {
+        await router.replace({ path: '/home' })
+      } else if (conversation.source_type === 'public_app' && conversation.app_id) {
+        await router.replace({ path: `/store/public-apps/${conversation.app_id}/preview` })
+      } else if (conversation.source_type === 'app_debugger' && conversation.app_id) {
+        await router.replace({ path: `/space/apps/${conversation.app_id}` })
       }
+    }
     await loadRecentConversations()
   })
 }
@@ -211,52 +216,79 @@ onUnmounted(() => {
 <template>
   <div class="flex flex-col h-full min-h-0 overflow-hidden">
     <!-- 导航菜单 -->
-    <div :class="`flex flex-col gap-0.5 mt-2 flex-shrink-0 ${props.collapsed ? 'items-center' : ''}`">
+    <div
+      :class="`flex flex-col gap-0.5 mt-2 flex-shrink-0 ${props.collapsed ? 'items-center' : ''}`"
+    >
       <button
         type="button"
         data-testid="sidebar-home-new-conversation"
         :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${isHomeRootRoute ? 'bg-gray-100' : ''}`"
-        :title="isHomeRootRoute ? '主页' : ''"
+        :title="isHomeRootRoute ? t('layout.sidebar.home') : ''"
         @click="handleHomeNavigation"
       >
         <icon-home-full v-if="isHomeRootRoute" class="flex-shrink-0 w-4 h-4" />
         <icon-home v-else class="flex-shrink-0 w-4 h-4" />
-        <span v-if="!props.collapsed" class="truncate text-sm">主页</span>
+        <span v-if="!props.collapsed" class="truncate text-sm">{{
+          $t('layout.sidebar.home')
+        }}</span>
       </button>
       <router-link
         to="/space/apps"
         :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/space') ? 'bg-gray-100' : ''}`"
-        :title="route.path.startsWith('/space') ? '个人空间' : ''"
+        :title="route.path.startsWith('/space') ? t('layout.sidebar.personalSpace') : ''"
       >
         <icon-space-full v-if="route.path.startsWith('/space')" class="flex-shrink-0 w-4 h-4" />
         <icon-space v-else class="flex-shrink-0 w-4 h-4" />
-        <span v-if="!props.collapsed" class="truncate text-sm">个人空间</span>
+        <span v-if="!props.collapsed" class="truncate text-sm">
+          {{ $t('layout.sidebar.personalSpace') }}
+        </span>
       </router-link>
-      <div v-show="!props.collapsed" class="text-gray-500 text-xs px-2 mt-1 mb-1">探索</div>
+      <div v-show="!props.collapsed" class="text-gray-500 text-xs px-2 mt-1 mb-1">
+        {{ $t('layout.sidebar.explore') }}
+      </div>
       <router-link
         to="/store/public-apps"
         :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/public-apps') ? 'bg-gray-100' : ''}`"
-        :title="route.path.startsWith('/store/public-apps') ? '应用广场' : ''"
+        :title="route.path.startsWith('/store/public-apps') ? t('layout.sidebar.appStore') : ''"
       >
         <icon-apps-full
           v-if="route.path.startsWith('/store/public-apps')"
           class="flex-shrink-0 w-4 h-4"
         />
         <icon-apps v-else class="flex-shrink-0 w-4 h-4" />
-        <span v-if="!props.collapsed" class="truncate text-sm">应用广场</span>
+        <span v-if="!props.collapsed" class="truncate text-sm">
+          {{ $t('layout.sidebar.appStore') }}
+        </span>
       </router-link>
       <router-link
         to="/store/workflows"
         :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/workflows') ? 'bg-gray-100' : ''}`"
         active-class="bg-gray-100"
-        :title="route.path.startsWith('/store/workflows') ? '工作流广场' : ''"
+        :title="route.path.startsWith('/store/workflows') ? t('layout.sidebar.workflowStore') : ''"
       >
         <icon-storage-full
           v-if="route.path.startsWith('/store/workflows')"
           class="flex-shrink-0 w-4 h-4"
         />
         <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
-        <span v-if="!props.collapsed" class="truncate text-sm">工作流广场</span>
+        <span v-if="!props.collapsed" class="truncate text-sm">
+          {{ $t('layout.sidebar.workflowStore') }}
+        </span>
+      </router-link>
+      <router-link
+        to="/store/skills"
+        :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/skills') ? 'bg-gray-100' : ''}`"
+        active-class="bg-gray-100"
+        :title="route.path.startsWith('/store/skills') ? t('layout.sidebar.skillsStore') : ''"
+      >
+        <icon-storage-full
+          v-if="route.path.startsWith('/store/skills')"
+          class="flex-shrink-0 w-4 h-4"
+        />
+        <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
+        <span v-if="!props.collapsed" class="truncate text-sm">
+          {{ $t('layout.sidebar.skillsStore') }}
+        </span>
       </router-link>
       <router-link
         to="/store/skills"
@@ -275,14 +307,31 @@ onUnmounted(() => {
         to="/store/tools"
         :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/tools') ? 'bg-gray-100' : ''}`"
         active-class="bg-gray-100"
-        :title="route.path.startsWith('/store/tools') ? '插件广场' : ''"
+        :title="route.path.startsWith('/store/tools') ? t('layout.sidebar.toolStore') : ''"
       >
         <icon-tool-full
           v-if="route.path.startsWith('/store/tools')"
           class="flex-shrink-0 w-4 h-4"
         />
         <icon-tool v-else class="flex-shrink-0 w-4 h-4" />
-        <span v-if="!props.collapsed" class="truncate text-sm">插件广场</span>
+        <span v-if="!props.collapsed" class="truncate text-sm">
+          {{ $t('layout.sidebar.toolStore') }}
+        </span>
+      </router-link>
+      <router-link
+        to="/store/mcp"
+        :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/store/mcp') ? 'bg-gray-100' : ''}`"
+        active-class="bg-gray-100"
+        :title="route.path.startsWith('/store/mcp') ? t('layout.sidebar.mcpStore') : ''"
+      >
+        <icon-storage-full
+          v-if="route.path.startsWith('/store/mcp')"
+          class="flex-shrink-0 w-4 h-4"
+        />
+        <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
+        <span v-if="!props.collapsed" class="truncate text-sm">
+          {{ $t('layout.sidebar.mcpStore') }}
+        </span>
       </router-link>
       <router-link
         to="/store/mcp"
@@ -301,26 +350,31 @@ onUnmounted(() => {
         to="/openapi"
         :class="`flex items-center h-9 rounded-lg transition-all text-gray-700 hover:text-gray-900 hover:bg-gray-200 flex-shrink-0 ${props.collapsed ? 'justify-center w-9' : 'gap-2 px-2'} ${route.path.startsWith('/openapi') ? 'bg-gray-100' : ''}`"
         active-class="bg-gray-100"
-        :title="route.path.startsWith('/openapi') ? '开放 API' : ''"
+        :title="route.path.startsWith('/openapi') ? t('layout.sidebar.openApi') : ''"
       >
         <icon-open-api-full
           v-if="route.path.startsWith('/openapi')"
           class="flex-shrink-0 w-4 h-4"
         />
         <icon-open-api v-else class="flex-shrink-0 w-4 h-4" />
-        <span v-if="!props.collapsed" class="truncate text-sm">开放 API</span>
+        <span v-if="!props.collapsed" class="truncate text-sm">
+          {{ $t('layout.sidebar.openApi') }}
+        </span>
       </router-link>
     </div>
 
     <!-- 最近对话区域 - 可滚动 -->
     <div v-if="isLoggedIn" class="flex flex-col flex-1 min-h-0 overflow-hidden">
       <!-- 侧边栏展开时显示完整列表 -->
-      <div v-if="!props.collapsed" class="mt-2 pt-2 flex items-center gap-2 px-2 mb-1 flex-shrink-0">
+      <div
+        v-if="!props.collapsed"
+        class="mt-2 pt-2 flex items-center gap-2 px-2 mb-1 flex-shrink-0"
+      >
         <router-link
           to="/search"
           :class="`text-sm font-bold cursor-pointer transition-colors ${route.path === '/search' ? 'text-blue-700' : 'text-gray-700 hover:text-blue-700'}`"
         >
-          最近对话
+          {{ $t('layout.sidebar.recentConversations') }}
         </router-link>
         <div class="flex-1 h-px bg-gray-200"></div>
       </div>
@@ -341,7 +395,7 @@ onUnmounted(() => {
         class="flex-1 min-h-0 overflow-y-auto pr-1 recent-conversation-list"
       >
         <div v-if="recentConversations.length === 0" class="text-xs text-gray-400 px-2 py-1">
-          暂无最近对话
+          {{ $t('layout.sidebar.noRecentConversations') }}
         </div>
         <div v-else class="flex flex-col gap-0.5">
           <div
@@ -374,7 +428,7 @@ onUnmounted(() => {
                   <template #icon>
                     <icon-edit />
                   </template>
-                  重命名
+                  {{ $t('common.actions.rename') }}
                 </a-doption>
                 <a-doption
                   class="text-red-700"
@@ -383,7 +437,7 @@ onUnmounted(() => {
                   <template #icon>
                     <icon-delete />
                   </template>
-                  删除会话
+                  {{ $t('common.actions.deleteConversation') }}
                 </a-doption>
               </template>
             </a-dropdown>
@@ -392,16 +446,26 @@ onUnmounted(() => {
       </div>
 
       <!-- 侧边栏收缩时显示按钮组 - 最近对话按钮与搜索按钮和折叠按钮保持相同间距 -->
-      <div v-if="props.collapsed" class="flex flex-col gap-0.5 items-center px-2 flex-shrink-0 mt-2">
+      <div
+        v-if="props.collapsed"
+        class="flex flex-col gap-0.5 items-center px-2 flex-shrink-0 mt-2"
+      >
         <!-- 最近对话按钮 -->
         <div
           class="flex items-center justify-center w-7 h-7 rounded-lg cursor-pointer transition-all duration-200 text-blue-600 hover:text-blue-700 hover:bg-blue-50 group flex-shrink-0"
           @mouseenter="handleRecentConversationsHover"
           @mouseleave="handleRecentConversationsLeave"
-          :title="`最近对话 (${recentConversations.length})`"
+          :title="
+            t('layout.sidebar.recentConversationsCount', { count: recentConversations.length })
+          "
         >
           <div class="relative w-4 h-4 flex items-center justify-center flex-shrink-0">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="w-4 h-4 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"

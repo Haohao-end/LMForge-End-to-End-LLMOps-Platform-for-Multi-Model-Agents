@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import {
@@ -11,8 +12,10 @@ import { getAppTags, type AppTag } from '@/services/public-app'
 import { getErrorMessage } from '@/utils/error'
 import { formatTimestampShort } from '@/utils/time-formatter'
 import ResourceCardDescription from '@/components/ResourceCardDescription.vue'
+import { getPublicAppTagDisplayName } from '@/utils/public-app-tag-display'
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const loading = ref(false)
 const workflows = ref<PublicWorkflow[]>([])
 const tags = ref<AppTag[]>([])
@@ -42,7 +45,7 @@ const loadWorkflows = async () => {
     }
     hasMore.value = page.value < res.data.paginator.total_page
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载工作流列表失败'))
+    Message.error(getErrorMessage(error, t('store.workflows.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -53,18 +56,18 @@ const loadTags = async () => {
     const res = await getAppTags()
     tags.value = res.data.tags
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载标签列表失败'))
+    Message.error(getErrorMessage(error, t('store.workflows.loadTagsFailed')))
   }
 }
 
 const handleFork = async (workflow: PublicWorkflow) => {
   try {
     const res = await forkPublicWorkflow(workflow.id)
-    Message.success(`已添加到个人空间: ${res.data.name}`)
+    Message.success(t('store.workflows.forkSuccess', { name: res.data.name }))
     await loadWorkflows()
     router.push({ name: 'space-workflows-detail', params: { workflow_id: res.data.id } })
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '添加失败'))
+    Message.error(getErrorMessage(error, t('store.workflows.actionFailed')))
   }
 }
 
@@ -108,7 +111,8 @@ const getDisplayTags = (workflowTags: string[]) => {
 
 const getTagName = (tagId: string) => {
   const tag = tags.value.find(t => t.id === tagId)
-  return tag?.name || tagId
+  if (!tag) return tagId
+  return getPublicAppTagDisplayName(tag, locale.value as 'zh-CN' | 'en-US')
 }
 
 const getExtraTagCount = (workflowTags: string[]) => {
@@ -135,13 +139,13 @@ onMounted(() => {
           <a-avatar :size="32" class="bg-blue-700">
             <icon-relation :size="18" />
           </a-avatar>
-          <div class="text-lg font-medium text-gray-900">工作流广场</div>
+          <div class="text-lg font-medium text-gray-900">{{ t('store.workflows.title') }}</div>
         </div>
       </div>
 
       <div class="flex flex-col gap-4 mb-6">
         <div class="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
-          <span class="text-sm text-gray-500 mr-1 whitespace-nowrap">标签:</span>
+          <span class="text-sm text-gray-500 mr-1 whitespace-nowrap">{{ t('store.workflows.tags') }}</span>
           <a
             v-for="tag in tags"
             :key="tag.id"
@@ -149,12 +153,12 @@ onMounted(() => {
             :class="selectedTags.includes(tag.id) ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-gray-100 text-gray-700'"
             @click="toggleTag(tag.id)"
           >
-            {{ tag.name }}
+            {{ getTagName(tag.id) }}
           </a>
         </div>
         <a-input-search
           v-model="searchWord"
-          placeholder="搜索工作流"
+          :placeholder="t('store.workflows.searchPlaceholder')"
           class="w-full sm:w-[240px] bg-white rounded-lg border-gray-300"
           @search="handleSearch"
         />
@@ -190,10 +194,10 @@ onMounted(() => {
                 <div class="flex min-w-0 flex-1 items-center gap-1.5">
                   <a-avatar :size="18" :image-url="workflow.account_avatar" />
                   <div class="min-w-0 flex-1 truncate text-xs text-gray-400">
-                    {{ workflow.account_name || '匿名用户' }} · 发布于 {{ workflow.published_at > 0 ? formatTimestampShort(workflow.published_at) : '未知时间' }}
+                    {{ workflow.account_name || t('store.workflows.unknownUser') }} · {{ t('store.workflows.publishedAt', { time: workflow.published_at > 0 ? formatTimestampShort(workflow.published_at) : t('store.workflows.unknownTime') }) }}
                   </div>
                 </div>
-                <a-tooltip :content="workflow.is_forked ? '已添加到个人空间' : '添加到个人空间'">
+                <a-tooltip :content="workflow.is_forked ? t('store.workflows.addedToSpace') : t('store.workflows.addToSpace')">
                   <button
                     type="button"
                     class="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105"
@@ -210,15 +214,15 @@ onMounted(() => {
               </div>
             </a-card>
           </a-col>
-          <a-col v-if="workflows.length === 0" :span="24"><a-empty description="暂无工作流" class="py-20" /></a-col>
+          <a-col v-if="workflows.length === 0" :span="24"><a-empty :description="t('store.workflows.empty')" class="py-20" /></a-col>
         </a-row>
 
         <div v-if="workflows.length > 0" class="py-4 text-center">
           <a-space v-if="loading">
             <a-spin />
-            <div class="text-gray-400">加载中</div>
+            <div class="text-gray-400">{{ t('store.workflows.loading') }}</div>
           </a-space>
-          <div v-else-if="!hasMore" class="text-gray-400">数据已加载完成</div>
+          <div v-else-if="!hasMore" class="text-gray-400">{{ t('store.workflows.loadedAll') }}</div>
         </div>
       </div>
     </div>

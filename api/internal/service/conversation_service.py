@@ -25,6 +25,7 @@ from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .base_service import BaseService
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.agent.usage_utils import summarize_agent_thoughts
 from internal.model import App, Conversation, Message, MessageAgentThought, Account
 from internal.schema.conversation_schema import GetConversationMessagesWithPageReq
 from internal.exception import NotFoundException
@@ -229,12 +230,7 @@ class ConversationService(BaseService):
         """存储智能体推理步骤消息"""
         # 1.定义变量存储推理位置及总耗时
         position = 0
-        running_total_token_count = 0
-        running_total_price = 0.0
-        regular_latency = 0.0
-        deep_phase_step_latency = 0.0
-        deep_phase_complete_latency = 0.0
-        max_latency = 0.0
+        usage_summary = summarize_agent_thoughts(agent_thoughts)
 
         # 2.在子线程中重新查询conversation以及message，确保对象会被子线程的会话管理到
         conversation = self.get(Conversation, conversation_id)
@@ -256,24 +252,6 @@ class ConversationService(BaseService):
             ]:
                 # 5.更新位置及总耗时
                 position += 1
-
-                current_total_token_count = max(0, int(getattr(agent_thought, "total_token_count", 0) or 0))
-                current_total_price = max(0.0, float(getattr(agent_thought, "total_price", 0.0) or 0.0))
-                current_latency = max(0.0, float(getattr(agent_thought, "latency", 0.0) or 0.0))
-
-                running_total_token_count += current_total_token_count
-                running_total_price += current_total_price
-                max_latency = max(max_latency, current_latency)
-                if agent_thought.event == QueueEvent.DEEP_COMPLETE.value:
-                    deep_phase_complete_latency = max(deep_phase_complete_latency, current_latency)
-                elif agent_thought.event in [
-                    QueueEvent.DEEP_THINKING.value,
-                    QueueEvent.DEEP_STEP.value,
-                    QueueEvent.DEEP_ARTIFACT_CREATED.value,
-                ]:
-                    deep_phase_step_latency += current_latency
-                else:
-                    regular_latency += current_latency
 
                 # 6.创建智能体消息推理步骤
                 self.create(
@@ -322,13 +300,9 @@ class ConversationService(BaseService):
                     answer_unit_price=agent_thought.answer_unit_price,
                     answer_price_unit=agent_thought.answer_price_unit,
                     # Agent推理统计相关
-                    total_token_count=running_total_token_count,
-                    total_price=running_total_price,
-                    latency=(
-                        regular_latency
-                        + (deep_phase_complete_latency or deep_phase_step_latency)
-                        or max_latency
-                    ),
+                    total_token_count=usage_summary.total_token_count,
+                    total_price=usage_summary.total_price,
+                    latency=usage_summary.latency,
                 )
 
                 # 9.检测是否开启长期记忆

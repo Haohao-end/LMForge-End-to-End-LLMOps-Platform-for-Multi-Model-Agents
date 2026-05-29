@@ -164,7 +164,6 @@ class GetPublishHistoriesWithPageResp(Schema):
                     getattr(data, "mcp_tool_snapshots", []),
                 ),
                 "skills": display_config.get("skills", getattr(data, "skills", [])),
-                "agent_bindings": display_config.get("agent_bindings", getattr(data, "agent_bindings", [])),
                 "workflows": display_config.get("workflows", data.workflows),
                 "datasets": display_config.get("datasets", data.datasets),
                 "retrieval_config": display_config.get("retrieval_config", data.retrieval_config),

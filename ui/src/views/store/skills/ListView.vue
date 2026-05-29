@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { apiPrefix } from '@/config'
 import CardGridSkeleton from '@/components/skeletons/CardGridSkeleton.vue'
@@ -9,7 +10,9 @@ import { getErrorMessage } from '@/utils/error'
 import 'github-markdown-css'
 import { getSkillCategories, getSkill, getSkillsWithPage } from '@/services/skill'
 import type { SkillCategory, SkillPackage } from '@/models/skill'
+import { getSkillCategoryDisplayName } from '@/utils/store-display'
 
+const { t, locale } = useI18n()
 const loading = ref(false)
 const categories = ref<SkillCategory[]>([])
 const skills = ref<SkillPackage[]>([])
@@ -82,7 +85,7 @@ const loadSkills = async () => {
     }
     hasMore.value = page.value < res.data.paginator.total_page
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载技能广场失败'))
+    Message.error(getErrorMessage(error, t('store.skills.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -121,7 +124,7 @@ const loadSkillDetail = async (skillId: string) => {
     const res = await getSkill(skillId)
     activeSkill.value = res.data
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载技能详情失败'))
+    Message.error(getErrorMessage(error, t('store.skills.detailLoadFailed')))
     showDetailVisible.value = false
   } finally {
     detailLoading.value = false
@@ -172,7 +175,23 @@ const getCategoryButtonClass = (active: boolean) =>
     active ? 'skills-category-btn-active' : 'skills-category-btn-inactive',
   ].join(' ')
 
-const detailMarkdown = computed(() => renderMarkdown(activeSkill.value?.readme || activeSkill.value?.description || '暂无技能正文'))
+const detailMarkdown = computed(() =>
+  renderMarkdown(activeSkill.value?.readme || activeSkill.value?.description || t('store.skills.noBody')),
+)
+
+const getCategoryLabel = (category: string) => {
+  return getSkillCategoryDisplayName(category, locale.value as 'zh-CN' | 'en-US')
+}
+
+const getExecutorTypeLabel = (value: string) => {
+  const normalized = String(value || '').trim()
+  if (!normalized) return ''
+
+  if (normalized === 'scf') return t('store.skills.executorTypes.scf')
+  if (normalized === 'tool') return t('store.skills.executorTypes.tool')
+  if (normalized === 'prompt') return t('store.skills.executorTypes.prompt')
+  return normalized
+}
 
 onMounted(async () => {
   await loadCategories()
@@ -189,7 +208,7 @@ onMounted(async () => {
             <icon-storage :size="18" />
           </a-avatar>
           <div>
-            <div class="text-lg font-medium text-gray-900">Skills 广场</div>
+            <div class="text-lg font-medium text-gray-900">{{ t('store.skills.title') }}</div>
           </div>
         </div>
       </div>
@@ -201,7 +220,7 @@ onMounted(async () => {
             :class="getCategoryButtonClass(selectedCategory === 'all')"
             @click="handleCategoryChange('all')"
           >
-            全部
+            {{ t('store.skills.all') }}
           </a-button>
           <a-button
             v-for="item in categories"
@@ -210,13 +229,13 @@ onMounted(async () => {
             :class="getCategoryButtonClass(selectedCategory === item.id)"
             @click="handleCategoryChange(item.id)"
           >
-            {{ item.name }}
+            {{ getCategoryLabel(item.id || item.name) }}
           </a-button>
         </div>
 
         <a-input-search
           v-model="searchWord"
-          placeholder="搜索技能名称、描述或标签"
+          :placeholder="t('store.skills.searchPlaceholder')"
           class="w-full sm:w-[260px] bg-white rounded-lg border-gray-300"
           @search="handleSearch"
         />
@@ -255,7 +274,7 @@ onMounted(async () => {
                     </div>
                     <div class="text-[11px] text-gray-500 line-clamp-1">
                       {{ skill.source_key }}
-                      <template v-if="skill.tool_count > 0"> · {{ skill.tool_count }} 个工具</template>
+                      <template v-if="skill.tool_count > 0"> · {{ t('store.skills.toolCount', { count: skill.tool_count }) }}</template>
                     </div>
                   </div>
                 </div>
@@ -263,9 +282,9 @@ onMounted(async () => {
               <resource-card-description :text="skill.description" />
 
               <div class="flex items-center gap-1.5 flex-wrap mt-2.5">
-                <a-tag size="small" color="gray">{{ skill.category }}</a-tag>
+                <a-tag size="small" color="gray">{{ getCategoryLabel(skill.category) }}</a-tag>
                 <a-tag size="small" :color="skill.executor_type === 'scf' ? 'green' : 'gray'">
-                  {{ skill.executor_type }}
+                  {{ getExecutorTypeLabel(skill.executor_type) }}
                 </a-tag>
               </div>
 
@@ -274,15 +293,15 @@ onMounted(async () => {
                   <icon-file :size="10" />
                 </a-avatar>
                 <div class="text-[11px] text-gray-400">
-                  <template v-if="skill.tool_count > 0">{{ skill.tool_count }} 个工具</template>
-                  <template v-else>prompt-only</template>
+                  <template v-if="skill.tool_count > 0">{{ t('store.skills.toolCount', { count: skill.tool_count }) }}</template>
+                  <template v-else>{{ t('store.skills.promptOnly') }}</template>
                 </div>
               </div>
             </a-card>
           </a-col>
 
           <a-col v-if="skills.length === 0" :span="24">
-            <a-empty description="暂无技能包" class="py-20" />
+            <a-empty :description="t('store.skills.empty')" class="py-20" />
           </a-col>
         </a-row>
       </div>
@@ -292,7 +311,7 @@ onMounted(async () => {
       :visible="showDetailVisible"
       :width="560"
       :footer="false"
-      title="Skills 详情"
+        :title="t('store.skills.detailTitle')"
       :drawer-style="{ background: '#F9FAFB' }"
       @cancel="showDetailVisible = false"
     >
@@ -318,11 +337,11 @@ onMounted(async () => {
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <div class="text-sm font-bold text-gray-900">{{ activeSkill.label }}</div>
-                <a-tag size="small" color="gray">{{ activeSkill.category }}</a-tag>
+                <a-tag size="small" color="gray">{{ getCategoryLabel(activeSkill.category) }}</a-tag>
               </div>
               <div class="text-[11px] text-gray-500 mt-1">
                 {{ activeSkill.source_key }}
-                <template v-if="activeSkill.tool_count > 0"> · {{ activeSkill.tool_count }} 个工具</template>
+                <template v-if="activeSkill.tool_count > 0"> · {{ t('store.skills.toolCount', { count: activeSkill.tool_count }) }}</template>
               </div>
             </div>
           </div>
@@ -333,17 +352,17 @@ onMounted(async () => {
 
           <div class="grid grid-cols-2 gap-3">
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">执行器</div>
-              <div class="text-sm text-gray-800">{{ activeSkill.executor_type }}</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('store.skills.executor') }}</div>
+              <div class="text-sm text-gray-800">{{ getExecutorTypeLabel(activeSkill.executor_type) }}</div>
             </div>
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">工具数量</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('store.skills.toolCountLabel') }}</div>
               <div class="text-sm text-gray-800">{{ activeSkill.tool_count }}</div>
             </div>
           </div>
 
           <div v-if="activeSkill.tools.length > 0">
-            <div class="text-sm font-bold text-gray-700 mb-2">包含工具</div>
+            <div class="text-sm font-bold text-gray-700 mb-2">{{ t('store.skills.toolsTitle') }}</div>
             <div class="space-y-2">
               <a-card
                 v-for="tool in activeSkill.tools"

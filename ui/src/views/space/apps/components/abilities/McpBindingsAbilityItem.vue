@@ -5,6 +5,7 @@ import { cloneDeep, isEqual } from 'lodash'
 import { Message } from '@arco-design/web-vue'
 import { apiPrefix } from '@/config'
 import type { McpBinding, McpToolSnapshot } from '@/models/app'
+import { useI18n } from 'vue-i18n'
 import McpMarketplacePickerModal from './McpMarketplacePickerModal.vue'
 import { resolveMcpBindingStatus } from './mcp-status'
 
@@ -45,6 +46,7 @@ const props = defineProps({
     default: () => [],
   },
 })
+const { t } = useI18n()
 const emits = defineEmits(['update:mcp_bindings', 'reload-draft-app-config'])
 const { handleUpdateDraftAppConfig } = useUpdateDraftAppConfig()
 const mcpBindingsModalVisible = ref(false)
@@ -200,7 +202,7 @@ const parseJsonArray = (text: string) => {
   if (!normalized) return []
   const parsed = JSON.parse(normalized)
   if (!Array.isArray(parsed)) {
-    throw new Error('必须是数组')
+    throw new Error(t('appStudio.abilities.mcp.arrayExpected'))
   }
   return parsed
 }
@@ -210,7 +212,7 @@ const parseJsonObject = (text: string) => {
   if (!normalized) return {}
   const parsed = JSON.parse(normalized)
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('必须是对象')
+    throw new Error(t('appStudio.abilities.mcp.objectExpected'))
   }
   return parsed as Record<string, string>
 }
@@ -218,23 +220,23 @@ const parseJsonObject = (text: string) => {
 const handleSubmitBinding = async () => {
   const form = bindingForm.value
   if (!form.name.trim()) {
-    Message.warning('请填写 MCP 名称')
+    Message.warning(t('appStudio.abilities.mcp.nameRequired'))
     return
   }
   if (!form.description.trim()) {
-    Message.warning('请填写 MCP 描述')
+    Message.warning(t('appStudio.abilities.mcp.descriptionRequired'))
     return
   }
 
   const transport = String(form.transport || 'streamable_http').trim()
   if (['http', 'sse', 'streamable_http', 'streamable-http'].includes(transport)) {
     if (!String(form.url || '').trim()) {
-      Message.warning('请填写 MCP 地址')
+      Message.warning(t('appStudio.abilities.mcp.urlRequired'))
       return
     }
   }
   if (transport === 'stdio' && !String(form.command || '').trim()) {
-    Message.warning('请填写 MCP 命令')
+    Message.warning(t('appStudio.abilities.mcp.commandRequired'))
     return
   }
 
@@ -247,7 +249,9 @@ const handleSubmitBinding = async () => {
     })).filter((item) => item.key)
     env = parseJsonObject(form.env_text)
   } catch (error) {
-    Message.warning(`高级配置 JSON 格式错误: ${(error as Error).message}`)
+    Message.warning(
+      t('appStudio.abilities.mcp.advancedJsonError', { message: (error as Error).message }),
+    )
     return
   }
 
@@ -283,7 +287,7 @@ const handleSubmitBinding = async () => {
   const newBindings = [...activateMcpBindings.value]
   if (editingIndex.value === -1) {
     if (newBindings.length >= 5) {
-      Message.warning('MCP 绑定已超过 5 个，无法继续添加')
+      Message.warning(t('appStudio.abilities.mcp.maxReached'))
       return
     }
     newBindings.push(nextBinding)
@@ -319,12 +323,12 @@ const handleSelectMarketplaceBinding = async (binding: McpBinding) => {
   const nextBinding = normalizeBindingToForm(binding)
   const duplicate = activateMcpBindings.value.some((item) => isSameBinding(item, nextBinding))
   if (duplicate) {
-    Message.warning('该 MCP 已添加到当前应用')
+    Message.warning(t('appStudio.abilities.mcp.duplicateWarning'))
     return
   }
 
   if (activateMcpBindings.value.length >= 5) {
-    Message.warning('MCP 绑定已超过 5 个，无法继续添加')
+    Message.warning(t('appStudio.abilities.mcp.maxReached'))
     return
   }
 
@@ -337,7 +341,7 @@ const handleSelectMarketplaceBinding = async (binding: McpBinding) => {
   await nextTick()
   emits('update:mcp_bindings', cloneDeep(newBindings.map((item) => stripBindingForm(item))))
   emits('reload-draft-app-config')
-  Message.success('已添加 MCP 绑定')
+  Message.success(t('appStudio.abilities.mcp.addedSuccess'))
   showMarketplacePickerModal.value = false
 }
 
@@ -358,7 +362,7 @@ watch(
 <template>
   <a-collapse-item key="mcp_bindings" class="app-ability-item">
     <template #header>
-      <div class="text-gray-700 font-bold">MCP</div>
+      <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.mcp.title') }}</div>
     </template>
     <template #extra>
       <a-button size="mini" type="text" class="!text-gray-700" @click.stop="openMarketplacePicker">
@@ -411,7 +415,7 @@ watch(
             </div>
             <div class="text-xs text-gray-500 truncate">{{ binding.description }}</div>
             <div class="text-xs text-gray-400 truncate">
-              {{ binding.url || binding.command || '未配置地址' }}
+              {{ binding.url || binding.command || t('appStudio.abilities.mcp.addressUnset') }}
             </div>
           </div>
         </div>
@@ -428,7 +432,7 @@ watch(
       </div>
     </div>
     <div v-else class="text-xs text-gray-500 leading-[22px]">
-      点击右上角 + 从 MCP 广场添加 MCP，或点击已有条目继续编辑。绑定后可以在应用运行时动态加载服务器上的工具。
+      {{ t('appStudio.abilities.mcp.empty') }}
     </div>
   </a-collapse-item>
 
@@ -442,7 +446,11 @@ watch(
   >
     <div class="flex items-center justify-between mb-6">
       <div class="text-lg font-bold text-gray-700">
-        {{ editingIndex === -1 ? '新增 MCP 绑定' : '编辑 MCP 绑定' }}
+        {{
+          editingIndex === -1
+            ? t('appStudio.abilities.mcp.addModalTitle')
+            : t('appStudio.abilities.mcp.editModalTitle')
+        }}
       </div>
       <a-button type="text" class="!text-gray-700" size="small" @click="handleCancelMcpBindingsModal">
         <template #icon>
@@ -453,8 +461,12 @@ watch(
 
     <div class="h-[calc(100vh-180px)] overflow-scroll scrollbar-w-none">
       <div class="space-y-3">
-        <a-input v-model="bindingForm.name" placeholder="MCP 名称，例如 12306 MCP" />
-        <a-textarea v-model="bindingForm.description" :auto-size="{ minRows: 2, maxRows: 4 }" placeholder="MCP 描述" />
+        <a-input v-model="bindingForm.name" :placeholder="t('appStudio.abilities.mcp.namePlaceholder')" />
+        <a-textarea
+          v-model="bindingForm.description"
+          :auto-size="{ minRows: 2, maxRows: 4 }"
+          :placeholder="t('appStudio.abilities.mcp.descriptionPlaceholder')"
+        />
         <div class="grid grid-cols-2 gap-3">
           <a-select v-model="bindingForm.transport" placeholder="Transport">
             <a-option value="streamable_http">streamable_http</a-option>
@@ -462,29 +474,43 @@ watch(
             <a-option value="sse">sse</a-option>
             <a-option value="stdio">stdio</a-option>
           </a-select>
-          <a-input-number v-model="bindingForm.timeout_seconds" :min="1" :max="600" placeholder="超时秒数" />
+          <a-input-number
+            v-model="bindingForm.timeout_seconds"
+            :min="1"
+            :max="600"
+            :placeholder="t('appStudio.abilities.mcp.timeoutPlaceholder')"
+          />
         </div>
-        <a-input v-model="bindingForm.url" placeholder="MCP 地址（HTTP / SSE）" />
-        <a-input v-model="bindingForm.command" placeholder="stdio 命令（可选）" />
+        <a-input v-model="bindingForm.url" :placeholder="t('appStudio.abilities.mcp.urlPlaceholder')" />
+        <a-input
+          v-model="bindingForm.command"
+          :placeholder="t('appStudio.abilities.mcp.commandPlaceholder')"
+        />
         <a-switch v-model="bindingForm.enabled">
-          <template #checked>已启用</template>
-          <template #unchecked>已停用</template>
+          <template #checked>{{ t('appStudio.abilities.mcp.enabledChecked') }}</template>
+          <template #unchecked>{{ t('appStudio.abilities.mcp.enabledUnchecked') }}</template>
         </a-switch>
-        <a-input v-model="bindingForm.tool_names_text" placeholder="工具白名单，英文逗号分隔（可选）" />
-        <a-input v-model="bindingForm.args_text" placeholder="stdio args，英文逗号分隔（可选）" />
+        <a-input
+          v-model="bindingForm.tool_names_text"
+          :placeholder="t('appStudio.abilities.mcp.toolNamesPlaceholder')"
+        />
+        <a-input
+          v-model="bindingForm.args_text"
+          :placeholder="t('appStudio.abilities.mcp.argsPlaceholder')"
+        />
         <a-textarea
           v-model="bindingForm.headers_text"
           :auto-size="{ minRows: 3, maxRows: 8 }"
-          placeholder='请求头 JSON 数组，例如 [{"key":"Authorization","value":"Bearer xxx"}]'
+          :placeholder="t('appStudio.abilities.mcp.headersPlaceholder')"
         />
         <a-textarea
           v-model="bindingForm.env_text"
           :auto-size="{ minRows: 3, maxRows: 8 }"
-          placeholder='stdio env JSON 对象，例如 {"API_KEY":"xxx"}'
+          :placeholder="t('appStudio.abilities.mcp.envPlaceholder')"
         />
         <div class="flex justify-end gap-2 pt-2">
-          <a-button @click="handleCancelMcpBindingsModal">取消</a-button>
-          <a-button type="primary" @click="handleSubmitBinding">保存</a-button>
+          <a-button @click="handleCancelMcpBindingsModal">{{ t('common.actions.cancel') }}</a-button>
+          <a-button type="primary" @click="handleSubmitBinding">{{ t('common.actions.save') }}</a-button>
         </div>
       </div>
     </div>

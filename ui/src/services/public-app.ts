@@ -112,7 +112,19 @@ export function sendPublicAppA2aMessage(
 }
 
 export function getPublicAppA2aConversationMessages(appId: string, conversationId: string) {
-  return get<BaseResponse<Array<ChatConversationMessage>>>(`/public/apps/${appId}/a2a/conversations/${conversationId}/messages`)
+  return get<BaseResponse<Array<{
+    id: string
+    conversation_id: string
+    query: string
+    image_urls: string[]
+    input_parts: Array<Record<string, unknown>>
+    answer: string
+    answer_parts: Array<Record<string, unknown>>
+    artifacts: Array<Record<string, unknown>>
+    total_token_count: number
+    latency: number
+    suggested_questions: string[]
+  }>>>(`/public/apps/${appId}/a2a/conversations/${conversationId}/messages`)
 }
 
 export function getLatestPublicAppA2aConversation(appId: string) {

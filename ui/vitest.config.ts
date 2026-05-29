@@ -9,6 +9,7 @@ export default mergeConfig(
       environment: 'jsdom',
       exclude: [...configDefaults.exclude, 'e2e/**'],
       include: ['src/**/__tests__/**/*.spec.ts'],
+      setupFiles: ['src/test/setup.ts'],
       root: fileURLToPath(new URL('./', import.meta.url)),
       clearMocks: true,
       restoreMocks: true,

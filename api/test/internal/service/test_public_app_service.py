@@ -349,7 +349,201 @@ class TestPublicAppService:
         assert apps[0]["creator_name"] == "Bob"
         assert apps[0]["is_forked"] is False
 
-    def test_fork_public_app_should_copy_public_config_and_dataset_joins(self, monkeypatch):
+    def test_fork_public_app_should_support_public_path(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        app_config = SimpleNamespace(
+            model_config={"provider": "openai"},
+            dialog_round=3,
+            preset_prompt="prompt",
+            tools=[],
+            mcp_bindings=[
+                {
+                    "name": "Weather MCP",
+                    "description": "weather",
+                    "transport": "streamable_http",
+                    "url": "https://mcp.example.com",
+                    "enabled": True,
+                    "headers": [],
+                    "tool_names": [],
+                    "timeout_seconds": 30,
+                    "args": [],
+                    "env": {},
+                }
+            ],
+            workflows=[],
+            retrieval_config={},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=["q1"],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            app_dataset_joins=[],
+        )
+        public_app = SimpleNamespace(
+            id=uuid4(),
+            is_public=True,
+            status=AppStatus.PUBLISHED.value,
+            view_count=1,
+            fork_count=2,
+            name="公共应用",
+            icon="https://x",
+            description="desc",
+            category=AppCategory.GENERAL.value,
+            tags=[AppCategory.GENERAL.value],
+            app_config=app_config,
+        )
+        session = _QueueSession([_Query(one_or_none_result=public_app)])
+        service = _build_service(session=session)
+        monkeypatch.setattr("internal.service.public_app_service.App", _FakeApp)
+        monkeypatch.setattr("internal.service.public_app_service.AppConfigVersion", _FakeAppConfigVersion)
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+
+        copied = service.fork_public_app(str(public_app.id), account)
+
+        assert copied.name.endswith("(副本)")
+        assert copied.original_app_id == public_app.id
+        assert copied.tags == public_app.tags
+        assert session.added[1].mcp_bindings == public_app.app_config.mcp_bindings
+        assert public_app.view_count == 2
+        assert public_app.fork_count == 3
+        assert len(session.added) == 2
+
+    def test_fork_public_app_should_cover_dataset_join_iteration_branch(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        app_config = SimpleNamespace(
+            model_config={"provider": "openai"},
+            dialog_round=3,
+            preset_prompt="prompt",
+            tools=[],
+            workflows=[],
+            retrieval_config={},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=["q1"],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            app_dataset_joins=[SimpleNamespace(dataset_id=uuid4())],
+        )
+        public_app = SimpleNamespace(
+            id=uuid4(),
+            is_public=True,
+            status=AppStatus.PUBLISHED.value,
+            view_count=1,
+            fork_count=2,
+            name="公共应用",
+            icon="https://x",
+            description="desc",
+            category=AppCategory.GENERAL.value,
+            tags=[AppCategory.GENERAL.value],
+            app_config=app_config,
+        )
+        session = _QueueSession([_Query(one_or_none_result=public_app)])
+        service = _build_service(session=session)
+        monkeypatch.setattr("internal.service.public_app_service.App", _FakeApp)
+        monkeypatch.setattr("internal.service.public_app_service.AppConfigVersion", _FakeAppConfigVersion)
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+
+        copied = service.fork_public_app(str(public_app.id), account)
+
+        assert copied.name.endswith("(副本)")
+        assert public_app.fork_count == 3
+
+    def test_fork_public_app_should_raise_for_invalid_or_unavailable_source(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        service = _build_service(session=_QueueSession())
+        with pytest.raises(NotFoundException):
+            service.fork_public_app("not-a-uuid", account)
+
+        service = _build_service(
+            session=_QueueSession([_Query(one_or_none_result=None)]),
+        )
+        with pytest.raises(NotFoundException):
+            service.fork_public_app(str(uuid4()), account)
+
+        public_app = SimpleNamespace(
+            id=uuid4(),
+            is_public=True,
+            status=AppStatus.PUBLISHED.value,
+            view_count=0,
+            fork_count=0,
+            name="p",
+            icon="i",
+            description="d",
+            category=AppCategory.GENERAL.value,
+            tags=[AppCategory.GENERAL.value],
+            app_config=None,
+        )
+        service = _build_service(
+            session=_QueueSession([_Query(one_or_none_result=public_app)]),
+        )
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+        with pytest.raises(FailException):
+            service.fork_public_app(str(public_app.id), account)
+
+    def test_fork_public_app_should_copy_dataset_joins(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        app_config = SimpleNamespace(
+            model_config={"provider": "openai"},
+            dialog_round=3,
+            preset_prompt="prompt",
+            tools=[],
+            workflows=[],
+            retrieval_config={},
+            long_term_memory={"enable": False},
+            opening_statement="hello",
+            opening_questions=["q1"],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            app_dataset_joins=[SimpleNamespace(dataset_id=uuid4())],
+        )
+        public_app = SimpleNamespace(
+            id=uuid4(),
+            is_public=True,
+            status=AppStatus.PUBLISHED.value,
+            view_count=0,
+            fork_count=0,
+            name="公共应用",
+            icon="https://x",
+            description="desc",
+            category=AppCategory.GENERAL.value,
+            tags=[AppCategory.GENERAL.value],
+            app_config=app_config,
+        )
+        session = _QueueSession([_Query(one_or_none_result=public_app)])
+        service = _build_service(session=session)
+        monkeypatch.setattr("internal.service.public_app_service.App", _FakeApp)
+        monkeypatch.setattr("internal.service.public_app_service.AppConfigVersion", _FakeAppConfigVersion)
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+
+        copied = service.fork_public_app(str(public_app.id), account)
+
+        assert copied.name.endswith("(副本)")
+        assert len(session.added) == 3
+        assert getattr(session.added[2], "dataset_id", None) == app_config.app_dataset_joins[0].dataset_id
+
+    def test_fork_public_app_should_skip_duplicate_dataset_joins(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())
         dataset_id_1 = uuid4()
         dataset_id_2 = uuid4()
@@ -443,8 +637,36 @@ class TestPublicAppService:
             description="desc",
             tags=[AppCategory.GENERAL.value],
             published_at=datetime(2026, 1, 1, tzinfo=UTC),
-            created_at=datetime(2025, 1, 1, tzinfo=UTC),
-            app_config=None,
+            created_at=datetime(2025, 12, 31, tzinfo=UTC),
+            app_config=SimpleNamespace(
+                model_config={"provider": "openai"},
+                dialog_round=4,
+                preset_prompt="prompt",
+                tools=[{"type": "builtin_tool"}],
+                mcp_bindings=[
+                    {
+                        "name": "Weather MCP",
+                        "description": "weather",
+                        "transport": "streamable_http",
+                        "url": "https://mcp.example.com",
+                        "enabled": True,
+                        "headers": [],
+                        "tool_names": [],
+                        "timeout_seconds": 30,
+                        "args": [],
+                        "env": {},
+                    }
+                ],
+                workflows=[{"id": "wf"}],
+                retrieval_config={},
+                long_term_memory={"enable": False},
+                opening_statement="hello",
+                opening_questions=["q1"],
+                speech_to_text={"enable": False},
+                text_to_speech={"enable": False},
+                suggested_after_answer={"enable": True},
+                review_config={"enable": False},
+            ),
         )
         creator = SimpleNamespace(id=app.account_id, name="Owner", avatar="https://avatar")
         session = _QueueSession(
@@ -458,22 +680,111 @@ class TestPublicAppService:
 
         detail = service.get_public_app_detail(str(app.id), account)
 
-        assert detail == {
-            "id": str(app.id),
-            "name": "app",
-            "icon": "https://icon",
-            "description": "desc",
-            "tags": [AppCategory.GENERAL.value],
-            "status": AppStatus.PUBLISHED.value,
-            "is_public": True,
-            "creator_name": "Owner",
-            "creator_avatar": "https://avatar",
-            "published_at": int(app.published_at.timestamp()),
-            "created_at": int(app.created_at.timestamp()),
-            "is_forked": True,
+        assert detail["creator_name"] == "Owner"
+        assert detail["tags"] == [AppCategory.GENERAL.value]
+        assert detail["is_liked"] is True
+        assert detail["is_favorited"] is False
+        assert detail["draft_app_config"]["tools"] == [{"type": "enriched"}]
+        assert detail["draft_app_config"]["mcp_bindings"] == [
+            {
+                "name": "Weather MCP",
+                "description": "weather",
+                "transport": "streamable_http",
+                "url": "https://mcp.example.com",
+                "enabled": True,
+                "headers": [],
+                "tool_names": [],
+                "timeout_seconds": 30,
+                "args": [],
+                "env": {},
+            }
+        ]
+        assert detail["draft_app_config"]["capabilities"] == {}
+        assert app.view_count == 4
+
+    def test_get_public_app_detail_should_include_runtime_capabilities_when_service_available(
+        self, monkeypatch
+    ):
+        app = SimpleNamespace(
+            id=uuid4(),
+            account_id=uuid4(),
+            is_public=True,
+            status=AppStatus.PUBLISHED.value,
+            name="PublicApp",
+            icon="https://icon",
+            description="desc",
+            category=AppCategory.GENERAL.value,
+            tags=[AppCategory.GENERAL.value],
+            view_count=1,
+            like_count=0,
+            fork_count=0,
+            published_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2025, 12, 31, tzinfo=UTC),
+            app_config=SimpleNamespace(
+                model_config={"provider": "openai", "model": "gpt-4o-mini"},
+                dialog_round=4,
+                preset_prompt="prompt",
+                tools=[],
+                workflows=[],
+                retrieval_config={},
+                long_term_memory={"enable": False},
+                opening_statement="hello",
+                opening_questions=["q1"],
+                speech_to_text={"enable": False},
+                text_to_speech={"enable": False},
+                suggested_after_answer={"enable": True},
+                review_config={"enable": False},
+            ),
+        )
+        session = _QueueSession(
+            [
+                _Query(one_or_none_result=app),
+                _Query(one_or_none_result=None),
+                _Query(scalar_result=0),
+            ]
+        )
+        capture = {}
+        capabilities = {"image_input": {"enabled": False, "reason_code": "PUBLIC_A2A_ONLY_TEXT"}}
+        service = _build_service(
+            session=session,
+            language_model_service=SimpleNamespace(
+                describe_runtime_capabilities=lambda model_config, entrypoint, allow_image_input: capture.update(
+                    {
+                        "model_config": model_config,
+                        "entrypoint": entrypoint,
+                        "allow_image_input": allow_image_input,
+                    }
+                )
+                or capabilities
+            ),
+        )
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+
+        detail = service.get_public_app_detail(str(app.id), None)
+
+        assert detail["draft_app_config"]["capabilities"] == capabilities
+        assert capture == {
+            "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+            "entrypoint": "public_a2a",
+            "allow_image_input": False,
         }
 
-    def test_get_public_app_detail_should_default_fork_flag_when_account_absent(self):
+    def test_get_public_app_detail_should_raise_when_id_invalid_or_not_public(self):
+        service = _build_service(session=_QueueSession())
+        with pytest.raises(NotFoundException):
+            service.get_public_app_detail("bad-id")
+
+        service = _build_service(
+            session=_QueueSession([_Query(one_or_none_result=None)]),
+        )
+        with pytest.raises(NotFoundException):
+            service.get_public_app_detail(str(uuid4()))
+
+    def test_get_public_app_detail_should_keep_default_flags_when_account_absent_and_skip_missing_config(self, monkeypatch):
         app = SimpleNamespace(
             id=uuid4(),
             account_id=uuid4(),

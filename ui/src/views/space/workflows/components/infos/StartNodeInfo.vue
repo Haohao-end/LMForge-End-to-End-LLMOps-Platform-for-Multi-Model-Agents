@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, ref, watch, inject } from 'vue'
 import { type ValidatedError, Message } from '@arco-design/web-vue'
 import { cloneDeep, debounce } from 'lodash'
+import { useI18n } from 'vue-i18n'
 
 type StartInputField = {
   name: string
@@ -31,6 +32,7 @@ const props = defineProps({
   loading: { type: Boolean, required: true, default: false },
 })
 const emits = defineEmits(['update:visible', 'updateNode'])
+const { t } = useI18n()
 const form = ref<StartNodeForm>({
   id: '',
   type: '',
@@ -52,7 +54,7 @@ const debounceAutoSave = debounce(() => {
 // 2.定义添加字段函数
 const addFormInputField = () => {
   form.value?.inputs.push({ name: '', type: 'string', description: '', required: true })
-  Message.success('新增输入字段成功')
+  Message.success(t('workflowEditor.addInputSuccess'))
 }
 
 // 3.定义删除字段函数
@@ -125,7 +127,7 @@ onBeforeUnmount(() => {
     <div v-if="isReadonly" class="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
       <div class="flex items-center gap-2 text-orange-700">
         <icon-lock class="flex-shrink-0" />
-        <span class="text-sm font-medium">预览模式：所有配置仅供查看，无法修改</span>
+        <span class="text-sm font-medium">{{ t('workflowEditor.previewMode') }}</span>
       </div>
     </div>
 
@@ -139,7 +141,7 @@ onBeforeUnmount(() => {
         <a-input
           v-model:model-value="form.title"
           :disabled="isReadonly"
-          placeholder="请输入标题"
+          :placeholder="t('workflowEditor.titlePlaceholder')"
           class="!bg-white text-gray-700 font-semibold px-2"
         />
       </div>
@@ -161,7 +163,7 @@ onBeforeUnmount(() => {
       v-model="form.description"
       :disabled="isReadonly"
       class="rounded-lg text-gray-700 !text-xs"
-      placeholder="输入描述..."
+      :placeholder="t('workflowEditor.descriptionPlaceholder')"
     />
     <!-- 分隔符 -->
     <a-divider class="my-2" />
@@ -171,10 +173,8 @@ onBeforeUnmount(() => {
       <div class="flex items-center justify-between mb-2">
         <!-- 左侧标题 -->
         <div class="flex items-center gap-2 text-gray-700 font-semibold">
-          <div class="">输入参数</div>
-          <a-tooltip
-            content="定义组件运行时的输入参数，大模型调用该组件时，将根据此信息抽取输入参数"
-          >
+          <div class="">{{ t('workflowEditor.inputParameters') }}</div>
+          <a-tooltip :content="t('workflowEditor.startNode.help')">
             <icon-question-circle />
           </a-tooltip>
         </div>
@@ -223,15 +223,15 @@ onBeforeUnmount(() => {
               <!-- 变量字段 -->
               <a-form-item
                 :field="`inputs[${idx}].name`"
-                label="参数名称"
+                :label="t('workflowEditor.parameterName')"
                 required
                 asterisk-position="end"
               >
-                <a-input v-model="input.name" size="small" placeholder="请输入变量名称" />
+                <a-input v-model="input.name" size="small" :placeholder="t('workflowEditor.parameterName')" />
               </a-form-item>
               <a-form-item
                 :field="`inputs[${idx}].type`"
-                label="变量类型"
+                :label="t('workflowEditor.parameterType')"
                 required
                 asterisk-position="end"
               >
@@ -244,7 +244,7 @@ onBeforeUnmount(() => {
               </a-form-item>
               <a-form-item
                 :field="`inputs[${idx}].description`"
-                label="参数描述"
+                :label="t('workflowEditor.startNode.descriptionLabel')"
                 required
                 asterisk-position="end"
               >
@@ -252,12 +252,12 @@ onBeforeUnmount(() => {
                   :auto-size="{ minRows: 3, maxRows: 3 }"
                   v-model="input.description"
                   size="small"
-                  placeholder="请准确描述该参数锁代表的含义，这将帮助大模型更好理解用户意图。"
+                  :placeholder="t('workflowEditor.startNode.descriptionPlaceholder')"
                 />
               </a-form-item>
               <a-form-item
                 :field="`inputs[${idx}].required`"
-                label="是否必填"
+                :label="t('workflowEditor.startNode.requiredLabel')"
                 required
                 asterisk-position="end"
               >
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
               </a-form-item>
             </div>
             <!-- 没数据UI -->
-            <a-empty v-if="form?.inputs.length <= 0" class="my-4">该节点暂无输入数据</a-empty>
+            <a-empty v-if="form?.inputs.length <= 0" class="my-4">{{ t('workflowEditor.noInputs') }}</a-empty>
           </div>
         </a-form>
       </div>
