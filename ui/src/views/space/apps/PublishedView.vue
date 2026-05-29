@@ -2,10 +2,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import { useGetPublishedConfig, useRegenerateWebAppToken } from '@/hooks/use-app'
 import { useGetWechatConfig, useUpdateWechatConfig } from '@/hooks/use-platform'
 import { shareAppToSquare, unshareAppFromSquare, getAppTags, type AppTag } from '@/services/public-app'
 import { getErrorMessage } from '@/utils/error'
+import { getPublicAppTagDisplayName } from '@/utils/public-app-tag-display'
 
 const props = withDefaults(defineProps<{ publishedRefreshToken?: number }>(), {
   publishedRefreshToken: 0,
@@ -36,6 +38,7 @@ const {
 } = useRegenerateWebAppToken()
 const { loading: getWechatConfigLoading, wechat_config, loadWechatConfig } = useGetWechatConfig()
 const { loading: updateWechatConfigLoading, handleUpdateWechatConfig } = useUpdateWechatConfig()
+const { t, locale } = useI18n()
 const webAppUrl = computed(() => {
   if (published_config.value?.web_app?.status === 'published') {
     return getFullPath('web-apps-index', {
@@ -104,8 +107,12 @@ const loadCategories = async () => {
     const res = await getAppTags()
     categories.value = res.data.tags
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载标签失败'))
+    Message.error(getErrorMessage(error, t('appStudio.published.square.loadTagsFailed')))
   }
+}
+
+const getCategoryDisplayName = (tag: AppTag) => {
+  return getPublicAppTagDisplayName(tag, locale.value as 'zh-CN' | 'en-US')
 }
 
 // 7.显示共享到广场模态窗
@@ -123,18 +130,18 @@ const handleCancelShareToSquareModal = () => {
 // 9.提交共享到广场
 const handleSubmitShareToSquare = async () => {
   if (!shareCategory.value) {
-    Message.warning('请选择应用分类')
+    Message.warning(t('appStudio.published.square.categoryRequired'))
     return
   }
 
   try {
     await shareAppToSquare(String(route.params?.app_id), shareCategory.value)
-    Message.success('已共享到应用广场')
+    Message.success(t('appStudio.published.square.sharedSuccess'))
     shareToSquareModalVisible.value = false
     // 重新加载配置
     await loadPublishedConfig(String(route.params?.app_id))
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '共享失败'))
+    Message.error(getErrorMessage(error, t('appStudio.published.square.shareFailed')))
   }
 }
 
@@ -142,11 +149,11 @@ const handleSubmitShareToSquare = async () => {
 const handleUnshareFromSquare = async () => {
   try {
     await unshareAppFromSquare(String(route.params?.app_id))
-    Message.success('已从应用广场取消共享')
+    Message.success(t('appStudio.published.square.unsharedSuccess'))
     // 重新加载配置
     await loadPublishedConfig(String(route.params?.app_id))
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '操作失败'))
+    Message.error(getErrorMessage(error, t('appStudio.published.square.actionFailed')))
   }
 }
 
@@ -179,16 +186,16 @@ watch(
   <div class="bg-white flex-1 w-full min-h-0 px-6 py-5">
     <!-- 顶部提示信息 -->
     <a-alert class="mb-5">
-      如应用访问链接或二维码意外泄露，请及时重新生成或进行停止分发，避免资源出现异常消耗
+      {{ t('appStudio.published.leakAlert') }}
     </a-alert>
     <!-- 发布渠道列表 -->
     <a-spin :loading="getPublishedConfigLoading" class="w-full">
       <table class="w-full">
         <thead>
           <tr class="h-10 bg-gray-100">
-            <th class="font-normal text-left px-4 text-gray-700 border-r border-white">发布渠道</th>
-            <th class="font-normal text-left px-4 text-gray-700 border-r border-white">状态</th>
-            <th class="font-normal text-left px-4 text-gray-700">操作</th>
+            <th class="font-normal text-left px-4 text-gray-700 border-r border-white">{{ t('appStudio.published.columns.channel') }}</th>
+            <th class="font-normal text-left px-4 text-gray-700 border-r border-white">{{ t('appStudio.published.columns.status') }}</th>
+            <th class="font-normal text-left px-4 text-gray-700">{{ t('appStudio.published.columns.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -199,8 +206,8 @@ watch(
                   <icon-compass :size="18" class="text-blue-700" />
                 </a-avatar>
                 <div class="flex flex-col">
-                  <div class="text-gray-700 font-semibold">网页版</div>
-                  <div class="text-gray-500">可通过访问PC网页立即开始对话。</div>
+                  <div class="text-gray-700 font-semibold">{{ t('appStudio.published.web.title') }}</div>
+                  <div class="text-gray-500">{{ t('appStudio.published.web.description') }}</div>
                 </div>
               </div>
             </td>
@@ -209,13 +216,13 @@ watch(
                 <template #icon>
                   <icon-minus-circle />
                 </template>
-                未发布
+                {{ t('appStudio.published.statuses.unpublished') }}
               </a-tag>
               <a-tag v-else color="blue" bordered>
                 <template #icon>
                   <icon-check-circle-fill />
                 </template>
-                已发布
+                {{ t('appStudio.published.statuses.published') }}
               </a-tag>
             </td>
             <td class="py-3 px-4">
@@ -227,7 +234,7 @@ watch(
                     <template v-if="published_config?.web_app?.status === 'published'">
                       {{ webAppUrl }}
                     </template>
-                    <template v-else>应用未发布，无可访问链接</template>
+                    <template v-else>{{ t('appStudio.published.web.noUrl') }}</template>
                   </div>
                   <a-button :loading="regenerateWebAppTokenLoading"
                     :disabled="published_config?.web_app?.status !== 'published'" type="primary"
@@ -240,16 +247,16 @@ watch(
                         published_config.web_app.token = token
                       }
                     ">
-                    重新生成
+                    {{ t('appStudio.published.web.regenerate') }}
                   </a-button>
                 </div>
                 <!-- 右侧访问按钮 -->
                 <a-button class="rounded-lg px-2">
                   <template v-if="published_config?.web_app?.status !== 'published'">
-                    立即访问
+                    {{ t('appStudio.published.web.visit') }}
                   </template>
                   <template v-else>
-                    <a :href="webAppUrl" target="_blank" rel="noopener noreferrer">立即访问</a>
+                    <a :href="webAppUrl" target="_blank" rel="noopener noreferrer">{{ t('appStudio.published.web.visit') }}</a>
                   </template>
                 </a-button>
               </div>
@@ -262,8 +269,8 @@ watch(
                   <icon-apps :size="18" class="text-purple-700" />
                 </a-avatar>
                 <div class="flex flex-col">
-                  <div class="text-gray-700 font-semibold">应用广场</div>
-                  <div class="text-gray-500">将应用共享到应用广场，让更多用户发现和使用。</div>
+                  <div class="text-gray-700 font-semibold">{{ t('appStudio.published.square.title') }}</div>
+                  <div class="text-gray-500">{{ t('appStudio.published.square.description') }}</div>
                 </div>
               </div>
             </td>
@@ -272,13 +279,13 @@ watch(
                 <template #icon>
                   <icon-minus-circle />
                 </template>
-                未共享
+                {{ t('appStudio.published.statuses.unshared') }}
               </a-tag>
               <a-tag v-else color="blue" bordered>
                 <template #icon>
                   <icon-check-circle-fill />
                 </template>
-                已共享
+                {{ t('appStudio.published.statuses.shared') }}
               </a-tag>
             </td>
             <td class="py-3 px-4">
@@ -288,21 +295,21 @@ watch(
                   <template #icon>
                     <icon-share-alt />
                   </template>
-                  共享到广场
+                  {{ t('appStudio.published.square.share') }}
                 </a-button>
                 <a-button v-else type="outline" status="danger" class="rounded-lg px-2"
                   @click="handleUnshareFromSquare">
                   <template #icon>
                     <icon-close />
                   </template>
-                  取消共享
+                  {{ t('appStudio.published.square.unshare') }}
                 </a-button>
                 <a-button v-if="published_config?.is_public" class="rounded-lg px-2"
                   @click="router.push('/store/public-apps')">
                   <template #icon>
                     <icon-eye />
                   </template>
-                  查看广场
+                  {{ t('appStudio.published.square.viewSquare') }}
                 </a-button>
               </div>
             </td>
@@ -314,8 +321,8 @@ watch(
                   <icon-wechat :size="18" class="text-green-700" />
                 </a-avatar>
                 <div class="flex flex-col">
-                  <div class="text-gray-700 font-semibold">微信公众号（订阅号、服务号）</div>
-                  <div class="text-gray-500">接入微信公众号，自动回复用户消息，助理高效私域运营。</div>
+                  <div class="text-gray-700 font-semibold">{{ t('appStudio.published.wechat.title') }}</div>
+                  <div class="text-gray-500">{{ t('appStudio.published.wechat.description') }}</div>
                 </div>
               </div>
             </td>
@@ -324,13 +331,13 @@ watch(
                 <template #icon>
                   <icon-minus-circle />
                 </template>
-                未配置
+                {{ t('appStudio.published.statuses.unconfigured') }}
               </a-tag>
               <a-tag v-else color="blue" bordered>
                 <template #icon>
                   <icon-check-circle-fill />
                 </template>
-                已配置
+                {{ t('appStudio.published.statuses.configured') }}
               </a-tag>
             </td>
             <td class="py-3 px-4">
@@ -341,7 +348,7 @@ watch(
                   <template #icon>
                     <icon-settings />
                   </template>
-                  立即配置
+                  {{ t('appStudio.published.wechat.configureNow') }}
                 </a-button>
               </div>
             </td>
@@ -354,7 +361,7 @@ watch(
       @cancel="handleCancelWechatConfigModal">
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
-        <div class="text-lg font-bold text-gray-700">微信公众号配置</div>
+        <div class="text-lg font-bold text-gray-700">{{ t('appStudio.published.wechat.modalTitle') }}</div>
         <a-button type="text" class="!text-gray-700" size="small" @click="handleCancelWechatConfigModal">
           <template #icon>
             <icon-close />
@@ -368,7 +375,7 @@ watch(
           <div class="flex flex-col gap-2">
             <div class="flex flex-col">
               <div class="flex items-center gap-1 text-gray-700">
-                服务器ip
+                {{ t('appStudio.published.wechat.serverIp') }}
                 <div class="text-red-700">*</div>
               </div>
             </div>
@@ -378,7 +385,7 @@ watch(
           <div class="flex flex-col gap-2">
             <div class="flex flex-col">
               <div class="flex items-center gap-1 text-gray-700">
-                服务器地址(URL)
+                {{ t('appStudio.published.wechat.serverUrl') }}
                 <div class="text-red-700">*</div>
               </div>
             </div>
@@ -387,23 +394,23 @@ watch(
           <!-- 开发者ID(AppID) -->
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-1 text-gray-700">
-              开发者ID(AppID) - 可选
+              {{ t('appStudio.published.wechat.appIdOptional') }}
             </div>
-            <a-input v-model:model-value="wechatConfigForm.wechat_app_id" placeholder="请填写微信开发者ID" />
+            <a-input v-model:model-value="wechatConfigForm.wechat_app_id" :placeholder="t('appStudio.published.wechat.appIdPlaceholder')" />
           </div>
           <!-- 开发者秘钥(AppSecret) -->
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-1 text-gray-700">
-              开发者秘钥(AppSecret) - 可选
+              {{ t('appStudio.published.wechat.appSecretOptional') }}
             </div>
-            <a-input v-model:model-value="wechatConfigForm.wechat_app_secret" placeholder="请填写微信开发者秘钥" />
+            <a-input v-model:model-value="wechatConfigForm.wechat_app_secret" :placeholder="t('appStudio.published.wechat.appSecretPlaceholder')" />
           </div>
           <!-- 令牌(Token) -->
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-1 text-gray-700">
-              令牌(Token) 随机生成
+              {{ t('appStudio.published.wechat.tokenLabel') }}
             </div>
-            <a-input v-model:model-value="wechatConfigForm.wechat_token" placeholder="请填写微信公众号令牌" />
+            <a-input v-model:model-value="wechatConfigForm.wechat_token" :placeholder="t('appStudio.published.wechat.tokenPlaceholder')" />
           </div>
         </div>
       </div>
@@ -411,10 +418,10 @@ watch(
       <div class="flex items-center justify-between">
         <div class=""></div>
         <a-space :size="16">
-          <a-button class="rounded-lg" @click="handleCancelWechatConfigModal">取消</a-button>
+          <a-button class="rounded-lg" @click="handleCancelWechatConfigModal">{{ t('common.actions.cancel') }}</a-button>
           <a-button :loading="updateWechatConfigLoading" type="primary" class="rounded-lg"
             @click="handleSubmitWechatConfigModal">
-            保存
+            {{ t('common.actions.save') }}
           </a-button>
         </a-space>
       </div>
@@ -424,7 +431,7 @@ watch(
       @cancel="handleCancelShareToSquareModal">
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between mb-4">
-        <div class="text-lg font-bold text-gray-700">共享到应用广场</div>
+        <div class="text-lg font-bold text-gray-700">{{ t('appStudio.published.square.shareModalTitle') }}</div>
         <a-button type="text" class="!text-gray-700" size="small" @click="handleCancelShareToSquareModal">
           <template #icon>
             <icon-close />
@@ -435,22 +442,22 @@ watch(
       <div class="py-4">
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-1 text-gray-700">
-            选择应用标签
+            {{ t('appStudio.published.square.selectTag') }}
             <div class="text-red-700">*</div>
           </div>
-          <a-select v-model="shareCategory" placeholder="请选择应用标签" class="w-full">
-            <a-option v-for="tag in categories" :key="tag.id" :value="tag.id" :label="tag.name" />
+          <a-select v-model="shareCategory" :placeholder="t('appStudio.published.square.selectTagPlaceholder')" class="w-full">
+            <a-option v-for="tag in categories" :key="tag.id" :value="tag.id" :label="getCategoryDisplayName(tag)" />
           </a-select>
           <div class="text-xs text-gray-500 mt-2">
-            共享后，您的应用将出现在应用广场，其他用户可以查看和Fork使用。
+            {{ t('appStudio.published.square.shareModalHint') }}
           </div>
         </div>
       </div>
       <!-- 底部按钮 -->
       <div class="flex items-center justify-end gap-3 mt-4">
-        <a-button class="rounded-lg" @click="handleCancelShareToSquareModal">取消</a-button>
+        <a-button class="rounded-lg" @click="handleCancelShareToSquareModal">{{ t('common.actions.cancel') }}</a-button>
         <a-button type="primary" class="rounded-lg" @click="handleSubmitShareToSquare">
-          确认共享
+          {{ t('appStudio.published.square.confirmShare') }}
         </a-button>
       </div>
     </a-modal>

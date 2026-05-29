@@ -16,6 +16,11 @@ describe('home service', () => {
   it('loads home intent from the home intent endpoint', async () => {
     await getHomeIntent()
 
-    expect(request.get).toHaveBeenCalledWith('/home/intent')
+    expect(request.get).toHaveBeenCalledWith('/home/intent', {
+      headers: {
+        'Accept-Language': 'zh-CN',
+        'X-App-Locale': 'zh-CN',
+      },
+    })
   })
 })

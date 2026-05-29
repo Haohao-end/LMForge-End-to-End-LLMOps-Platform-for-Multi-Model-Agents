@@ -203,19 +203,22 @@ def test_deepseek_provider_should_expose_latest_models(monkeypatch):
     assert pro.attributes["model"] == "deepseek-v4-pro"
 
 
-def test_provider_pricing_should_be_rmb_across_all_models():
+def test_provider_pricing_should_match_documented_currency_per_provider():
     repo_root = Path(__file__).resolve().parents[5]
     providers_root = repo_root / "api/internal/core/language_model/providers"
 
-    def assert_all_currency_fields_are_rmb(node, rel_path: str):
+    def assert_all_currency_fields(node, rel_path: str):
         if isinstance(node, dict):
             if "currency" in node:
-                assert node["currency"] == "RMB", f"{rel_path} has non-RMB currency {node['currency']}"
+                expected_currency = "RMB"
+                assert (
+                    node["currency"] == expected_currency
+                ), f"{rel_path} has unexpected currency {node['currency']}"
             for key, value in node.items():
-                assert_all_currency_fields_are_rmb(value, f"{rel_path}.{key}")
+                assert_all_currency_fields(value, f"{rel_path}.{key}")
         elif isinstance(node, list):
             for index, value in enumerate(node):
-                assert_all_currency_fields_are_rmb(value, f"{rel_path}[{index}]")
+                assert_all_currency_fields(value, f"{rel_path}[{index}]")
 
     for yaml_path in providers_root.rglob("*.yaml"):
         if yaml_path.name in {"providers.yaml", "positions.yaml"}:
@@ -227,9 +230,31 @@ def test_provider_pricing_should_be_rmb_across_all_models():
 
         metadata = data.get("metadata")
         if isinstance(metadata, dict):
-            assert_all_currency_fields_are_rmb(
+            assert_all_currency_fields(
                 metadata, yaml_path.relative_to(providers_root).as_posix()
             )
+
+    atlascloud_v3 = yaml.safe_load(
+        (providers_root / "atlascloud/deepseek-v3-0324.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_v3["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_v3["metadata"]["pricing"]["input"] == pytest.approx(0.001846)
+    assert atlascloud_v3["metadata"]["pricing"]["output"] == pytest.approx(0.007522)
+    assert atlascloud_v3["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
+    assert atlascloud_v3["context_window"] == 131_072
+    assert atlascloud_v3["max_output_tokens"] == 32_768
+    assert atlascloud_v3["features"] == ["tool_call", "agent_thought"]
+
+    atlascloud_v4 = yaml.safe_load(
+        (providers_root / "atlascloud/deepseek-v4-pro.yaml").read_text(encoding="utf-8")
+    )
+    assert atlascloud_v4["metadata"]["pricing"]["currency"] == "RMB"
+    assert atlascloud_v4["metadata"]["pricing"]["input"] == pytest.approx(0.000992)
+    assert atlascloud_v4["metadata"]["pricing"]["output"] == pytest.approx(0.00595)
+    assert atlascloud_v4["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
+    assert atlascloud_v4["context_window"] == 1_048_576
+    assert atlascloud_v4["max_output_tokens"] == 393_216
+    assert atlascloud_v4["features"] == ["tool_call", "agent_thought"]
 
     deepseek_v4_pro = yaml.safe_load(
         (providers_root / "deepseek/deepseek-v4-pro.yaml").read_text(encoding="utf-8")
@@ -280,6 +305,86 @@ def test_provider_pricing_should_be_rmb_across_all_models():
     assert glm_5["metadata"]["pricing"]["currency"] == "RMB"
     assert glm_5["metadata"]["pricing"]["input"] == pytest.approx(0.004103)
     assert glm_5["metadata"]["pricing"]["output"] == pytest.approx(0.015045)
+
+
+def test_atlascloud_provider_should_expose_documented_deepseek_models(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[5]
+    provider_entity_path = repo_root / "api/internal/core/language_model/entities/provider_entity.py"
+
+    monkeypatch.setattr(
+        "internal.core.language_model.entities.provider_entity.os.path.abspath",
+        lambda _path: str(provider_entity_path),
+    )
+    monkeypatch.setattr(
+        "internal.core.language_model.entities.provider_entity.dynamic_import",
+        lambda module, symbol: f"{module}:{symbol}",
+    )
+
+    provider = Provider(
+        name="atlascloud",
+        position=1,
+        provider_entity=ProviderEntity(
+            name="atlascloud",
+            label="Atlas Cloud",
+            description="Atlas Cloud provider",
+            icon="icon.png",
+            background="#FFFFFF",
+            supported_model_types=[ModelType.CHAT],
+        ),
+    )
+
+    model_names = [model.model_name for model in provider.get_model_entities()]
+    assert model_names[:8] == [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "kimi-k2.6",
+        "qwen3.6-plus",
+        "qwen3-coder-next",
+        "glm-5.1",
+        "minimax-m2.7",
+        "deepseek-v3-0324",
+    ]
+
+    v4 = provider.get_model_entity("deepseek-v4-pro")
+    v4_flash = provider.get_model_entity("deepseek-v4-flash")
+    kimi = provider.get_model_entity("kimi-k2.6")
+    qwen_plus = provider.get_model_entity("qwen3.6-plus")
+    qwen_coder = provider.get_model_entity("qwen3-coder-next")
+    glm_51 = provider.get_model_entity("glm-5.1")
+    minimax = provider.get_model_entity("minimax-m2.7")
+    v3 = provider.get_model_entity("deepseek-v3-0324")
+    assert v4.context_window == 1_048_576
+    assert v4.max_output_tokens == 393_216
+    assert v4.attributes["model"] == "deepseek-ai/deepseek-v4-pro"
+    assert v4.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert v4_flash.context_window == 1_048_576
+    assert v4_flash.max_output_tokens == 393_216
+    assert v4_flash.attributes["model"] == "deepseek-ai/deepseek-v4-flash"
+    assert v4_flash.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert kimi.context_window == 262_144
+    assert kimi.max_output_tokens == 262_144
+    assert kimi.attributes["model"] == "moonshotai/kimi-k2.6"
+    assert kimi.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_plus.context_window == 1_000_000
+    assert qwen_plus.max_output_tokens == 65_536
+    assert qwen_plus.attributes["model"] == "qwen/qwen3.6-plus"
+    assert qwen_plus.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_coder.context_window == 262_144
+    assert qwen_coder.max_output_tokens == 262_144
+    assert qwen_coder.attributes["model"] == "qwen/qwen3-coder-next"
+    assert qwen_coder.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert glm_51.context_window == 202_752
+    assert glm_51.max_output_tokens == 202_752
+    assert glm_51.attributes["model"] == "zai-org/glm-5.1"
+    assert glm_51.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert minimax.context_window == 196_608
+    assert minimax.max_output_tokens == 196_608
+    assert minimax.attributes["model"] == "minimaxai/minimax-m2.7"
+    assert minimax.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert v3.context_window == 131_072
+    assert v3.max_output_tokens == 32_768
+    assert v3.attributes["model"] == "deepseek-ai/DeepSeek-V3-0324"
+    assert v3.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
 
 
 def test_language_model_manager_should_load_and_delegate(monkeypatch, tmp_path):
@@ -339,6 +444,31 @@ def test_language_model_manager_should_load_and_delegate(monkeypatch, tmp_path):
 
     with pytest.raises(NotFoundException, match="服务提供商不存在"):
         manager.get_provider("missing")
+
+
+def test_language_model_manager_should_preserve_documented_provider_order(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[5]
+    manager_path = repo_root / "api/internal/core/language_model/language_model_manager.py"
+    provider_entity_path = (
+        repo_root / "api/internal/core/language_model/entities/provider_entity.py"
+    )
+
+    def _fake_abspath(path):
+        path_text = str(path)
+        if path_text.endswith("language_model_manager.py"):
+            return str(manager_path)
+        if path_text.endswith("provider_entity.py"):
+            return str(provider_entity_path)
+        return path_text
+
+    monkeypatch.setattr("os.path.abspath", _fake_abspath)
+
+    manager = LanguageModelManager()
+    provider_names = [provider.name for provider in manager.get_providers()]
+
+    assert provider_names[0] == "atlascloud"
+    assert provider_names[1] == "deepseek"
+    assert provider_names[-1] == "openai"
 
 
 def test_grok_env_resolver_should_apply_priority(monkeypatch):

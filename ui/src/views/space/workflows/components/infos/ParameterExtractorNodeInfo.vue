@@ -4,6 +4,7 @@ import { useVueFlow } from '@vue-flow/core'
 import { cloneDeep, debounce } from 'lodash'
 import { type ValidatedError, Message } from '@arco-design/web-vue'
 import { getReferencedVariables } from '@/utils/helper'
+import { useI18n } from 'vue-i18n'
 
 type OutputField = {
   name: string
@@ -41,6 +42,7 @@ const props = defineProps({
 })
 const emits = defineEmits(['update:visible', 'updateNode'])
 const { nodes, edges } = useVueFlow()
+const { t } = useI18n()
 const form = ref<ParameterExtractorNodeForm>({
   id: '',
   type: '',
@@ -78,12 +80,12 @@ const variableDefaultValue = (type: string) => {
 
 const addFormOutputField = () => {
   form.value?.outputs.push({ name: '', type: 'string', required: true })
-  Message.success('新增提取字段成功')
+  Message.success(t('workflowEditor.addExtractorFieldSuccess'))
 }
 
 const removeFormOutputField = (idx: number) => {
   if ((form.value?.outputs?.length ?? 0) <= 1) {
-    Message.warning('至少保留1个提取字段')
+    Message.warning(t('workflowEditor.keepAtLeastOneExtractor'))
     return
   }
   form.value?.outputs?.splice(idx, 1)
@@ -201,7 +203,7 @@ onBeforeUnmount(() => {
     <div v-if="isReadonly" class="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
       <div class="flex items-center gap-2 text-orange-700">
         <icon-lock class="flex-shrink-0" />
-        <span class="text-sm font-medium">预览模式：所有配置仅供查看，无法修改</span>
+        <span class="text-sm font-medium">{{ t('workflowEditor.previewMode') }}</span>
       </div>
     </div>
 
@@ -212,7 +214,7 @@ onBeforeUnmount(() => {
         </a-avatar>
         <a-input
           v-model:model-value="form.title"
-          :disabled="isReadonly" placeholder="请输入标题"
+          :disabled="isReadonly" :placeholder="t('workflowEditor.titlePlaceholder')"
           class="!bg-white text-gray-700 font-semibold px-2"
         />
       </div>
@@ -232,30 +234,30 @@ onBeforeUnmount(() => {
       :auto-size="{ minRows: 3, maxRows: 5 }"
       v-model="form.description"
       :disabled="isReadonly" class="rounded-lg text-gray-700 !text-xs"
-      placeholder="输入描述..."
+      :placeholder="t('workflowEditor.descriptionPlaceholder')"
     />
 
     <a-divider class="my-2" />
 
     <a-form size="mini" :model="form" :disabled="isReadonly" layout="vertical">
-      <a-form-item field="mode" label="提取模式">
+      <a-form-item field="mode" :label="t('workflowEditor.extractMode')">
         <a-select v-model="form.mode" size="mini">
-          <a-option value="auto">自动(JSON/KV)</a-option>
-          <a-option value="json">仅 JSON</a-option>
-          <a-option value="kv">仅 Key-Value</a-option>
+          <a-option value="auto">{{ t('workflowEditor.extractModes.auto') }}</a-option>
+          <a-option value="json">{{ t('workflowEditor.extractModes.json') }}</a-option>
+          <a-option value="kv">{{ t('workflowEditor.extractModes.kv') }}</a-option>
         </a-select>
       </a-form-item>
 
       <div class="flex flex-col gap-2">
-        <div class="flex items-center gap-2 text-gray-700 font-semibold">输入文本</div>
+        <div class="flex items-center gap-2 text-gray-700 font-semibold">{{ t('workflowEditor.inputText') }}</div>
         <div class="flex items-center gap-1 text-xs text-gray-500 mb-2">
-          <div class="w-[30%]">参数名</div>
-          <div class="w-[24%]">类型</div>
-          <div class="w-[46%]">值</div>
+          <div class="w-[30%]">{{ t('workflowEditor.parameterName') }}</div>
+          <div class="w-[24%]">{{ t('workflowEditor.parameterType') }}</div>
+          <div class="w-[46%]">{{ t('workflowEditor.parameterValue') }}</div>
         </div>
         <div class="flex items-center gap-1">
           <div class="w-[30%] flex-shrink-0">
-            <a-input v-model="form.input.name" size="mini" placeholder="请输入参数名" class="!px-2" />
+            <a-input v-model="form.input.name" size="mini" :placeholder="t('workflowEditor.parameterName')" class="!px-2" />
           </div>
           <div class="w-[24%] flex-shrink-0">
             <a-select
@@ -263,8 +265,8 @@ onBeforeUnmount(() => {
               v-model="form.input.type"
               class="px-2"
               :options="[
-                { label: '引用', value: 'ref' },
-                { label: 'STRING', value: 'string' },
+                { label: t('workflowEditor.variableTypes.ref'), value: 'ref' },
+                { label: t('workflowEditor.variableTypes.string'), value: 'string' },
               ]"
             />
           </div>
@@ -273,11 +275,11 @@ onBeforeUnmount(() => {
               v-if="form.input.type !== 'ref'"
               size="mini"
               v-model="form.input.content"
-              placeholder="请输入待提取文本"
+              :placeholder="t('workflowEditor.inputText')"
             />
             <a-select
               v-else
-              placeholder="请选择引用变量"
+              :placeholder="t('workflowEditor.selectReference')"
               size="mini"
               tag-nowrap
               v-model="form.input.ref"
@@ -292,8 +294,8 @@ onBeforeUnmount(() => {
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div>提取字段</div>
-            <a-tooltip content="字段名用于从文本中提取对应值，并作为节点输出。">
+            <div>{{ t('workflowEditor.parameterExtractor.fieldLabel') }}</div>
+            <a-tooltip :content="t('workflowEditor.parameterExtractor.help')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -304,14 +306,14 @@ onBeforeUnmount(() => {
           </a-button>
         </div>
         <div class="flex items-center gap-1 text-xs text-gray-500 mb-2">
-          <div class="w-[32%]">字段名</div>
-          <div class="w-[30%]">类型</div>
-          <div class="w-[24%]">必填</div>
+          <div class="w-[32%]">{{ t('workflowEditor.parameterName') }}</div>
+          <div class="w-[30%]">{{ t('workflowEditor.parameterType') }}</div>
+          <div class="w-[24%]">{{ t('workflowEditor.startNode.requiredLabel') }}</div>
           <div class="w-[14%]"></div>
         </div>
         <div v-for="(output, idx) in form?.outputs" :key="idx" class="flex items-center gap-1">
           <div class="w-[32%] flex-shrink-0">
-            <a-input v-model="output.name" size="mini" placeholder="请输入字段名" class="!px-2" />
+            <a-input v-model="output.name" size="mini" :placeholder="t('workflowEditor.parameterName')" class="!px-2" />
           </div>
           <div class="w-[30%] flex-shrink-0">
             <a-select
@@ -319,10 +321,10 @@ onBeforeUnmount(() => {
               v-model="output.type"
               class="px-2"
               :options="[
-                { label: 'STRING', value: 'string' },
-                { label: 'INT', value: 'int' },
-                { label: 'FLOAT', value: 'float' },
-                { label: 'BOOLEAN', value: 'boolean' },
+                { label: t('workflowEditor.variableTypes.string'), value: 'string' },
+                { label: t('workflowEditor.variableTypes.int'), value: 'int' },
+                { label: t('workflowEditor.variableTypes.float'), value: 'float' },
+                { label: t('workflowEditor.variableTypes.boolean'), value: 'boolean' },
               ]"
             />
           </div>

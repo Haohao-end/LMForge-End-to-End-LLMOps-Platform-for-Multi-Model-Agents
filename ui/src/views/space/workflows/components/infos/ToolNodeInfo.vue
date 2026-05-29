@@ -7,6 +7,7 @@ import { apiPrefix } from '@/config'
 import { useGetBuiltinTool, useGetBuiltinTools, useGetCategories } from '@/hooks/use-builtin-tool'
 import { useGetApiToolProvidersWithPage } from '@/hooks/use-tool'
 import type { ValidatedError } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 
 type ToolProvider = {
   id: string
@@ -89,6 +90,7 @@ const {
 const { builtin_tool, loadBuiltinTool } = useGetBuiltinTool()
 const { builtin_tools, loadBuiltinTools } = useGetBuiltinTools()
 const { categories, loadCategories } = useGetCategories()
+const { t } = useI18n()
 const form = ref<ToolNodeForm>({
   id: '',
   type: '',
@@ -435,7 +437,7 @@ onMounted(() => {
     <div v-if="isReadonly" class="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
       <div class="flex items-center gap-2 text-orange-700">
         <icon-lock class="flex-shrink-0" />
-        <span class="text-sm font-medium">预览模式：所有配置仅供查看，无法修改</span>
+        <span class="text-sm font-medium">{{ t('workflowEditor.previewMode') }}</span>
       </div>
     </div>
 
@@ -449,7 +451,7 @@ onMounted(() => {
         </a-avatar>
         <a-input
           v-model:model-value="form.title"
-          :disabled="isReadonly" placeholder="请输入标题"
+          :disabled="isReadonly" :placeholder="t('workflowEditor.titlePlaceholder')"
           class="!bg-white text-gray-700 font-semibold px-2"
         />
       </div>
@@ -470,7 +472,7 @@ onMounted(() => {
       :auto-size="{ minRows: 3, maxRows: 5 }"
       v-model="form.description"
       :disabled="isReadonly" class="rounded-lg text-gray-700 !text-xs"
-      placeholder="输入描述..."
+      :placeholder="t('workflowEditor.descriptionPlaceholder')"
     />
     <!-- 分隔符 -->
     <a-divider class="my-2" />
@@ -482,8 +484,8 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">绑定插件</div>
-            <a-tooltip content="为工具节点绑定指定的扩展插件，支持插件广场以及自定义API插件。">
+            <div class="">{{ t('workflowEditor.toolNode.title') }}</div>
+            <a-tooltip :content="t('workflowEditor.toolNode.help')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -532,7 +534,7 @@ onMounted(() => {
           </div>
         </div>
         <div v-else class="text-xs text-gray-500 leading-[22px]">
-          插件能够让工作流调用外部API，例如搜索信息、浏览网页、生成图片等，扩展工作流的能力和使用场景。
+          {{ t('workflowEditor.toolNode.help') }}
         </div>
       </div>
       <a-divider class="my-4" />
@@ -542,19 +544,17 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">输入数据</div>
-            <a-tooltip
-              content="输入给大模型的参数，可在下方提示词中引用。所有输入参数会被转为string输入。"
-            >
+            <div class="">{{ t('workflowEditor.toolNode.inputData') }}</div>
+            <a-tooltip :content="t('workflowEditor.toolNode.toolInputsHelp')">
               <icon-question-circle />
             </a-tooltip>
           </div>
         </div>
         <!-- 字段名 -->
         <div class="flex items-center gap-1 text-xs text-gray-500 mb-2">
-          <div class="w-[30%]">参数名</div>
-          <div class="w-[25%]">类型</div>
-          <div class="w-[45%]">值</div>
+          <div class="w-[30%]">{{ t('workflowEditor.parameterName') }}</div>
+          <div class="w-[25%]">{{ t('workflowEditor.parameterType') }}</div>
+          <div class="w-[45%]">{{ t('workflowEditor.parameterValue') }}</div>
         </div>
         <!-- 循环遍历字段列表 -->
         <div v-for="(input, idx) in form?.inputs" :key="idx" class="flex items-center gap-1">
@@ -570,8 +570,8 @@ onMounted(() => {
               v-model="input.value_type"
               class="px-2"
               :options="[
-                { label: '引用', value: 'ref' },
-                { label: '直接输入', value: 'literal' },
+                { label: t('workflowEditor.variableTypes.ref'), value: 'ref' },
+                { label: t('workflowEditor.toolNode.directInput'), value: 'literal' },
               ]"
             />
           </div>
@@ -580,11 +580,11 @@ onMounted(() => {
               v-if="input.value_type !== 'ref'"
               size="mini"
               v-model="input.content"
-              placeholder="请输入参数值"
+              :placeholder="t('workflowEditor.parameterValue')"
             />
             <a-select
               v-else
-              placeholder="请选择引用变量"
+              :placeholder="t('workflowEditor.selectReference')"
               size="mini"
               tag-nowrap
               v-model="input.ref"
@@ -593,7 +593,7 @@ onMounted(() => {
           </div>
         </div>
         <!-- 空数据状态 -->
-        <a-empty v-if="form?.inputs.length <= 0" class="my-4">该节点暂无输入数据</a-empty>
+        <a-empty v-if="form?.inputs.length <= 0" class="my-4">{{ t('workflowEditor.noInputs') }}</a-empty>
       </div>
       <a-divider class="my-4" />
       <!-- PARAMS参数 -->
@@ -602,8 +602,8 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">PARAMS参数</div>
-            <a-tooltip content="内置工具使用的PARAMS参数，用于初始化内置工具。">
+            <div class="">{{ t('workflowEditor.toolNode.paramsTitle') }}</div>
+            <a-tooltip :content="t('workflowEditor.toolNode.builtinParamsHelp')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -613,8 +613,8 @@ onMounted(() => {
           v-if="form?.params?.length > 0"
           class="flex items-center gap-1 text-xs text-gray-500 mb-2"
         >
-          <div class="w-[20%]">参数名</div>
-          <div class="w-[80%]">值</div>
+          <div class="w-[20%]">{{ t('workflowEditor.parameterName') }}</div>
+          <div class="w-[80%]">{{ t('workflowEditor.parameterValue') }}</div>
         </div>
         <!-- 循环遍历字段列表 -->
         <div v-for="(param, idx) in form?.params" :key="idx" class="flex items-center gap-1">
@@ -624,19 +624,19 @@ onMounted(() => {
             </div>
           </div>
           <div class="w-[80%] flex-shrink-0">
-            <a-input size="mini" v-model="param.value" placeholder="请输入参数值" />
+            <a-input size="mini" v-model="param.value" :placeholder="t('workflowEditor.parameterValue')" />
           </div>
         </div>
         <!-- 空数据状态 -->
-        <a-empty v-if="form?.params.length <= 0" class="my-4">该工具暂无PARAMS数据</a-empty>
+        <a-empty v-if="form?.params.length <= 0" class="my-4">{{ t('workflowEditor.toolNode.noParams') }}</a-empty>
       </div>
       <a-divider class="my-4" />
       <!-- 输出参数 -->
       <div class="flex flex-col gap-2">
         <!-- 输出标题 -->
-        <div class="font-semibold text-gray-700">输出数据</div>
+        <div class="font-semibold text-gray-700">{{ t('workflowEditor.outputData') }}</div>
         <!-- 字段标题 -->
-        <div class="text-gray-500 text-xs">参数名</div>
+        <div class="text-gray-500 text-xs">{{ t('workflowEditor.parameterName') }}</div>
         <!-- 输出参数列表 -->
         <div v-for="(output, idx) in form?.outputs" :key="idx" class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
@@ -662,10 +662,10 @@ onMounted(() => {
           class="flex flex-col flex-shrink-0 bg-gray-50 w-[200px] h-full px-3 py-4 overflow-scroll scrollbar-w-none"
         >
           <!-- 标题 -->
-          <div class="text-gray-900 font-bold text-lg mb-4">关联插件</div>
+          <div class="text-gray-900 font-bold text-lg mb-4">{{ t('workflowEditor.toolNode.modalTitle') }}</div>
           <!-- 添加插件按钮 -->
           <router-link :to="{ name: 'space-tools-list', query: { create_type: 'tool' } }">
-            <a-button long type="primary" class="rounded-lg mb-5">创建自定义插件</a-button>
+            <a-button long type="primary" class="rounded-lg mb-5">{{ t('workflowEditor.toolNode.createCustomTool') }}</a-button>
           </router-link>
           <!-- 工具类别导航 -->
           <div class="flex flex-col gap-1 mb-4">
@@ -674,20 +674,20 @@ onMounted(() => {
               @click="toolsActivateType = 'api_tool'"
             >
               <icon-code />
-              自定义插件
+              {{ t('workflowEditor.toolNode.customTool') }}
             </div>
             <div
               :class="`rounded-lg h-8 leading-8 px-3 flex items-center gap-2 cursor-pointer hover:bg-white hover:text-blue-700 ${toolsActivateType === 'builtin_tool' ? 'text-blue-700 bg-white' : 'text-gray-700'}`"
               @click="toolsActivateType = 'builtin_tool'"
             >
               <icon-translate />
-              内置插件
+              {{ t('workflowEditor.toolNode.builtinTool') }}
             </div>
           </div>
           <!-- 内置工具分类 -->
           <div v-if="toolsActivateType === 'builtin_tool'" class="">
             <!-- 分类标题 -->
-            <div class="text-xs text-gray-500 mb-3">类别</div>
+            <div class="text-xs text-gray-500 mb-3">{{ t('workflowEditor.toolNode.categoryTitle') }}</div>
             <!-- 分类列表 -->
             <div class="flex flex-col gap-1">
               <!-- 所有类别 -->
@@ -696,7 +696,7 @@ onMounted(() => {
                 @click="toolsActivateCategory = 'all'"
               >
                 <icon-apps />
-                全部
+                {{ t('workflowEditor.toolNode.all') }}
               </div>
               <div
                 v-for="category in categories"
@@ -715,7 +715,7 @@ onMounted(() => {
           <!-- 标题与关闭按钮 -->
           <div class="w-full flex items-center justify-between gap-2 mb-7">
             <div class="text-lg font-bold text-gray-700">
-              {{ toolsActivateType === 'api_tool' ? '自定义插件' : '内置插件' }}
+              {{ toolsActivateType === 'api_tool' ? t('workflowEditor.toolNode.customTool') : t('workflowEditor.toolNode.builtinTool') }}
             </div>
             <a-button
               size="mini"
@@ -765,14 +765,14 @@ onMounted(() => {
                     <template #icon>
                       <icon-plus />
                     </template>
-                    {{ isToolSelected(builtin_tool, tool) ? '删除' : '添加' }}
+                      {{ isToolSelected(builtin_tool, tool) ? t('workflowEditor.toolNode.delete') : t('workflowEditor.toolNode.add') }}
                   </a-button>
                 </div>
               </div>
             </div>
             <div v-if="computedBuiltinTools.length === 0" class="">
               <a-empty
-                description="没有可用的内置插件"
+                  :description="t('workflowEditor.toolNode.noBuiltinTools')"
                 class="h-[400px] flex flex-col items-center justify-center"
               />
             </div>
@@ -816,14 +816,14 @@ onMounted(() => {
                       <template #icon>
                         <icon-plus />
                       </template>
-                      {{ isToolSelected(api_tool_provider, tool) ? '删除' : '添加' }}
+                      {{ isToolSelected(api_tool_provider, tool) ? t('workflowEditor.toolNode.delete') : t('workflowEditor.toolNode.add') }}
                     </a-button>
                   </div>
                 </div>
               </div>
               <div v-if="api_tool_providers.length === 0" class="">
                 <a-empty
-                  description="没有可用的API插件"
+                  :description="t('workflowEditor.toolNode.noApiTools')"
                   class="h-[400px] flex flex-col items-center justify-center"
                 />
               </div>
@@ -837,12 +837,12 @@ onMounted(() => {
                 >
                   <a-space class="my-4">
                     <a-spin />
-                    <div class="text-gray-400">加载中</div>
+                    <div class="text-gray-400">{{ t('workflowEditor.toolNode.loading') }}</div>
                   </a-space>
                 </a-col>
                 <!-- 数据加载完成 -->
                 <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" class="!text-center">
-                  <div class="text-gray-400 my-4">数据已加载完成</div>
+                  <div class="text-gray-400 my-4">{{ t('workflowEditor.toolNode.loaded') }}</div>
                 </a-col>
               </a-row>
             </a-spin>

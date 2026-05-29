@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, type PropType } from 'vue'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
   app_id: { type: String, default: '', required: true },
   opening_statement: { type: String, default: '', required: true },
@@ -37,21 +39,21 @@ const handleUpdateOpeningQuestions = async () => {
   <div class="">
     <a-collapse-item key="opening" class="app-ability-item">
       <template #header>
-        <div class="text-gray-700 font-bold">对话开场白</div>
+        <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.opening.title') }}</div>
       </template>
       <div class="text-xs text-gray-500">
         <!-- 开场白文案 -->
         <div class="flex flex-col gap-2 mb-2">
           <div class="flex items-center gap-2">
-            <div class="text-gray-700">开场白文案</div>
-            <a-tooltip content="开场白是与Agent应用对话时，Agent默认展示的对话。">
+            <div class="text-gray-700">{{ t('appStudio.abilities.opening.statementLabel') }}</div>
+            <a-tooltip :content="t('appStudio.abilities.opening.statementTooltip')">
               <icon-exclamation-circle />
             </a-tooltip>
           </div>
           <a-textarea
             :model-value="props.opening_statement"
             @update:model-value="(value) => emits('update:opening_statement', value)"
-            placeholder="在此处填写 AI 应用的开场白"
+            :placeholder="t('appStudio.abilities.opening.statementPlaceholder')"
             class="bg-white text-gray-700 rounded-lg border border-gray-200"
             :auto-size="{ minRows: 4, maxRows: 4 }"
             @blur="
@@ -66,8 +68,8 @@ const handleUpdateOpeningQuestions = async () => {
         <!-- 开场白建议问题 -->
         <div class="flex flex-col gap-2 mb-2">
           <div class="flex items-center gap-2">
-            <div class="text-gray-700">开场白预设问题</div>
-            <a-tooltip content="开场白预设问题是与Agent对话时，初始化提供的建议问题，最多不超过3个">
+            <div class="text-gray-700">{{ t('appStudio.abilities.opening.presetQuestionsLabel') }}</div>
+            <a-tooltip :content="t('appStudio.abilities.opening.presetQuestionsTooltip')">
               <icon-exclamation-circle />
             </a-tooltip>
           </div>
@@ -89,7 +91,7 @@ const handleUpdateOpeningQuestions = async () => {
                   }
                 "
                 class="rounded-lg bg-white"
-                placeholder="输入开场白引导问题"
+                :placeholder="t('appStudio.abilities.opening.questionPlaceholder')"
                 @blur="async () => await handleUpdateOpeningQuestions()"
               />
               <a-button

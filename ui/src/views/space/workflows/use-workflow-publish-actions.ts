@@ -1,5 +1,6 @@
 import { computed, type Ref } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
+import { i18n } from '@/i18n'
 type WorkflowRecord = Record<string, unknown>
 
 type UseWorkflowPublishActionsOptions = {
@@ -27,13 +28,16 @@ const isPublicWorkflow = (workflow: WorkflowRecord): boolean => {
   return Boolean(workflow.is_public)
 }
 
-const showUnDebugPublishConfirm = ({ content, onConfirm }: ConfirmPublishOptions) => {
+const showUnDebugPublishConfirm = (
+  t: typeof i18n.global.t,
+  { content, onConfirm }: ConfirmPublishOptions,
+) => {
   Modal.warning({
-    title: '工作流未调试',
+    title: t('appStudio.shell.workflowNotDebuggedTitle'),
     content,
     hideCancel: false,
-    okText: '确认发布',
-    cancelText: '取消',
+    okText: t('appStudio.shell.confirmPublish'),
+    cancelText: t('common.actions.cancel'),
     onOk: async () => {
       await onConfirm()
     },
@@ -41,8 +45,13 @@ const showUnDebugPublishConfirm = ({ content, onConfirm }: ConfirmPublishOptions
 }
 
 export const useWorkflowPublishActions = (options: UseWorkflowPublishActionsOptions) => {
+  const t = i18n.global.t
+  const locale = i18n.global.locale as unknown as { value: string }
   const shareActionLabel = computed(() => {
-    return isPublicWorkflow(options.workflow.value) ? '取消分享到广场' : '分享到广场'
+    void locale.value
+    return isPublicWorkflow(options.workflow.value)
+      ? t('appStudio.shell.unshareFromSquare')
+      : t('appStudio.shell.shareToSquare')
   })
 
   const canOperatePublishedActions = computed(() => {
@@ -65,28 +74,28 @@ export const useWorkflowPublishActions = (options: UseWorkflowPublishActionsOpti
 
   const handleUpdatePublish = async () => {
     if (isDebugPassed(options.workflow.value)) {
-      await publishWorkflow(true, '工作流已发布到广场')
+      await publishWorkflow(true, t('appStudio.shell.workflowPublishedToSquare'))
       return
     }
 
-    showUnDebugPublishConfirm({
-      content: '该工作流尚未调试成功，是否确认发布？发布后将更新草稿配置并发布到工作流广场。',
+    showUnDebugPublishConfirm(t, {
+      content: t('appStudio.shell.workflowNotDebuggedContent'),
       onConfirm: async () => {
-        await publishWorkflow(true, '工作流已发布到广场')
+        await publishWorkflow(true, t('appStudio.shell.workflowPublishedToSquare'))
       },
     })
   }
 
   const handleUpdateConfig = async () => {
     if (isDebugPassed(options.workflow.value)) {
-      await publishWorkflow(false, '工作流配置已更新')
+      await publishWorkflow(false, t('appStudio.shell.workflowConfigUpdated'))
       return
     }
 
-    showUnDebugPublishConfirm({
-      content: '该工作流尚未调试成功，是否确认发布？发布后将更新草稿配置。',
+    showUnDebugPublishConfirm(t, {
+      content: t('appStudio.shell.workflowNotDebuggedContentConfigOnly'),
       onConfirm: async () => {
-        await publishWorkflow(false, '工作流配置已更新')
+        await publishWorkflow(false, t('appStudio.shell.workflowConfigUpdated'))
       },
     })
   }

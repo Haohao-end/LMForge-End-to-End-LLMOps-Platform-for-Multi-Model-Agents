@@ -4,6 +4,7 @@ import { useAudioPlayer } from '@/hooks/use-audio'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { Message } from '@arco-design/web-vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义自定义组件所需数据
 const props = defineProps({
@@ -18,6 +19,7 @@ const props = defineProps({
     required: true,
   },
 })
+const { t } = useI18n()
 
 const visible = ref(props.default_visible)
 const containerRef = ref<HTMLElement | null>(null)
@@ -67,11 +69,11 @@ const containerClass = computed(() => {
 })
 
 const toggleTitle = computed(() => {
-  return visible.value ? '隐藏技术细节' : '查看技术细节'
+  return visible.value ? t('chat.thought.hideTechnicalDetails') : t('chat.thought.showTechnicalDetails')
 })
 
 const toggleLabel = computed(() => {
-  return visible.value ? '隐藏技术细节' : '查看技术细节'
+  return visible.value ? t('chat.thought.hideTechnicalDetails') : t('chat.thought.showTechnicalDetails')
 })
 
 const headerClass = computed(() => {
@@ -87,23 +89,23 @@ const getThoughtContent = (agentThought: Record<string, any>) => {
 }
 
 const getThoughtTitle = (event: string) => {
-  if (event === QueueEvent.longTermMemoryRecall) return '长期记忆召回'
-  if (event === QueueEvent.agentThought) return '智能体推理'
-  if (event === QueueEvent.datasetRetrieval) return '搜索知识库'
-  if (event === QueueEvent.agentAction) return '调用工具'
-  if (event === QueueEvent.agentMessage) return '智能体消息'
-  if (event === QueueEvent.deepThinking) return '深度思考'
-  return '运行步骤'
+  if (event === QueueEvent.longTermMemoryRecall) return t('chat.thought.events.longTermMemoryRecall')
+  if (event === QueueEvent.agentThought) return t('chat.thought.events.agentThought')
+  if (event === QueueEvent.datasetRetrieval) return t('chat.thought.events.datasetRetrieval')
+  if (event === QueueEvent.agentAction) return t('chat.thought.events.agentAction')
+  if (event === QueueEvent.agentMessage) return t('chat.thought.events.agentMessage')
+  if (event === QueueEvent.deepThinking) return t('chat.thought.events.deepThinking')
+  return t('chat.thought.events.fallback')
 }
 
 const getThoughtTitleTooltip = (event: string) => {
-  if (event === QueueEvent.longTermMemoryRecall) return '长期记忆召回'
-  if (event === QueueEvent.agentThought) return '智能体推理'
-  if (event === QueueEvent.datasetRetrieval) return '搜索知识库'
-  if (event === QueueEvent.agentAction) return '调用工具'
-  if (event === QueueEvent.agentMessage) return '智能体消息'
-  if (event === QueueEvent.deepThinking) return '深度思考规划过程'
-  return '运行步骤'
+  if (event === QueueEvent.longTermMemoryRecall) return t('chat.thought.events.longTermMemoryRecall')
+  if (event === QueueEvent.agentThought) return t('chat.thought.events.agentThought')
+  if (event === QueueEvent.datasetRetrieval) return t('chat.thought.events.datasetRetrieval')
+  if (event === QueueEvent.agentAction) return t('chat.thought.events.agentAction')
+  if (event === QueueEvent.agentMessage) return t('chat.thought.events.agentMessage')
+  if (event === QueueEvent.deepThinking) return t('chat.thought.events.deepThinkingTooltip')
+  return t('chat.thought.events.fallback')
 }
 
 const scrollThoughtIntoView = (thoughtKey: string) => {
@@ -128,11 +130,11 @@ const syncLatestThought = async () => {
 const handleCopyThought = async (agentThought: Record<string, any>) => {
   const content = getThoughtContent(agentThought)
   if (!content) {
-    Message.warning('暂无可复制内容')
+    Message.warning(t('chat.thought.noCopyableContent'))
     return
   }
   await copyTextToClipboard(content)
-  Message.success('推理内容已复制')
+  Message.success(t('chat.thought.copied'))
 }
 
 const isThoughtPlaying = (agentThoughtId: string) => {
@@ -158,19 +160,19 @@ const canShowThoughtAudioAction = computed(() => {
 
 const handlePlayThought = async (agentThought: Record<string, any>) => {
   if (!props.message_id) {
-    Message.warning('当前消息暂不支持语音播放')
+    Message.warning(t('chat.thought.unsupportedAudioForMessage'))
     return
   }
 
   const content = getThoughtContent(agentThought)
   if (!content) {
-    Message.warning('暂无可播放内容')
+    Message.warning(t('chat.thought.noPlayableContent'))
     return
   }
 
   const currentId = String(getThoughtKey(agentThought))
   if (!currentId) {
-    Message.warning('当前推理内容暂不支持语音播放')
+    Message.warning(t('chat.thought.unsupportedAudioForThought'))
     return
   }
 

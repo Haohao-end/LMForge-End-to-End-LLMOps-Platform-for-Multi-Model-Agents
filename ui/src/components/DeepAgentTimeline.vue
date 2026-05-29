@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { QueueEvent } from '@/config'
 import { isImageArtifact, type ChatArtifact } from '@/views/shared/chat-output'
 import ChatImageGallery from './ChatImageGallery.vue'
@@ -14,22 +15,88 @@ const props = defineProps({
   },
   loading: { type: Boolean, default: false },
 })
+const { t } = useI18n()
 
 const expanded = ref(true)
 
 const stepTypeLabelMap: Record<string, string> = {
-  plan: '规划',
-  tool: '工具',
-  subagent: '子任务',
-  reflection: '汇总',
-  artifact: '产物',
+  plan: t('chat.deepTimeline.stepTypes.plan'),
+  tool: t('chat.deepTimeline.stepTypes.tool'),
+  subagent: t('chat.deepTimeline.stepTypes.subagent'),
+  reflection: t('chat.deepTimeline.stepTypes.reflection'),
+  artifact: t('chat.deepTimeline.stepTypes.artifact'),
 }
 
-const statusLabelMap: Record<string, string> = {
-  start: '进行中',
-  success: '完成',
-  error: '失败',
-  stream: '处理中',
+const normalizeTodoStatus = (status: unknown) => {
+  const normalized = String(status ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+
+  if (!normalized)
+    return 'pending'
+
+  const aliases: Record<string, string> = {
+    completed: 'completed',
+    complete: 'completed',
+    done: 'completed',
+    success: 'completed',
+    succeeded: 'completed',
+    finished: 'completed',
+    error: 'error',
+    failed: 'error',
+    fail: 'error',
+    failure: 'error',
+    in_progress: 'in_progress',
+    progress: 'in_progress',
+    running: 'in_progress',
+    working: 'in_progress',
+    doing: 'in_progress',
+    start: 'in_progress',
+    pending: 'pending',
+    todo: 'pending',
+    to_do: 'pending',
+    wait: 'pending',
+    waiting: 'pending',
+    not_started: 'pending',
+  }
+
+  return aliases[normalized] || 'pending'
+}
+
+const normalizeTodoItems = (todos: unknown): Array<Record<string, any>> => {
+  if (!Array.isArray(todos))
+    return []
+
+  return todos
+    .map((todo, index) => {
+      if (todo && typeof todo === 'object') {
+        const record = todo as Record<string, any>
+        const content = String(
+          record.content ?? record.text ?? record.description ?? record.title ?? record.name ?? '',
+        ).trim()
+        const title = String(record.title ?? record.name ?? content).trim()
+        const rawStatus = String(record.status ?? '').trim()
+
+        return {
+          ...record,
+          content: content || title,
+          title: title || content,
+          status: normalizeTodoStatus(record.status),
+          ...(rawStatus ? { raw_status: rawStatus } : {}),
+          position: index,
+        }
+      }
+
+      const text = String(todo ?? '').trim()
+      return {
+        content: text,
+        title: text,
+        status: 'pending',
+        position: index,
+      }
+    })
+    .filter((todo) => String(todo.content || todo.title || '').trim())
 }
 
 const timelineItems = computed(() => {
@@ -37,19 +104,22 @@ const timelineItems = computed(() => {
     const toolInput = (thought.tool_input || {}) as Record<string, any>
     const timeline = (toolInput.timeline || {}) as Record<string, any>
     const artifact = (toolInput.artifact || null) as Record<string, any> | null
+    const todos = normalizeTodoItems(timeline.todos || toolInput.todos || [])
+    const renderKey = String(thought.id || `step-${index}`)
+    const tool = String(thought.tool || '')
 
     if (thought.event === QueueEvent.deepArtifactCreated && artifact) {
       return {
-        id: String(thought.id || `artifact-${index}`),
+        id: renderKey,
+        renderKey: `${renderKey}-artifact-${index}`,
         event: thought.event,
         position: Number(thought.position ?? index),
-        title: artifact.name || '已生成附件',
+        title: artifact.name || t('chat.deepTimeline.generatedAttachment'),
         detail: artifact.url || '',
         technicalDetail: artifact.path || '',
         stepType: 'artifact',
         stepTypeLabel: stepTypeLabelMap.artifact,
         status: 'success',
-        statusLabel: statusLabelMap.success,
         tool: 'artifact',
         latency: Number(thought.latency ?? 0),
         artifact,
@@ -58,12 +128,13 @@ const timelineItems = computed(() => {
 
     const stepType = String(timeline.step_type || 'tool')
     const status = String(timeline.status || 'success')
-    const title = String(timeline.title || thought.tool || '深度执行步骤')
+    const title = String(timeline.title || thought.tool || t('chat.deepTimeline.fallbackStepTitle'))
     const detail = String(timeline.detail || thought.thought || thought.observation || '')
     const technicalDetail = String(timeline.technical_detail || thought.observation || '')
 
     return {
-      id: String(thought.id || `step-${index}`),
+      id: renderKey,
+      renderKey: `${renderKey}-${stepType}-${tool || 'step'}-${index}`,
       event: thought.event,
       position: Number(thought.position ?? index),
       title,
@@ -72,10 +143,12 @@ const timelineItems = computed(() => {
       stepType,
       stepTypeLabel: stepTypeLabelMap[stepType] || stepType,
       status,
-      statusLabel: statusLabelMap[status] || status,
-      tool: String(thought.tool || ''),
+      tool,
       latency: Number(thought.latency ?? 0),
       artifact: null,
+      todos,
+      showTodos: tool === 'write_todos' && todos.length > 0,
+      todoCount: todos.length,
     }
   }).sort((left, right) => left.position - right.position)
 })
@@ -115,23 +188,32 @@ const visibleTimelineItems = computed(() => {
 
 const summaryText = computed(() => {
   const count = visibleTimelineItems.value.length + (imageGalleryImages.value.length > 0 ? 1 : 0)
+  const activeTodo = [...visibleTimelineItems.value].reverse().find((item) => item.showTodos) || null
+  if (activeTodo) {
+    return t('chat.deepTimeline.todoSummary', { count: activeTodo.todoCount })
+  }
   const active = [...visibleTimelineItems.value].reverse().find((item) => item.status === 'start') || null
   if (active) {
     return `${active.title}`
   }
-  return count > 0 ? `共 ${count} 个深度执行步骤` : '深度执行轨迹'
+  return count > 0
+    ? t('chat.deepTimeline.totalSteps', { count })
+    : t('chat.deepTimeline.empty')
 })
 
-const getStatusDotClass = (status: string) => {
+const getStepDotClass = (status: string) => {
   if (status === 'success') return 'bg-emerald-500'
   if (status === 'error') return 'bg-rose-500'
-  return 'bg-amber-500 animate-pulse'
+  if (status === 'warning') return 'bg-amber-500'
+  if (status === 'start' || status === 'stream') return 'bg-amber-500 animate-pulse'
+  return 'bg-slate-300'
 }
 
-const getStatusBadgeClass = (status: string) => {
-  if (status === 'success') return 'deep-agent-badge--success'
-  if (status === 'error') return 'deep-agent-badge--error'
-  return 'deep-agent-badge--progress'
+const getTodoDotClass = (status: string) => {
+  if (status === 'completed') return 'bg-emerald-500'
+  if (status === 'error') return 'bg-rose-500'
+  if (status === 'in_progress') return 'bg-amber-500 animate-pulse'
+  return 'bg-slate-300'
 }
 </script>
 
@@ -143,9 +225,8 @@ const getStatusBadgeClass = (status: string) => {
       @click="expanded = !expanded"
     >
       <div class="flex items-center gap-2 min-w-0">
-        <span class="deep-agent-timeline__brain">🧠</span>
         <div class="min-w-0">
-          <div class="deep-agent-timeline__title">深入思考轨迹</div>
+          <div class="deep-agent-timeline__title">{{ t('chat.deepTimeline.title') }}</div>
           <div class="deep-agent-timeline__summary truncate">{{ summaryText }}</div>
         </div>
       </div>
@@ -153,7 +234,7 @@ const getStatusBadgeClass = (status: string) => {
         <span
           v-if="loading"
           class="text-[11px] text-amber-700"
-        >执行中</span>
+        >{{ t('chat.deepTimeline.running') }}</span>
         <span
           :class="['deep-agent-timeline__caret', expanded ? 'rotate-180' : '']"
         >⌄</span>
@@ -166,34 +247,44 @@ const getStatusBadgeClass = (status: string) => {
         class="deep-agent-gallery"
       >
         <div class="deep-agent-gallery__header">
-          <span class="deep-agent-gallery__label">生成图片</span>
-          <span class="deep-agent-gallery__count">{{ imageCount }} 张</span>
+          <span class="deep-agent-gallery__label">{{ t('chat.deepTimeline.generatedImages') }}</span>
+          <span class="deep-agent-gallery__count">{{ t('chat.deepTimeline.imageCount', { count: imageCount }) }}</span>
         </div>
         <chat-image-gallery
           :images="imageGalleryImages"
-          title="生成图片"
+          :title="t('chat.deepTimeline.generatedImages')"
         />
       </div>
 
       <div
         v-for="item in visibleTimelineItems"
-        :key="item.id"
+        :key="item.renderKey"
         class="deep-agent-step"
       >
         <div class="deep-agent-step__rail">
-          <span :class="['deep-agent-step__dot', getStatusDotClass(item.status)]"></span>
+          <span :class="['deep-agent-step__dot', getStepDotClass(item.status)]"></span>
         </div>
 
         <div class="deep-agent-step__content">
           <div class="deep-agent-step__meta">
             <span class="deep-agent-step__name">{{ item.title }}</span>
             <span class="deep-agent-badge">{{ item.stepTypeLabel }}</span>
-            <span :class="['deep-agent-badge', getStatusBadgeClass(item.status)]">{{ item.statusLabel }}</span>
             <span v-if="item.latency > 0" class="deep-agent-step__latency">{{ item.latency.toFixed(2) }}s</span>
           </div>
 
           <div v-if="item.detail" class="deep-agent-step__detail">
             {{ item.detail }}
+          </div>
+
+          <div v-if="item.showTodos && item.todos.length > 0" class="deep-agent-todo-list">
+            <div
+              v-for="todo in item.todos"
+              :key="`${item.id}-todo-${todo.position}-${todo.title}`"
+              class="deep-agent-todo-item"
+            >
+              <span :class="['deep-agent-todo__dot', getTodoDotClass(todo.status)]"></span>
+              <span class="deep-agent-todo__text">{{ todo.content || todo.title }}</span>
+            </div>
           </div>
 
           <div v-if="item.artifact" class="deep-agent-artifact">
@@ -214,12 +305,12 @@ const getStatusBadgeClass = (status: string) => {
               target="_blank"
               rel="noreferrer"
             >
-              下载附件
+              {{ t('chat.deepTimeline.downloadAttachment') }}
             </a>
           </div>
 
           <details v-if="item.technicalDetail && item.technicalDetail !== item.detail" class="deep-agent-step__technical">
-            <summary>查看技术细节</summary>
+            <summary>{{ t('chat.deepTimeline.technicalDetails') }}</summary>
             <pre>{{ item.technicalDetail }}</pre>
           </details>
         </div>
@@ -232,10 +323,9 @@ const getStatusBadgeClass = (status: string) => {
 .deep-agent-timeline {
   width: 100%;
   border-radius: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.14), transparent 38%),
-    linear-gradient(180deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.98));
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08);
   overflow: hidden;
 }
 
@@ -247,11 +337,6 @@ const getStatusBadgeClass = (status: string) => {
   padding: 12px 14px;
   cursor: pointer;
   text-align: left;
-}
-
-.deep-agent-timeline__brain {
-  font-size: 16px;
-  line-height: 1;
 }
 
 .deep-agent-timeline__title {
@@ -318,6 +403,10 @@ const getStatusBadgeClass = (status: string) => {
   height: 10px;
   border-radius: 999px;
   box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9);
+  transition:
+    background-color 0.24s ease,
+    box-shadow 0.24s ease,
+    transform 0.24s ease;
 }
 
 .deep-agent-step__content {
@@ -348,21 +437,6 @@ const getStatusBadgeClass = (status: string) => {
   background: rgba(148, 163, 184, 0.14);
 }
 
-.deep-agent-badge--success {
-  color: #166534;
-  background: rgba(34, 197, 94, 0.14);
-}
-
-.deep-agent-badge--error {
-  color: #b91c1c;
-  background: rgba(248, 113, 113, 0.16);
-}
-
-.deep-agent-badge--progress {
-  color: #92400e;
-  background: rgba(251, 191, 36, 0.18);
-}
-
 .deep-agent-step__latency {
   font-size: 11px;
   color: #94a3b8;
@@ -372,6 +446,51 @@ const getStatusBadgeClass = (status: string) => {
   margin-top: 6px;
   font-size: 12px;
   color: #4b5563;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.deep-agent-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.deep-agent-todo-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.deep-agent-todo-item + .deep-agent-todo-item {
+  padding-top: 8px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.24);
+}
+
+.deep-agent-todo__dot {
+  flex-shrink: 0;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.85);
+  transition:
+    background-color 0.24s ease,
+    box-shadow 0.24s ease,
+    transform 0.24s ease;
+}
+
+.deep-agent-todo__text {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #334155;
   white-space: pre-wrap;
   word-break: break-word;
 }

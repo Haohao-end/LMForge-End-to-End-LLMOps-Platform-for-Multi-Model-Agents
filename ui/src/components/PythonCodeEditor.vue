@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, shallowRef } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, shallowRef } from 'vue'
 import type * as Monaco from 'monaco-editor'
 import { Message } from '@arco-design/web-vue'
 import {
@@ -7,6 +7,7 @@ import {
   checkCodeQuality,
   type ValidationError,
 } from '@/utils/python-validator'
+import { useI18n } from 'vue-i18n'
 
 // 定义组件属性
 const props = defineProps({
@@ -16,7 +17,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: '# 在此编写 Python 代码...',
+    default: '',
   },
   height: {
     type: String,
@@ -29,6 +30,11 @@ const props = defineProps({
 })
 
 const emits = defineEmits(['update:modelValue', 'validate'])
+const { locale } = useI18n()
+const isEnglish = computed(() => locale.value === 'en-US')
+const defaultPlaceholder = computed(() =>
+  isEnglish.value ? '# Write Python code here...' : '# 在此编写 Python 代码...',
+)
 
 // 编辑器实例和容器引用
 const editorContainer = ref<HTMLElement | null>(null)
@@ -75,7 +81,7 @@ onMounted(async () => {
 
   // 配置 Monaco Editor
   editor.value = monaco.editor.create(container, {
-    value: props.modelValue || props.placeholder,
+    value: props.modelValue || props.placeholder || defaultPlaceholder.value,
     language: 'python',
     theme: 'vs-dark',
     automaticLayout: true,
@@ -131,7 +137,7 @@ onMounted(async () => {
 
   // 添加自定义命令
   editor.value.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-    Message.success('代码已自动保存')
+    Message.success(isEnglish.value ? 'Code saved automatically' : '代码已自动保存')
   })
 })
 
@@ -140,7 +146,7 @@ watch(
   () => props.modelValue,
   (newValue) => {
     if (editor.value && newValue !== editor.value.getValue()) {
-      editor.value.setValue(newValue || props.placeholder)
+      editor.value.setValue(newValue || props.placeholder || defaultPlaceholder.value)
       const validationErrors = validatePythonCode(newValue)
       updateMarkers(validationErrors)
     }
@@ -179,25 +185,25 @@ defineExpose({
       <div class="flex items-center justify-between px-3 py-2 bg-gray-800 text-white text-xs">
         <div class="flex items-center gap-2">
           <icon-code :size="16" />
-          <span>Python 代码编辑器</span>
-          <a-tag v-if="isValidating" size="small" color="blue">验证中...</a-tag>
+          <span>{{ isEnglish ? 'Python Code Editor' : 'Python 代码编辑器' }}</span>
+          <a-tag v-if="isValidating" size="small" color="blue">{{ isEnglish ? 'Validating...' : '验证中...' }}</a-tag>
           <a-tag v-else-if="errors.length === 0" size="small" color="green">
             <template #icon>
               <icon-check-circle />
             </template>
-            无错误
+            {{ isEnglish ? 'No errors' : '无错误' }}
           </a-tag>
           <a-tag v-else size="small" color="red">
             <template #icon>
               <icon-close-circle />
             </template>
-            {{ errors.filter(e => e.severity === 8).length }} 个错误
+            {{ errors.filter(e => e.severity === 8).length }} {{ isEnglish ? 'errors' : '个错误' }}
           </a-tag>
         </div>
         <div class="flex items-center gap-2 text-gray-400">
-          <span>Ctrl+S 保存</span>
+          <span>{{ isEnglish ? 'Ctrl+S Save' : 'Ctrl+S 保存' }}</span>
           <span>|</span>
-          <span>Ctrl+/ 注释</span>
+          <span>{{ isEnglish ? 'Ctrl+/ Comment' : 'Ctrl+/ 注释' }}</span>
         </div>
       </div>
     </div>
@@ -212,7 +218,7 @@ defineExpose({
     <!-- 错误提示面板 -->
     <div v-if="errors.length > 0" class="error-panel max-h-32 overflow-y-auto">
       <div class="px-3 py-2 bg-red-50 border-t border-red-200">
-        <div class="text-xs font-semibold text-red-700 mb-2">代码问题：</div>
+        <div class="text-xs font-semibold text-red-700 mb-2">{{ isEnglish ? 'Code issues:' : '代码问题：' }}</div>
         <div class="space-y-1">
           <div
             v-for="(error, index) in errors.slice(0, 5)"
@@ -230,12 +236,12 @@ defineExpose({
               :size="14"
             />
             <span class="text-gray-700">
-              <span class="font-mono text-red-600">行 {{ error.startLineNumber }}:</span>
+              <span class="font-mono text-red-600">{{ isEnglish ? 'Line' : '行' }} {{ error.startLineNumber }}:</span>
               {{ error.message }}
             </span>
           </div>
           <div v-if="errors.length > 5" class="text-xs text-gray-500 pl-5">
-            还有 {{ errors.length - 5 }} 个问题...
+            {{ isEnglish ? 'There are' : '还有' }} {{ errors.length - 5 }} {{ isEnglish ? 'more issues...' : '个问题...' }}
           </div>
         </div>
       </div>

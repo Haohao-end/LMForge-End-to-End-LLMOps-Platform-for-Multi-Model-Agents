@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useGetDebugConversationSummary, useUpdateDebugConversationSummary } from '@/hooks/use-app'
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
   app_id: { type: String, required: true },
   long_term_memory: {
@@ -32,7 +34,7 @@ const openSummaryModal = async () => {
   <div class="">
     <!-- 预览与调试头组件 -->
     <div class="flex items-center justify-between border-b h-[64px] px-4">
-      <div class="text-lg text-gray-700">预览与调试</div>
+      <div class="text-lg text-gray-700">{{ t('appStudio.debug.title') }}</div>
       <a-button
         :disabled="!props.long_term_memory?.enable"
         size="mini"
@@ -43,7 +45,7 @@ const openSummaryModal = async () => {
         <template #icon>
           <icon-save />
         </template>
-        长期记忆
+        {{ t('appStudio.debug.longTermMemory') }}
       </a-button>
     </div>
     <!-- 长期记忆模态窗 -->
@@ -56,7 +58,9 @@ const openSummaryModal = async () => {
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
-        <div class="text-lg font-bold text-gray-700">长期记忆</div>
+        <div class="text-lg font-bold text-gray-700">
+          {{ t('appStudio.debug.longTermMemory') }}
+        </div>
         <a-button
           type="text"
           class="!text-gray-700"
@@ -72,7 +76,7 @@ const openSummaryModal = async () => {
       <div class="pt-6">
         <a-textarea
           v-model:model-value="debug_conversation_summary"
-          placeholder="请输入当前调试会话长期记忆"
+          :placeholder="t('appStudio.debug.longTermMemoryPlaceholder')"
           show-word-limit
           :max-length="2000"
           :auto-size="{ minRows: 8, maxRows: 8 }"
@@ -81,7 +85,9 @@ const openSummaryModal = async () => {
         <div class="flex items-center justify-between">
           <div class=""></div>
           <a-space :size="16">
-            <a-button class="rounded-lg" @click="summaryModalVisible = false">取消</a-button>
+            <a-button class="rounded-lg" @click="summaryModalVisible = false">
+              {{ t('common.actions.cancel') }}
+            </a-button>
             <a-button
               :loading="loading"
               type="primary"
@@ -96,7 +102,7 @@ const openSummaryModal = async () => {
                 }
               "
             >
-              保存
+              {{ t('common.actions.save') }}
             </a-button>
           </a-space>
         </div>

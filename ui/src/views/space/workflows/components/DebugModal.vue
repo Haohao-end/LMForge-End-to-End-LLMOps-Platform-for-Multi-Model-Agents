@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useVueFlow } from '@vue-flow/core'
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDebugWorkflow } from '@/hooks/use-workflow'
 import type { ValidatedError } from '@arco-design/web-vue'
 import {
@@ -22,6 +23,7 @@ const props = defineProps({
   workflow_id: { type: String, required: true, default: '' },
 })
 const emits = defineEmits(['update:visible', 'debug-success'])
+const { t } = useI18n()
 const { nodes } = useVueFlow()
 const form = ref<Record<string, string | number | boolean>>({})
 const nodeResults = ref<DebugNodeResult[]>([])
@@ -107,7 +109,7 @@ watch(
     <!-- 调试面板标题 -->
     <div class="flex items-center justify-between mb-2">
       <!-- 左侧标题 -->
-      <div class="text-base font-bold text-gray-700">工作流调试</div>
+      <div class="text-base font-bold text-gray-700">{{ t('workflowEditor.debugTitle') }}</div>
       <!-- 右侧关闭按钮 -->
       <a-button
         size="mini"
@@ -122,9 +124,9 @@ watch(
     </div>
     <!-- tab面板 -->
     <a-tabs v-model:active-key="activatedTab">
-      <a-tab-pane key="input" title="输入">
+      <a-tab-pane key="input" :title="t('workflowEditor.input')">
         <!-- 无输入数据样式 -->
-        <a-empty v-if="inputs.length <= 0" class="my-4">该工作流暂无输入数据</a-empty>
+        <a-empty v-if="inputs.length <= 0" class="my-4">{{ t('workflowEditor.noInputData') }}</a-empty>
         <!-- 有数据的UI -->
         <a-form :model="form" layout="vertical" @submit="onSubmit">
           <!-- 输入数据表单列表 -->
@@ -147,18 +149,18 @@ watch(
             <a-input
               v-if="input.type === 'string'"
               v-model="form[input.name]"
-              placeholder="请输入参考值"
+              :placeholder="t('workflowEditor.parameterValue')"
               class="!rounded-lg"
             />
             <a-input-number
               v-else-if="['int', 'float'].includes(input.type)"
               v-model="form[input.name]"
-              placeholder="请输入参考值"
+              :placeholder="t('workflowEditor.parameterValue')"
               class="!rounded-lg"
             />
             <a-radio-group v-else-if="input.type === 'boolean'" v-model="form[input.name]">
-              <a-radio :value="true">是</a-radio>
-              <a-radio :value="false">否</a-radio>
+              <a-radio :value="true">{{ t('common.status.active') }}</a-radio>
+              <a-radio :value="false">{{ t('common.status.revoked') }}</a-radio>
             </a-radio-group>
           </a-form-item>
           <a-button
@@ -171,11 +173,11 @@ watch(
             <template #icon>
               <icon-play-arrow />
             </template>
-            开始运行
+            {{ t('workflowEditor.startRun') }}
           </a-button>
         </a-form>
       </a-tab-pane>
-      <a-tab-pane key="output" title="输出">
+      <a-tab-pane key="output" :title="t('workflowEditor.output')">
         <!-- 运行中的状态 -->
         <div
           v-if="debugWorkflowLoading"
@@ -184,11 +186,11 @@ watch(
           <!-- 加载状态 -->
           <div class="flex items-center gap-2">
             <icon-loading class="text-green-500" />
-            <div class="text-green-500">工作流运行中</div>
+            <div class="text-green-500">{{ t('workflowEditor.running') }}</div>
           </div>
           <!-- 当前执行完成的节点 -->
           <div class="text-gray-500 text-xs">
-            已成功运行节点【{{ nodeResults.slice(-1)[0]?.node_data?.title ?? '-' }}】
+            {{ t('workflowEditor.previewNodeSuccess', { name: nodeResults.slice(-1)[0]?.node_data?.title ?? '-' }) }}
           </div>
         </div>
         <!-- 非运行时状态 -->
@@ -200,7 +202,7 @@ watch(
           >
             <div class="flex items-center gap-2 text-red-500">
               <icon-exclamation-circle-fill />
-              <div>工作流运行失败</div>
+              <div>{{ t('workflowEditor.runFailed') }}</div>
             </div>
             <div class="text-xs text-gray-500">{{ debugWorkflowError }}</div>
           </div>
@@ -212,20 +214,20 @@ watch(
             <!-- 状态统计 -->
             <div class="flex items-center gap-2 text-green-500">
               <icon-check-circle-fill />
-              <div class="">运行成功</div>
+              <div class="">{{ t('workflowEditor.runSuccess') }}</div>
             </div>
             <!-- 数据统计 -->
             <div class="flex items-center gap-2 text-xs">
               <div class="flex-1 flex flex-col gap-2">
-                <div class="text-gray-500">总消耗</div>
+                <div class="text-gray-500">{{ t('workflowEditor.totalConsumption') }}</div>
                 <div class="text-gray-700">500 Tokens</div>
               </div>
               <div class="flex-1 flex flex-col gap-2">
-                <div class="text-gray-500">总用时</div>
+                <div class="text-gray-500">{{ t('workflowEditor.totalTime') }}</div>
                 <div class="text-gray-700">{{ latency.toFixed(2) }}s</div>
               </div>
               <div class="flex-1 flex flex-col gap-2">
-                <div class="text-gray-500">插件消耗</div>
+                <div class="text-gray-500">{{ t('workflowEditor.toolConsumption') }}</div>
                 <div class="text-gray-700">{{ toolLatency.toFixed(2) }}s</div>
               </div>
             </div>
@@ -235,7 +237,7 @@ watch(
         </div>
         <!-- 空数据状态 -->
         <a-empty v-if="!debugWorkflowLoading && !outputs && !debugWorkflowError" class="my-4">
-          该工作流暂无运行调试结果
+          {{ t('workflowEditor.noRunResults') }}
         </a-empty>
       </a-tab-pane>
     </a-tabs>

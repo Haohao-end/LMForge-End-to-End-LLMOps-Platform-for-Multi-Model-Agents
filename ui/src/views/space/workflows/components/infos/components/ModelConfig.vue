@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { apiPrefix } from '@/config'
 import { useGetLanguageModel, useGetLanguageModels } from '@/hooks/use-language-model'
+import {
+  getModelParameterDisplayHelp,
+  getModelParameterDisplayLabel,
+} from '@/utils/model-parameter-display'
 
 type ModelForm = {
   selectValue: string
@@ -33,6 +38,7 @@ const {
   loadLanguageModel,
 } = useGetLanguageModel()
 const { language_models, loadLanguageModels } = useGetLanguageModels()
+const { t } = useI18n()
 const modelOptions = computed(() => {
   return language_models.value.map((language_model) => {
     return {
@@ -122,16 +128,16 @@ onMounted(() => {
     <template #content>
       <div class="bg-white px-6 py-5 shadow rounded-lg w-[460px]">
         <!-- 标题 -->
-        <div class="text-gray-700 text-base font-semibold mb-3">模型设置</div>
+        <div class="text-gray-700 text-base font-semibold mb-3">{{ t('workflowEditor.modelConfig.title') }}</div>
         <!-- 模型选择 -->
         <div class="flex flex-col gap-2 mb-2">
-          <div class="text-gray-700">模型</div>
+          <div class="text-gray-700">{{ t('workflowEditor.modelConfig.model') }}</div>
           <a-select
             v-model:model-value="form.selectValue"
             :options="modelOptions"
             size="small"
             class="rounded-lg mb-2"
-            placeholder="请选择Agent使用的大语言模型"
+            :placeholder="t('workflowEditor.modelConfig.placeholder')"
             @change="changeModel"
           >
             <template #label="{ data }">
@@ -161,7 +167,7 @@ onMounted(() => {
           </a-select>
         </div>
         <!-- 参数列表 -->
-        <div class="text-gray-700 mb-2">参数</div>
+        <div class="text-gray-700 mb-2">{{ t('workflowEditor.modelConfig.parameters') }}</div>
         <a-spin :loading="getLanguageModelLoading" class="w-full">
           <div
             v-for="parameter in language_model?.parameters"
@@ -170,8 +176,12 @@ onMounted(() => {
           >
             <!-- 字段标签 -->
             <div class="flex items-center gap-2 text-gray-500 w-[120px] flex-shrink-0">
-              <div class="text-xs">{{ parameter?.label }}</div>
-              <a-tooltip :content="parameter?.help">
+              <div class="text-xs">
+                {{ getModelParameterDisplayLabel(parameter.name, String(parameter?.label || ''), t) }}
+              </div>
+              <a-tooltip
+                :content="getModelParameterDisplayHelp(parameter.name, String(parameter?.help || ''), t)"
+              >
                 <icon-question-circle />
               </a-tooltip>
             </div>
@@ -180,7 +190,7 @@ onMounted(() => {
               <a-select
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请选择参数值"
+                :placeholder="t('workflowEditor.modelConfig.parameterValue')"
                 :options="parameter.options"
               />
             </template>
@@ -188,10 +198,10 @@ onMounted(() => {
               <a-select
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请选择参数值"
+                :placeholder="t('workflowEditor.modelConfig.parameterValue')"
                 :options="[
-                  { label: '是', value: true },
-                  { label: '否', value: false },
+                  { label: t('common.yes'), value: true },
+                  { label: t('common.no'), value: false },
                 ]"
               />
             </template>
@@ -209,7 +219,7 @@ onMounted(() => {
               <a-input
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请输入参数值"
+                :placeholder="t('workflowEditor.modelConfig.stringValue')"
               />
             </template>
           </div>

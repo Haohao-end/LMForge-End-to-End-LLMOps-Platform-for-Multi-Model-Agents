@@ -1,6 +1,7 @@
 import { audioToText, messageToAudio, textToAudio } from '@/services/audio'
 import { Message } from '@arco-design/web-vue'
 import { computed, ref } from 'vue'
+import { i18n } from '@/i18n'
 
 export const useAudioToText = () => {
   // 1.定义自定义hooks所需数据
@@ -12,7 +13,7 @@ export const useAudioToText = () => {
     try {
       loading.value = true
       const resp = await audioToText(file)
-      Message.success('语音转文本成功')
+      Message.success(i18n.global.t('appStudio.debug.audioToTextSuccess') as string)
       text.value = resp.data.text
     } finally {
       loading.value = false

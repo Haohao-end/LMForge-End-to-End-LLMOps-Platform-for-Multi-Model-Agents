@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useMarkdownRenderer } from '@/hooks/use-markdown-renderer'
+import { useI18n } from 'vue-i18n'
 import 'github-markdown-css'
 import 'highlight.js/styles/github.css'
 
 // 只读版本的人设与回复逻辑组件，支持编辑、对比、预览三种模式
+const { t } = useI18n()
 
 const props = defineProps({
   preset_prompt: { type: String, default: '', required: true },
@@ -96,12 +98,12 @@ const syncScrollFromPreview = () => {
 
 // 渲染 Markdown
 const compiledMarkdown = computed(() => {
-  return renderMarkdownWithPlaceholder(props.preset_prompt, '暂无人设与回复逻辑')
+  return renderMarkdownWithPlaceholder(props.preset_prompt, t('appStudio.presetPrompt.readonlyEmpty'))
 })
 
 // 处理代码块复制
 const handleMarkdownClick = async (event: MouseEvent) => {
-  await handleMarkdownCopyClick(event, { successMessage: '代码已复制' })
+  await handleMarkdownCopyClick(event, { successMessage: t('chat.messages.codeCopied') })
 }
 </script>
 
@@ -109,7 +111,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   <div class="flex flex-col h-[calc(100vh-173px)]">
     <!-- 提示标题 -->
     <div class="flex items-center justify-between px-4 mb-4">
-      <div class="text-gray-700 font-bold">人设与回复逻辑</div>
+      <div class="text-gray-700 font-bold">{{ t('appStudio.presetPrompt.title') }}</div>
       <a-space :size="4">
         <a-button
           size="mini"
@@ -120,7 +122,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           <template #icon>
             <icon-edit />
           </template>
-          编辑
+          {{ t('chat.markdown.modeEdit') }}
         </a-button>
         <a-button
           size="mini"
@@ -131,7 +133,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           <template #icon>
             <icon-apps />
           </template>
-          对比
+          {{ t('chat.markdown.modeSplit') }}
         </a-button>
         <a-button
           size="mini"
@@ -142,7 +144,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           <template #icon>
             <icon-eye />
           </template>
-          预览
+          {{ t('chat.markdown.modePreview') }}
         </a-button>
       </a-space>
     </div>
@@ -158,7 +160,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           @scroll="syncScrollFromEditor"
         >
           <div class="readonly-textarea">
-            {{ props.preset_prompt || '暂无人设与回复逻辑' }}
+            {{ props.preset_prompt || t('appStudio.presetPrompt.readonlyEmpty') }}
           </div>
         </div>
 

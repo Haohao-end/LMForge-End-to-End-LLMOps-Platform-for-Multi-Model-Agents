@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   count: number
@@ -14,6 +15,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'item-click': [index: number]
 }>()
+const { t } = useI18n()
 
 const items = computed(() => {
   return Array.from({ length: props.count }, (_, i) => i)
@@ -50,7 +52,7 @@ const handleAfterEnter = (el: Element) => {
             ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/30'
             : 'bg-white/40 backdrop-blur-md border border-white/60 text-gray-700 hover:bg-white/50 hover:border-white/80 hover:shadow-lg hover:shadow-blue-500/10',
         ]"
-        :aria-label="`跳转到第 ${index + 1} 项`"
+        :aria-label="t('chat.navigation.jumpToItem', { index: index + 1 })"
       >
         {{ index + 1 }}
       </button>

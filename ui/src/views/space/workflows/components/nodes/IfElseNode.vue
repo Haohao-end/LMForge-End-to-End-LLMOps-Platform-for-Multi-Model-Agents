@@ -1,23 +1,25 @@
 <script setup lang="ts">
 import { Handle, type NodeProps, Position } from '@vue-flow/core'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<NodeProps>()
+const { t } = useI18n()
 
-// 运算符显示映射
-const operatorLabels: Record<string, string> = {
-  equals: '等于',
-  not_equals: '不等于',
-  contains: '包含',
-  not_contains: '不包含',
-  starts_with: '开始于',
-  ends_with: '结束于',
-  is_empty: '为空',
-  is_not_empty: '不为空',
-  greater_than: '大于',
-  less_than: '小于',
-  greater_than_or_equal: '大于等于',
-  less_than_or_equal: '小于等于',
-}
+const operatorLabels = computed<Record<string, string>>(() => ({
+  equals: t('workflowEditor.operators.equals'),
+  not_equals: t('workflowEditor.operators.not_equals'),
+  contains: t('workflowEditor.operators.contains'),
+  not_contains: t('workflowEditor.operators.not_contains'),
+  starts_with: t('workflowEditor.operators.starts_with'),
+  ends_with: t('workflowEditor.operators.ends_with'),
+  is_empty: t('workflowEditor.operators.is_empty'),
+  is_not_empty: t('workflowEditor.operators.is_not_empty'),
+  greater_than: t('workflowEditor.operators.greater_than'),
+  less_than: t('workflowEditor.operators.less_than'),
+  greater_than_or_equal: t('workflowEditor.operators.greater_than_or_equal'),
+  less_than_or_equal: t('workflowEditor.operators.less_than_or_equal'),
+}))
 </script>
 
 <template>
@@ -39,7 +41,7 @@ const operatorLabels: Record<string, string> = {
     <div v-if="props.data?.inputs?.length > 0" class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">输入数据</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.inputData') }}</div>
       </div>
       <div class="w-full flex flex-col gap-2 min-w-0">
         <div
@@ -58,7 +60,7 @@ const operatorLabels: Record<string, string> = {
               v-if="input.value.type == 'ref'"
               class="bg-white text-gray-500 border px-2 py-1 rounded break-words"
             >
-              引用 / {{ input.value.content.ref_var_name }}
+              {{ t('workflowEditor.referencePrefix') }} {{ input.value.content.ref_var_name }}
             </div>
             <div v-else class="text-gray-500 px-2 py-1 bg-white rounded break-words">
               {{ input.value.content || '-' }}
@@ -72,7 +74,7 @@ const operatorLabels: Record<string, string> = {
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">条件配置</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.ifElse.title') }}</div>
       </div>
       <div class="w-full flex flex-col gap-2 min-w-0">
         <div
@@ -87,10 +89,10 @@ const operatorLabels: Record<string, string> = {
           </span>
         </div>
         <div v-if="!props.data?.conditions?.length" class="text-gray-500 text-xs px-0.5">
-          未配置条件
+          {{ t('workflowEditor.ifElse.noConditions') }}
         </div>
         <div v-if="props.data?.conditions?.length > 1" class="text-xs text-gray-500 break-words">
-          逻辑关系: {{ props.data?.logical_operator === 'and' ? '且 (AND)' : '或 (OR)' }}
+          {{ t('workflowEditor.logicRelation') }}: {{ props.data?.logical_operator === 'and' ? t('workflowEditor.logicOptions.and') : t('workflowEditor.logicOptions.or') }}
         </div>
       </div>
     </div>

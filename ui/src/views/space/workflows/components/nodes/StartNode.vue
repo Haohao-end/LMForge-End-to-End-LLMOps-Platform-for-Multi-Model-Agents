@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Handle, type NodeProps, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义自定义组件所需数据
 const props = defineProps<NodeProps>()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -24,7 +26,7 @@ const props = defineProps<NodeProps>()
       <!-- 标题 -->
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">输入数据</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.inputData') }}</div>
       </div>
       <!-- 变量列表 -->
       <div class="flex flex-wrap gap-2 w-full min-w-0">

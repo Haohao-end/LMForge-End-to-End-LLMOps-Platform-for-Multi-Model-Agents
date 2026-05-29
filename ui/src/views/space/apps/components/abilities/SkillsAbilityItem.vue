@@ -7,6 +7,8 @@ import { useMarkdownRenderer } from '@/hooks/use-markdown-renderer'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
 import type { SkillBinding, SkillPackage } from '@/models/skill'
 import { getSkill } from '@/services/skill'
+import { useI18n } from 'vue-i18n'
+import { getStoreCategoryDisplayName } from '@/utils/store-display'
 import 'github-markdown-css'
 import SkillsMarketplacePickerModal from './SkillsMarketplacePickerModal.vue'
 
@@ -40,6 +42,7 @@ const props = defineProps({
   },
 })
 
+const { t, locale } = useI18n()
 const emits = defineEmits(['update:skills'])
 const { handleUpdateDraftAppConfig } = useUpdateDraftAppConfig()
 const skillsModalVisible = ref(false)
@@ -50,7 +53,11 @@ const showMarketplacePickerModal = ref(false)
 const skillDetailLoading = ref(false)
 const skillDetail = ref<SkillPackage | null>(null)
 const { renderMarkdown } = useMarkdownRenderer()
-const skillDetailMarkdown = computed(() => renderMarkdown(skillDetail.value?.readme || skillDetail.value?.description || '未填写描述'))
+const skillDetailMarkdown = computed(() =>
+  renderMarkdown(
+    skillDetail.value?.readme || skillDetail.value?.description || t('appStudio.abilities.skills.noDescription'),
+  ),
+)
 
 const avatarPalettes = [
   ['#334155', '#0f172a'],
@@ -60,6 +67,18 @@ const avatarPalettes = [
   ['#be123c', '#e11d48'],
   ['#0f766e', '#14b8a6'],
 ]
+
+const getCategoryLabel = (category: string) => {
+  return getStoreCategoryDisplayName(category, locale.value === 'en-US' ? 'en-US' : 'zh-CN')
+}
+
+const getExecutorLabel = (value: string) => {
+  const normalized = String(value || '').trim()
+  if (normalized === 'scf') return t('store.skills.executorTypes.scf')
+  if (normalized === 'tool') return t('store.skills.executorTypes.tool')
+  if (normalized === 'prompt') return t('store.skills.executorTypes.prompt')
+  return normalized
+}
 
 const normalizeIconUrl = (icon: string = '') => {
   if (!icon) return ''
@@ -113,7 +132,7 @@ const openDetailModal = async (idx: number) => {
     const res = await getSkill(binding.skill_id || binding.id)
     skillDetail.value = res.data
   } catch (error: unknown) {
-    Message.error(error instanceof Error ? error.message : '加载技能详情失败')
+    Message.error(error instanceof Error ? error.message : t('appStudio.abilities.skills.detailLoadFailed'))
     skillsModalVisible.value = false
   } finally {
     skillDetailLoading.value = false
@@ -154,7 +173,7 @@ const handleSelectMarketplaceSkill = async (skill: SkillPackage) => {
 
   const duplicate = activateSkills.value.some((item) => String(item.skill_id || item.id || '').trim() === skillId)
   if (duplicate) {
-    Message.warning('该技能已添加到当前应用')
+    Message.warning(t('appStudio.abilities.skills.duplicateWarning'))
     return
   }
 
@@ -164,7 +183,7 @@ const handleSelectMarketplaceSkill = async (skill: SkillPackage) => {
   })
 
   await persistSkills([...activateSkills.value, nextSkill])
-  Message.success('已添加技能')
+  Message.success(t('appStudio.abilities.skills.addedSuccess'))
 }
 
 watch(
@@ -184,7 +203,7 @@ watch(
 <template>
   <a-collapse-item key="skills" class="app-ability-item">
     <template #header>
-      <div class="text-gray-700 font-bold">Skills</div>
+      <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.skills.title') }}</div>
     </template>
     <template #extra>
       <a-button size="mini" type="text" class="!text-gray-700" @click.stop="openMarketplacePicker">
@@ -219,10 +238,14 @@ watch(
             </div>
             <div class="text-xs text-gray-500 truncate">
               {{ skill.source_key }}
-              <template v-if="skill.tool_count > 0"> · {{ skill.tool_count }} 个工具</template>
-              · {{ skill.executor_type }}
+              <template v-if="skill.tool_count > 0">
+                · {{ t('appStudio.abilities.readonly.toolCount', { count: skill.tool_count }) }}
+              </template>
+              · {{ getExecutorLabel(skill.executor_type) }}
             </div>
-            <div class="text-xs text-gray-400 truncate">{{ skill.description || '未填写描述' }}</div>
+            <div class="text-xs text-gray-400 truncate">
+              {{ skill.description || t('appStudio.abilities.skills.noDescription') }}
+            </div>
           </div>
         </div>
         <a-button
@@ -238,7 +261,7 @@ watch(
       </div>
     </div>
     <div v-else class="text-xs text-gray-500 leading-[22px]">
-      点击右上角 + 从 Skills 广场添加技能。添加后会直接纳入当前应用的 Skills 绑定。
+      {{ t('appStudio.abilities.skills.empty') }}
     </div>
   </a-collapse-item>
 
@@ -252,7 +275,7 @@ watch(
   >
     <div class="flex items-center justify-between mb-6">
       <div class="text-lg font-bold text-gray-700">
-        {{ skillDetail ? skillDetail.label : 'Skills 详情' }}
+        {{ skillDetail ? skillDetail.label : t('appStudio.abilities.skills.detailTitle') }}
       </div>
       <a-button type="text" class="!text-gray-700" size="small" @click="handleCloseSkillsModal">
         <template #icon>
@@ -279,7 +302,7 @@ watch(
               </a-avatar>
               <div class="min-w-0">
                 <div class="font-semibold text-gray-800 truncate">{{ skillDetail.label }}</div>
-                <div class="text-xs text-gray-500 truncate">{{ skillDetail.source_key }} · {{ skillDetail.category }}</div>
+                <div class="text-xs text-gray-500 truncate">{{ skillDetail.source_key }} · {{ getCategoryLabel(skillDetail.category) }}</div>
               </div>
             </div>
             <div class="markdown-body skill-markdown max-h-56 overflow-auto" v-html="skillDetailMarkdown" />
@@ -287,17 +310,19 @@ watch(
 
           <div class="grid grid-cols-2 gap-3">
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">执行器</div>
-              <div class="text-sm text-gray-800">{{ skillDetail.executor_type }}</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('appStudio.abilities.skills.executor') }}</div>
+              <div class="text-sm text-gray-800">{{ getExecutorLabel(skillDetail.executor_type) }}</div>
             </div>
             <div class="rounded-lg bg-white p-3">
-              <div class="text-xs text-gray-500 mb-1">工具数量</div>
+              <div class="text-xs text-gray-500 mb-1">{{ t('appStudio.abilities.skills.toolCount') }}</div>
               <div class="text-sm text-gray-800">{{ skillDetail.tool_count }}</div>
             </div>
           </div>
 
           <div v-if="skillDetail.tools.length > 0">
-            <div class="text-sm font-bold text-gray-700 mb-2">包含工具</div>
+            <div class="text-sm font-bold text-gray-700 mb-2">
+              {{ t('appStudio.abilities.skills.includedTools') }}
+            </div>
             <div class="space-y-2">
               <a-card
                 v-for="tool in skillDetail.tools"
@@ -312,10 +337,12 @@ watch(
           </div>
 
           <div class="flex items-center justify-end gap-2 pt-2">
-            <a-button type="primary" @click="handleCloseSkillsModal">关闭</a-button>
+            <a-button type="primary" @click="handleCloseSkillsModal">
+              {{ t('common.actions.close') }}
+            </a-button>
           </div>
         </div>
-        <a-tag v-else color="arcoblue">请稍候，正在加载技能详情</a-tag>
+        <a-tag v-else color="arcoblue">{{ t('appStudio.abilities.skills.loadingDetail') }}</a-tag>
       </div>
     </a-spin>
   </a-modal>

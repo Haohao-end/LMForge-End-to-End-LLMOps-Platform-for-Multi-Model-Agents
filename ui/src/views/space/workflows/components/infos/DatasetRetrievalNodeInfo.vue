@@ -5,6 +5,7 @@ import { cloneDeep, debounce } from 'lodash'
 import { getReferencedVariables } from '@/utils/helper'
 import { useGetDatasetsWithPage } from '@/hooks/use-dataset'
 import { type ValidatedError, Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 type DatasetItem = {
   id: string
   name: string
@@ -66,6 +67,7 @@ const props = defineProps({
 })
 const emits = defineEmits(['update:visible', 'updateNode'])
 const datasetsModalVisible = ref(false)
+const { t } = useI18n()
 const form = ref<DatasetRetrievalNodeForm>({
   id: '',
   type: '',
@@ -131,8 +133,8 @@ const handleSelectDataset = (idx: number) => {
     )
   } else {
     // 5.3 检测已关联的知识库数量
-    if (form.value.datasets.length >= 5) {
-      Message.warning('关联知识库已超过5个，无法继续关联')
+  if (form.value.datasets.length >= 5) {
+      Message.warning(t('workflowEditor.datasetRetrieval.limitExceeded'))
       return
     }
     // 5.4 添加数据到激活知识库列表
@@ -272,7 +274,7 @@ onMounted(() => {
     <div v-if="isReadonly" class="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
       <div class="flex items-center gap-2 text-orange-700">
         <icon-lock class="flex-shrink-0" />
-        <span class="text-sm font-medium">预览模式：所有配置仅供查看，无法修改</span>
+        <span class="text-sm font-medium">{{ t('workflowEditor.previewMode') }}</span>
       </div>
     </div>
 
@@ -287,7 +289,7 @@ onMounted(() => {
         <a-input
           v-model:model-value="form.title"
           :disabled="isReadonly"
-          placeholder="请输入标题"
+          :placeholder="t('workflowEditor.titlePlaceholder')"
           class="!bg-white text-gray-700 font-semibold px-2"
         />
       </div>
@@ -309,7 +311,7 @@ onMounted(() => {
       v-model="form.description"
       :disabled="isReadonly"
       class="rounded-lg text-gray-700 !text-xs"
-      placeholder="输入描述..."
+      :placeholder="t('workflowEditor.descriptionPlaceholder')"
     />
     <!-- 分隔符 -->
     <a-divider class="my-2" />
@@ -321,19 +323,17 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">输入数据</div>
-            <a-tooltip
-              content="输入给大模型的参数，可在下方提示词中引用。所有输入参数会被转为string输入。"
-            >
+            <div class="">{{ t('workflowEditor.inputParameters') }}</div>
+            <a-tooltip :content="t('workflowEditor.modelConfig.help')">
               <icon-question-circle />
             </a-tooltip>
           </div>
         </div>
         <!-- 字段名 -->
         <div class="flex items-center gap-1 text-xs text-gray-500 mb-2">
-          <div class="w-[20%]">参数名</div>
-          <div class="w-[25%]">类型</div>
-          <div class="w-[55%]">值</div>
+          <div class="w-[20%]">{{ t('workflowEditor.parameterName') }}</div>
+          <div class="w-[25%]">{{ t('workflowEditor.parameterType') }}</div>
+          <div class="w-[55%]">{{ t('workflowEditor.parameterValue') }}</div>
         </div>
         <!-- 循环遍历字段列表 -->
         <div v-for="(input, idx) in form?.inputs" :key="idx" class="flex items-center gap-1">
@@ -346,11 +346,11 @@ onMounted(() => {
               v-model="input.type"
               class="px-2"
               :options="[
-                { label: '引用', value: 'ref' },
-                { label: 'STRING', value: 'string' },
-                { label: 'INT', value: 'int' },
-                { label: 'FLOAT', value: 'float' },
-                { label: 'BOOLEAN', value: 'boolean' },
+                { label: t('workflowEditor.variableTypes.ref'), value: 'ref' },
+                { label: t('workflowEditor.variableTypes.string'), value: 'string' },
+                { label: t('workflowEditor.variableTypes.int'), value: 'int' },
+                { label: t('workflowEditor.variableTypes.float'), value: 'float' },
+                { label: t('workflowEditor.variableTypes.boolean'), value: 'boolean' },
               ]"
             />
           </div>
@@ -359,11 +359,11 @@ onMounted(() => {
               v-if="input.type !== 'ref'"
               size="mini"
               v-model="input.content"
-              placeholder="请输入参数值"
+              :placeholder="t('workflowEditor.parameterValue')"
             />
             <a-select
               v-else
-              placeholder="请选择引用变量"
+              :placeholder="t('workflowEditor.selectReference')"
               size="mini"
               tag-nowrap
               v-model="input.ref"
@@ -379,8 +379,8 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">检索设置</div>
-            <a-tooltip content="配置知识库的检索规则，支持相似性检索、混合检索、全文检索。">
+            <div class="">{{ t('workflowEditor.datasetRetrieval.title') }}</div>
+            <a-tooltip :content="t('workflowEditor.datasetRetrieval.help')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -389,9 +389,9 @@ onMounted(() => {
           v-model="form.retrieval_config.retrieval_strategy"
           default-value="semantic"
           :options="[
-            { label: '混合策略', value: 'hybrid' },
-            { label: '全文检索', value: 'full_text' },
-            { label: '相似性检索', value: 'semantic' },
+            { label: t('workflowEditor.datasetRetrieval.strategyHybrid'), value: 'hybrid' },
+            { label: t('workflowEditor.datasetRetrieval.strategyFullText'), value: 'full_text' },
+            { label: t('workflowEditor.datasetRetrieval.strategySemantic'), value: 'semantic' },
           ]"
         />
       </div>
@@ -402,8 +402,8 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">最大召回数量</div>
-            <a-tooltip content="配置知识库的最大召回数量，范围为0-10.">
+            <div class="">{{ t('workflowEditor.datasetRetrieval.maxRecallTitle') }}</div>
+            <a-tooltip :content="t('workflowEditor.datasetRetrieval.maxRecallHelp')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -425,8 +425,8 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">最小匹配度</div>
-            <a-tooltip content="配置知识库的最小匹配度，范围为0-1">
+            <div class="">{{ t('workflowEditor.datasetRetrieval.minScoreTitle') }}</div>
+            <a-tooltip :content="t('workflowEditor.datasetRetrieval.minScoreHelp')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -452,8 +452,8 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <!-- 左侧标题 -->
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div class="">关联知识库</div>
-            <a-tooltip content="绑定知识库检索节点需要检索的知识库，最多可以关联5个知识库。">
+            <div class="">{{ t('workflowEditor.datasetRetrieval.bindDataset') }}</div>
+            <a-tooltip :content="t('workflowEditor.datasetRetrieval.bindDatasetHelp')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -509,16 +509,16 @@ onMounted(() => {
           </div>
         </div>
         <div v-else class="text-xs text-gray-500 leading-[22px]">
-          引用文本类型的数据，实现知识问答，工作流最多支持关联 5 个知识库。
+          {{ t('workflowEditor.datasetRetrieval.emptyTip') }}
         </div>
       </div>
       <a-divider class="my-4" />
       <!-- 输出参数 -->
       <div class="flex flex-col gap-2">
         <!-- 输出标题 -->
-        <div class="font-semibold text-gray-700">输出数据</div>
+        <div class="font-semibold text-gray-700">{{ t('workflowEditor.outputData') }}</div>
         <!-- 字段标题 -->
-        <div class="text-gray-500 text-xs">参数名</div>
+        <div class="text-gray-500 text-xs">{{ t('workflowEditor.parameterName') }}</div>
         <!-- 输出参数列表 -->
         <div v-for="(output, idx) in form?.outputs" :key="idx" class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
@@ -539,7 +539,7 @@ onMounted(() => {
     >
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between mb-6">
-        <div class="text-lg font-bold text-gray-700">选择引用知识库</div>
+        <div class="text-lg font-bold text-gray-700">{{ t('workflowEditor.datasetRetrieval.chooseDatasetTitle') }}</div>
         <a-button
           type="text"
           class="!text-gray-700"
@@ -578,7 +578,7 @@ onMounted(() => {
             <!-- 无数据UI状态 -->
             <a-empty
               v-if="datasets.length === 0"
-              description="没有可用的知识库"
+              :description="t('workflowEditor.datasetRetrieval.noAvailable')"
               class="h-[400px] flex flex-col items-center justify-center"
             />
           </div>
@@ -592,12 +592,12 @@ onMounted(() => {
             >
               <a-space class="my-4">
                 <a-spin />
-                <div class="text-gray-400">加载中</div>
+                <div class="text-gray-400">{{ t('workflowEditor.datasetRetrieval.loading') }}</div>
               </a-space>
             </a-col>
             <!-- 数据加载完成 -->
             <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" class="!text-center">
-              <div class="text-gray-400 my-4">数据已加载完成</div>
+              <div class="text-gray-400 my-4">{{ t('workflowEditor.datasetRetrieval.loaded') }}</div>
             </a-col>
           </a-row>
         </a-spin>
@@ -605,11 +605,11 @@ onMounted(() => {
       <!-- 底部选中知识库及按钮 -->
       <div class="flex items-center justify-between">
         <!-- 左侧提示文字 -->
-        <div class="">{{ form.datasets.length }} 个知识库被选中</div>
+        <div class="">{{ t('workflowEditor.datasetRetrieval.selectedCount', { count: form.datasets.length }) }}</div>
         <!-- 按钮组 -->
         <a-space :size="12">
           <a-button type="primary" class="rounded-lg" @click="() => (datasetsModalVisible = false)">
-            确定
+            {{ t('workflowEditor.datasetRetrieval.chooseDatasetButton') }}
           </a-button>
         </a-space>
       </div>

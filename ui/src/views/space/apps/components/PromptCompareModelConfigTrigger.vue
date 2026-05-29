@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { apiPrefix } from '@/config'
 import { useGetLanguageModel, useGetLanguageModels } from '@/hooks/use-language-model'
+import { useI18n } from 'vue-i18n'
 
 type ModelForm = {
   selectValue: string
@@ -18,6 +19,7 @@ const props = defineProps({
   },
 })
 const emits = defineEmits(['update:model_config'])
+const { t } = useI18n()
 const popupVisible = ref(false)
 const form = ref<ModelForm>({
   selectValue: '',
@@ -120,20 +122,24 @@ onMounted(() => {
         :image-url="`${apiPrefix}/language-models/${form.provider}/icon`"
       />
       <icon-robot v-else />
-      <div class="text-gray-700 text-xs">{{ form.model || '未配置模型' }}</div>
+      <div class="text-gray-700 text-xs">
+        {{ form.model || t('appStudio.promptCompareModel.unsetModel') }}
+      </div>
       <icon-down />
     </div>
     <template #content>
       <div class="bg-white px-6 py-5 shadow rounded-lg w-[460px]">
-        <div class="text-gray-700 text-base font-semibold mb-3">对比模型</div>
+        <div class="text-gray-700 text-base font-semibold mb-3">
+          {{ t('appStudio.promptCompareModel.title') }}
+        </div>
         <div class="flex flex-col gap-2 mb-2">
-          <div class="text-gray-700">模型</div>
+          <div class="text-gray-700">{{ t('appStudio.promptCompareModel.modelLabel') }}</div>
           <a-select
             v-model:model-value="form.selectValue"
             :options="modelOptions"
             size="small"
             class="rounded-lg mb-2"
-            placeholder="请选择用于对比的大语言模型"
+            :placeholder="t('appStudio.promptCompareModel.modelPlaceholder')"
             @change="changeModel"
           >
             <template #label="{ data }">
@@ -163,7 +169,7 @@ onMounted(() => {
           </a-select>
         </div>
 
-        <div class="text-gray-700 mb-2">参数</div>
+        <div class="text-gray-700 mb-2">{{ t('appStudio.promptCompareModel.parametersTitle') }}</div>
         <a-spin :loading="getLanguageModelLoading" class="w-full">
           <div
             v-for="parameter in language_model?.parameters"
@@ -180,7 +186,7 @@ onMounted(() => {
               <a-select
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请选择参数值"
+                :placeholder="t('appStudio.promptCompareModel.parameterPlaceholder')"
                 :options="parameter.options"
               />
             </template>
@@ -188,10 +194,10 @@ onMounted(() => {
               <a-select
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请选择参数值"
+                :placeholder="t('appStudio.promptCompareModel.parameterPlaceholder')"
                 :options="[
-                  { label: '是', value: true },
-                  { label: '否', value: false },
+                  { label: t('appStudio.modelConfig.booleanYes'), value: true },
+                  { label: t('appStudio.modelConfig.booleanNo'), value: false },
                 ]"
               />
             </template>
@@ -209,15 +215,19 @@ onMounted(() => {
               <a-input
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请输入参数值"
+                :placeholder="t('appStudio.promptCompareModel.parameterInputPlaceholder')"
               />
             </template>
           </div>
         </a-spin>
 
         <div class="flex justify-end gap-2 pt-2">
-          <a-button class="rounded-lg" @click="popupVisible = false">取消</a-button>
-          <a-button type="primary" class="rounded-lg" @click="handleApply">应用模型</a-button>
+          <a-button class="rounded-lg" @click="popupVisible = false">
+            {{ t('common.actions.cancel') }}
+          </a-button>
+          <a-button type="primary" class="rounded-lg" @click="handleApply">
+            {{ t('appStudio.promptCompareModel.applyModel') }}
+          </a-button>
         </div>
       </div>
     </template>

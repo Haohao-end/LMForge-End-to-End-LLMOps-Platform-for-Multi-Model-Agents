@@ -1,4 +1,5 @@
 import { type Ref } from 'vue'
+import { i18n } from '@/i18n'
 import { getErrorMessage } from '@/utils/error'
 
 export const CHAT_IMAGE_UPLOAD_LIMIT = 5
@@ -30,8 +31,10 @@ export const canUploadMoreImages = (
 
 export const useChatImageUpload = (options: UseChatImageUploadOptions) => {
   const imageLimit = options.limit ?? CHAT_IMAGE_UPLOAD_LIMIT
-  const limitMessage = options.limitMessage ?? '对话上传图片数量不能超过5张'
-  const successMessage = options.successMessage ?? '上传图片成功'
+  const limitMessage =
+    options.limitMessage ?? (i18n.global.t('chat.composer.imageLimit', { count: imageLimit }) as string)
+  const successMessage =
+    options.successMessage ?? (i18n.global.t('chat.composer.uploadSuccess') as string)
 
   const triggerFileInput = () => {
     if (!canUploadMoreImages(options.imageUrls.value.length, imageLimit)) {
@@ -55,14 +58,14 @@ export const useChatImageUpload = (options: UseChatImageUploadOptions) => {
       const resp = await options.uploadImage(selectedFile)
       const imageUrl = String(resp?.data?.image_url || '')
       if (!imageUrl) {
-        options.onError('上传图片失败')
+        options.onError(i18n.global.t('chat.composer.uploadFailed') as string)
         return
       }
 
       options.imageUrls.value.push(imageUrl)
       options.onSuccess(successMessage)
     } catch (error: unknown) {
-      options.onError(getErrorMessage(error, '上传图片失败'))
+      options.onError(getErrorMessage(error, i18n.global.t('chat.composer.uploadFailed') as string))
     } finally {
       options.uploadFileLoading.value = false
       input.value = ''

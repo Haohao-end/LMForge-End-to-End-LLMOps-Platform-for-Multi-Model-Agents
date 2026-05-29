@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 type ComposerSize = 'default' | 'compact'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  placeholder: { type: String, default: '发送消息' },
+  placeholder: { type: String, default: '' },
   size: { type: String as PropType<ComposerSize>, default: 'default' },
   textareaRefSetter: {
     type: Function as PropType<(element: HTMLTextAreaElement | null) => void>,
@@ -20,10 +21,10 @@ const props = defineProps({
   showClearButton: { type: Boolean, default: true },
   showUploadButton: { type: Boolean, default: true },
   uploadDisabled: { type: Boolean, default: false },
-  uploadDisabledTitle: { type: String, default: '当前不支持图片上传' },
+  uploadDisabledTitle: { type: String, default: '' },
   showVoiceButton: { type: Boolean, default: true },
   showDeepThinkingToggle: { type: Boolean, default: false },
-  clearTitle: { type: String, default: '清空会话' },
+  clearTitle: { type: String, default: '' },
   clearDisabled: { type: Boolean, default: false },
   clearLoading: { type: Boolean, default: false },
   uploadLoading: { type: Boolean, default: false },
@@ -49,6 +50,7 @@ const emit = defineEmits([
   'blur',
   'file-change',
 ])
+const { t } = useI18n()
 
 const isFocused = ref(false)
 const isDragOver = ref(false)
@@ -56,6 +58,11 @@ const localTextareaRef = ref<HTMLTextAreaElement | null>(null)
 const localFileInputRef = ref<HTMLInputElement | null>(null)
 const isCompact = computed(() => props.size === 'compact')
 const canUploadImages = computed(() => props.showUploadButton && !props.uploadDisabled)
+const resolvedPlaceholder = computed(() => props.placeholder || t('chat.composer.placeholder'))
+const resolvedUploadDisabledTitle = computed(
+  () => props.uploadDisabledTitle || t('chat.composer.uploadDisabled'),
+)
+const resolvedClearTitle = computed(() => props.clearTitle || t('chat.composer.clearConversation'))
 
 const rootClass = computed(() => {
   if (!props.showClearButton) return 'w-full'
@@ -203,7 +210,7 @@ const handleBlur = (event: FocusEvent) => {
       type="button"
       :disabled="clearDisabled || clearLoading"
       :class="clearButtonClass"
-      :title="clearTitle"
+      :title="resolvedClearTitle"
       @click="$emit('clear')"
     >
       <svg
@@ -258,7 +265,7 @@ const handleBlur = (event: FocusEvent) => {
           <button
             type="button"
             class="chat-composer-image-remove"
-            title="移除图片"
+            :title="t('chat.composer.removeImage')"
             @click.stop="$emit('remove-image', index)"
           >
             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -278,8 +285,8 @@ const handleBlur = (event: FocusEvent) => {
           v-if="showUploadButton"
           type="button"
           :disabled="uploadLoading || uploadDisabled"
-          :title="uploadDisabled ? uploadDisabledTitle : '上传图片'"
-          aria-label="上传图片"
+          :title="uploadDisabled ? resolvedUploadDisabledTitle : t('chat.composer.uploadImage')"
+          :aria-label="t('chat.composer.uploadImage')"
           :class="[
             actionButtonClass,
             'text-gray-600 hover:bg-white/20 hover:text-gray-800 disabled:opacity-60',
@@ -338,7 +345,7 @@ const handleBlur = (event: FocusEvent) => {
           :value="modelValue"
           rows="1"
           :class="textareaClass"
-          :placeholder="placeholder"
+          :placeholder="resolvedPlaceholder"
           @input="handleInput"
           @keydown="$emit('keydown', $event)"
           @focus="handleFocus"
@@ -350,7 +357,7 @@ const handleBlur = (event: FocusEvent) => {
             v-if="showVoiceButton && !audioToTextLoading && !isRecording"
             type="button"
             :class="[actionButtonClass, 'text-gray-600 hover:bg-white/20 hover:text-gray-800']"
-            title="开始录音"
+            :title="t('chat.composer.startRecord')"
             @click.stop="$emit('start-record')"
           >
             <svg
@@ -376,7 +383,7 @@ const handleBlur = (event: FocusEvent) => {
               actionButtonClass,
               'animate-pulse text-red-500 hover:bg-red-50/60 hover:text-red-600',
             ]"
-            title="停止录音"
+            :title="t('chat.composer.stopRecord')"
             @click.stop="$emit('stop-record')"
           >
             <svg :class="isCompact ? 'h-4 w-4' : 'h-5 w-5'" fill="currentColor" viewBox="0 0 24 24">
@@ -389,7 +396,7 @@ const handleBlur = (event: FocusEvent) => {
             type="button"
             disabled
             :class="[actionButtonClass, 'cursor-wait text-cyan-500/80']"
-            title="正在转写"
+            :title="t('chat.composer.transcribing')"
           >
             <svg
               :class="['animate-spin', isCompact ? 'h-4 w-4' : 'h-5 w-5']"
@@ -418,7 +425,7 @@ const handleBlur = (event: FocusEvent) => {
             v-if="showDeepThinkingToggle"
             type="button"
             :class="deepThinkingButtonClass"
-            :title="deepThinkingEnabled ? '关闭深度思考' : '开启深度思考'"
+            :title="deepThinkingEnabled ? t('chat.composer.disableDeepThinking') : t('chat.composer.enableDeepThinking')"
             :aria-pressed="deepThinkingEnabled"
             @click.stop="$emit('update:deepThinkingEnabled', !deepThinkingEnabled)"
           >
@@ -444,8 +451,8 @@ const handleBlur = (event: FocusEvent) => {
               actionButtonClass,
               'text-cyan-600 hover:bg-cyan-500/20 hover:text-cyan-700 disabled:opacity-50',
             ]"
-            title="发送消息"
-            aria-label="发送消息"
+            :title="t('chat.composer.sendMessage')"
+            :aria-label="t('chat.composer.sendMessage')"
             @click.stop="$emit('submit')"
           >
             <svg :class="isCompact ? 'h-4 w-4' : 'h-5 w-5'" fill="currentColor" viewBox="0 0 24 24">

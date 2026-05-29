@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ChatArtifact } from '@/views/shared/chat-output'
 
 type GalleryImage = Pick<ChatArtifact, 'name' | 'url' | 'mime_type' | 'extension'>
@@ -14,6 +15,7 @@ const props = defineProps({
     default: '',
   },
 })
+const { t } = useI18n()
 
 const selectedIndex = ref(0)
 
@@ -153,10 +155,10 @@ const selectImage = (index: number) => {
             type="button"
             class="chat-image-gallery__download"
             :data-download-filename="downloadFilename"
-            :aria-label="`下载 ${downloadFilename}`"
+            :aria-label="t('chat.gallery.downloadAria', { filename: downloadFilename })"
             @click="handleDownload"
           >
-            下载
+            {{ t('chat.gallery.download') }}
           </button>
           <div
             v-if="hasMultipleImages"
@@ -169,7 +171,7 @@ const selectImage = (index: number) => {
 
       <div class="chat-image-gallery__caption">
         <div class="chat-image-gallery__title">
-          {{ title || activeImage?.name || '图片' }}
+          {{ title || activeImage?.name || t('chat.gallery.image') }}
         </div>
         <div
           v-if="activeMeta"
@@ -192,12 +194,12 @@ const selectImage = (index: number) => {
           'chat-image-gallery__thumb',
           index === selectedIndex ? 'chat-image-gallery__thumb--active' : '',
         ]"
-        :aria-label="image.name || `图片 ${index + 1}`"
+        :aria-label="image.name || t('chat.gallery.imageIndexed', { index: index + 1 })"
         @click="selectImage(index)"
       >
         <img
           :src="image.url"
-          :alt="image.name || `图片 ${index + 1}`"
+          :alt="image.name || t('chat.gallery.imageIndexed', { index: index + 1 })"
           class="chat-image-gallery__thumb-image"
         >
         <span class="chat-image-gallery__thumb-index">{{ index + 1 }}</span>

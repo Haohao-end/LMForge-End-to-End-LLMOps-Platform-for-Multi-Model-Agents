@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { type Form, type ValidatedError, Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import {
   useCreateWorkflow,
   useGenerateIconPreview,
@@ -20,6 +21,7 @@ const props = defineProps({
   callback: { type: Function, required: false },
 })
 const emits = defineEmits(['update:visible', 'update:workflow_id'])
+const { t } = useI18n()
 const { loading: createWorkflowLoading, handleCreateWorkflow } = useCreateWorkflow()
 const { loading: updateWorkflowLoading, handleUpdateWorkflow } = useUpdateWorkflow()
 const { workflow, loadWorkflow } = useGetWorkflow()
@@ -41,14 +43,14 @@ const formRef = ref<InstanceType<typeof Form>>()
 const handleUploadIcon = async (file: File) => {
   await handleUploadImage(file)
   form.value.icon = image_url.value
-  form.value.fileList = [{ uid: '1', name: '工作流图标', url: image_url.value }]
-  Message.success('图标上传成功')
+  form.value.fileList = [{ uid: '1', name: t('workflowEditor.workflowModal.iconName'), url: image_url.value }]
+  Message.success(t('workflowEditor.workflowModal.iconUploadSuccess'))
 }
 
 // 3.定义生成图标处理器
 const handleGenerateIcon = async () => {
   if (!form.value.name || form.value.name.trim() === '') {
-    Message.warning('请先输入工作流名称')
+    Message.warning(t('workflowEditor.workflowModal.enterNameFirst'))
     return
   }
 
@@ -58,8 +60,8 @@ const handleGenerateIcon = async () => {
       const iconUrl = await handleRegenerateIcon(props.workflow_id)
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '工作流图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('workflowEditor.workflowModal.iconName'), url: iconUrl }]
+        Message.success(t('workflowEditor.workflowModal.iconGenerateSuccess'))
       }
     }
     // 创建模式：调用 generateIconPreview
@@ -67,12 +69,12 @@ const handleGenerateIcon = async () => {
       const iconUrl = await handleGenerateIconPreview(form.value.name, form.value.description)
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '工作流图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('workflowEditor.workflowModal.iconName'), url: iconUrl }]
+        Message.success(t('workflowEditor.workflowModal.iconGenerateSuccess'))
       }
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '图标生成失败'))
+    Message.error(getErrorMessage(error, t('workflowEditor.workflowModal.iconGenerateFailed')))
   }
 }
 
@@ -96,7 +98,7 @@ const saveWorkflow = async ({ errors }: { errors: Record<string, ValidatedError>
     emits('update:visible', false)
     props.callback && props.callback()
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '保存工作流失败，请稍后重试'))
+    Message.error(getErrorMessage(error, t('workflowEditor.workflowModal.saveFailed')))
   }
 }
 
@@ -116,7 +118,7 @@ watch(
 
         // 4.5 更新表单数据
         form.value = {
-          fileList: [{ uid: '1', name: '应用图标', url: String(workflow.value?.icon) }],
+          fileList: [{ uid: '1', name: t('workflowEditor.workflowModal.appIconName'), url: String(workflow.value?.icon) }],
           icon: String(workflow.value?.icon),
           name: String(workflow.value?.name),
           tool_call_name: String(workflow.value?.tool_call_name),
@@ -145,7 +147,7 @@ watch(
     <!-- 顶部标题 -->
     <div class="flex items-center justify-between">
       <div class="text-lg font-bold text-gray-700">
-        {{ props.workflow_id === '' ? '创建工作流' : '编辑工作流' }}
+        {{ props.workflow_id === '' ? t('workflowEditor.workflowModal.createTitle') : t('workflowEditor.workflowModal.editTitle') }}
       </div>
       <a-button type="text" class="!text-gray-700" size="small" @click="hideModal">
         <template #icon>
@@ -159,7 +161,7 @@ watch(
         <a-form-item
           field="fileList"
           hide-label
-          :rules="[{ required: true, message: '工作流图标不能为空' }]"
+          :rules="[{ required: true, message: t('workflowEditor.workflowModal.iconRequired') }]"
         >
           <IconUploadGenerator
             :name="form.name"
@@ -167,7 +169,7 @@ watch(
             :icon="form.icon"
             :file-list="form.fileList"
             :loading="regenerateIconLoading || generateIconPreviewLoading"
-            placeholder="工作流"
+            :placeholder="t('workflowEditor.workflowModal.iconName')"
             :on-upload="handleUploadIcon"
             :on-generate="handleGenerateIcon"
             @update:icon="(val) => (form.icon = val)"
@@ -176,27 +178,27 @@ watch(
         </a-form-item>
         <a-form-item
           field="name"
-          label="工作流名称"
+          :label="t('workflowEditor.workflowModal.nameLabel')"
           asterisk-position="end"
-          :rules="[{ required: true, message: '工作流名称不能为空' }]"
+          :rules="[{ required: true, message: t('workflowEditor.workflowModal.nameRequired') }]"
         >
           <a-input
             show-word-limit
             :max-length="50"
             v-model:model-value="form.name"
-            placeholder="请输入工作流名称"
+            :placeholder="t('workflowEditor.workflowModal.namePlaceholder')"
           />
         </a-form-item>
         <a-form-item
           field="tool_call_name"
-          label="英文名称"
+          :label="t('workflowEditor.workflowModal.toolCallNameLabel')"
           asterisk-position="end"
           :rules="[
-            { required: true, message: '英文名称不能为空' },
+            { required: true, message: t('workflowEditor.workflowModal.toolCallNameRequired') },
             {
               validator: (value: string) => {
                 if (!value || isValidWorkflowToolCallName(value)) return true
-                return '英文名称仅支持字母、数字和下划线，且以字母/下划线为开头'
+                return t('workflowEditor.workflowModal.toolCallNameRule')
               },
             },
           ]"
@@ -205,35 +207,35 @@ watch(
             show-word-limit
             :max-length="50"
             v-model:model-value="form.tool_call_name"
-            placeholder="英文名称将用于被大模型识别及调用"
+            :placeholder="t('workflowEditor.workflowModal.toolCallNamePlaceholder')"
           />
         </a-form-item>
         <a-form-item
           field="description"
-          label="工作流描述"
+          :label="t('workflowEditor.workflowModal.descriptionLabel')"
           asterisk-position="end"
-          :rules="[{ required: true, message: '工作流描述不能为空' }]"
+          :rules="[{ required: true, message: t('workflowEditor.workflowModal.descriptionRequired') }]"
         >
           <a-textarea
             v-model:model-value="form.description"
             :auto-size="{ minRows: 8, maxRows: 8 }"
             :max-length="1024"
             show-word-limit
-            placeholder="请输入关于该工作流的描述信息，以便LLM能准确识别工作流的用途。"
+            :placeholder="t('workflowEditor.workflowModal.descriptionPlaceholder')"
           />
         </a-form-item>
         <!-- 底部按钮 -->
         <div class="flex items-center justify-between">
           <div class=""></div>
           <a-space :size="16">
-            <a-button class="rounded-lg" @click="hideModal">取消</a-button>
+            <a-button class="rounded-lg" @click="hideModal">{{ t('common.actions.cancel') }}</a-button>
             <a-button
               :loading="createWorkflowLoading || updateWorkflowLoading"
               type="primary"
               html-type="submit"
               class="rounded-lg"
             >
-              保存
+              {{ t('common.actions.save') }}
             </a-button>
           </a-space>
         </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import LongTermMemoryAbilityItem from './abilities/LongTermMemoryAbilityItem.vue'
 import OpeningAbilityItem from './abilities/OpeningAbilityItem.vue'
 import SuggestedAfterAnswerAbilityItem from './abilities/SuggestedAfterAnswerAbilityItem.vue'
@@ -12,6 +13,7 @@ import SpeechToTextAbilityItem from './abilities/SpeechToTextAbilityItem.vue'
 import TextToSpeechAbilitiItem from './abilities/TextToSpeechAbilitiItem.vue'
 
 // 1.定义自定义组件所需数据
+const { t } = useI18n()
 const props = defineProps({
   app_id: { type: String, default: '', required: true },
   draft_app_config: { type: Object, required: true },
@@ -35,7 +37,7 @@ const defaultActivateKeys = [
 <template>
   <div class="flex flex-col h-[calc(100vh-141px)]">
     <!-- 应用能力标题 -->
-    <div class="p-4 text-gray-700 font-bold">应用能力</div>
+    <div class="p-4 text-gray-700 font-bold">{{ t('appStudio.abilities.title') }}</div>
     <!-- 应用能力列表 -->
     <div class="flex-1 overflow-scroll scrollbar-w-none">
       <a-collapse :bordered="false" :default-active-key="defaultActivateKeys">

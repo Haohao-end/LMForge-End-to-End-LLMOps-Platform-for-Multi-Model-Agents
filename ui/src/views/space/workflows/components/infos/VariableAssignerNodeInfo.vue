@@ -4,6 +4,7 @@ import { useVueFlow } from '@vue-flow/core'
 import { cloneDeep, debounce } from 'lodash'
 import { type ValidatedError, Message } from '@arco-design/web-vue'
 import { getReferencedVariables } from '@/utils/helper'
+import { useI18n } from 'vue-i18n'
 
 type NodeInputField = {
   name: string
@@ -46,6 +47,7 @@ const props = defineProps({
 })
 const emits = defineEmits(['update:visible', 'updateNode'])
 const { nodes, edges } = useVueFlow()
+const { t } = useI18n()
 const form = ref<VariableAssignerNodeForm>({
   id: '',
   type: '',
@@ -77,7 +79,7 @@ const variableDefaultValue = (type: string) => {
 
 const addFormInputField = () => {
   form.value?.inputs.push({ name: '', type: 'string', content: '', ref: '' })
-  Message.success('新增变量成功')
+  Message.success(t('workflowEditor.addVariableSuccess'))
 }
 
 const removeFormInputField = (idx: number) => {
@@ -203,7 +205,7 @@ onBeforeUnmount(() => {
     <div v-if="isReadonly" class="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
       <div class="flex items-center gap-2 text-orange-700">
         <icon-lock class="flex-shrink-0" />
-        <span class="text-sm font-medium">预览模式：所有配置仅供查看，无法修改</span>
+        <span class="text-sm font-medium">{{ t('workflowEditor.previewMode') }}</span>
       </div>
     </div>
 
@@ -214,7 +216,7 @@ onBeforeUnmount(() => {
         </a-avatar>
         <a-input
           v-model:model-value="form.title"
-          :disabled="isReadonly" placeholder="请输入标题"
+          :disabled="isReadonly" :placeholder="t('workflowEditor.titlePlaceholder')"
           class="!bg-white text-gray-700 font-semibold px-2"
         />
       </div>
@@ -234,7 +236,7 @@ onBeforeUnmount(() => {
       :auto-size="{ minRows: 3, maxRows: 5 }"
       v-model="form.description"
       :disabled="isReadonly" class="rounded-lg text-gray-700 !text-xs"
-      placeholder="输入描述..."
+      :placeholder="t('workflowEditor.descriptionPlaceholder')"
     />
 
     <a-divider class="my-2" />
@@ -243,8 +245,8 @@ onBeforeUnmount(() => {
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2 text-gray-700 font-semibold">
-            <div>赋值变量</div>
-            <a-tooltip content="定义变量和值，供后续节点引用。值支持字面量或引用上游变量。">
+            <div>{{ t('workflowEditor.variableAssigner.title') }}</div>
+            <a-tooltip :content="t('workflowEditor.variableAssigner.help')">
               <icon-question-circle />
             </a-tooltip>
           </div>
@@ -255,14 +257,14 @@ onBeforeUnmount(() => {
           </a-button>
         </div>
         <div class="flex items-center gap-1 text-xs text-gray-500 mb-2">
-          <div class="w-[20%]">变量名</div>
-          <div class="w-[25%]">类型</div>
-          <div class="w-[47%]">值</div>
+          <div class="w-[20%]">{{ t('workflowEditor.variableName') }}</div>
+          <div class="w-[25%]">{{ t('workflowEditor.variableType') }}</div>
+          <div class="w-[47%]">{{ t('workflowEditor.variableValue') }}</div>
           <div class="w-[8%]"></div>
         </div>
         <div v-for="(input, idx) in form?.inputs" :key="idx" class="flex items-center gap-1">
           <div class="w-[20%] flex-shrink-0">
-            <a-input v-model="input.name" size="mini" placeholder="请输入变量名" class="!px-2" />
+            <a-input v-model="input.name" size="mini" :placeholder="t('workflowEditor.variableName')" class="!px-2" />
           </div>
           <div class="w-[25%] flex-shrink-0">
             <a-select
@@ -270,11 +272,11 @@ onBeforeUnmount(() => {
               v-model="input.type"
               class="px-2"
               :options="[
-                { label: '引用', value: 'ref' },
-                { label: 'STRING', value: 'string' },
-                { label: 'INT', value: 'int' },
-                { label: 'FLOAT', value: 'float' },
-                { label: 'BOOLEAN', value: 'boolean' },
+                { label: t('workflowEditor.variableTypes.ref'), value: 'ref' },
+                { label: t('workflowEditor.variableTypes.string'), value: 'string' },
+                { label: t('workflowEditor.variableTypes.int'), value: 'int' },
+                { label: t('workflowEditor.variableTypes.float'), value: 'float' },
+                { label: t('workflowEditor.variableTypes.boolean'), value: 'boolean' },
               ]"
             />
           </div>
@@ -283,11 +285,11 @@ onBeforeUnmount(() => {
               v-if="input.type !== 'ref'"
               size="mini"
               v-model="input.content"
-              placeholder="请输入变量值"
+              :placeholder="t('workflowEditor.variableValue')"
             />
             <a-select
               v-else
-              placeholder="请选择引用变量"
+              :placeholder="t('workflowEditor.selectReference')"
               size="mini"
               tag-nowrap
               v-model="input.ref"
@@ -301,14 +303,14 @@ onBeforeUnmount(() => {
             />
           </div>
         </div>
-        <a-empty v-if="form?.inputs.length <= 0" class="my-4">该节点暂无变量</a-empty>
+        <a-empty v-if="form?.inputs.length <= 0" class="my-4">{{ t('workflowEditor.noVariables') }}</a-empty>
       </div>
 
       <a-divider class="my-4" />
 
       <div class="flex flex-col gap-2">
-        <div class="font-semibold text-gray-700">输出数据</div>
-        <div class="text-gray-500 text-xs">输出会自动与赋值变量保持一致</div>
+        <div class="font-semibold text-gray-700">{{ t('workflowEditor.outputData') }}</div>
+        <div class="text-gray-500 text-xs">{{ t('workflowEditor.variableAssigner.outputHelp') }}</div>
         <div v-for="(output, idx) in form?.outputs" :key="idx" class="flex items-center gap-2">
           <div class="text-gray-700">{{ output.name }}</div>
           <div class="text-gray-500 bg-gray-200 px-1 py-0.5 rounded">{{ output.type }}</div>

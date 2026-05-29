@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AiDynamicBackground from '@/components/AiDynamicBackground.vue'
 import { OPEN_AGENT_NAME } from '@/config/openagent'
@@ -15,6 +16,7 @@ import 'highlight.js/styles/github.css'
 type SearchableConversation = RecentConversation | SearchConversation
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const pageRef = ref<HTMLElement | null>(null)
 const scrollAreaRef = ref<HTMLElement | null>(null)
 const { renderMarkdown } = useMarkdownRenderer()
@@ -120,13 +122,15 @@ const formatDate = (timestamp: number) => {
   // 如果时间戳是秒级别（小于 10000000000），转换为毫秒
   const ms = timestamp < 10000000000 ? timestamp * 1000 : timestamp
   const date = new Date(ms)
-  const year = date.getFullYear()
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}年${month}月${day}日 ${hours}:${minutes}`
+  const resolvedLocale = locale.value === 'en-US' ? 'en-US' : 'zh-CN'
+  return new Intl.DateTimeFormat(resolvedLocale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
 }
 
 const escapeHtml = (text: string) => {
@@ -265,15 +269,15 @@ const getNonMessageMatchLabels = (conversation: SearchableConversation) => {
   const labels: string[] = []
 
   if (hasMatchedField(conversation, 'name')) {
-    labels.push('标题')
+    labels.push(t('conversationSearch.matchedLabels.title'))
   }
 
   if (hasMatchedField(conversation, 'app_name')) {
-    labels.push('应用')
+    labels.push(t('conversationSearch.matchedLabels.app'))
   }
 
   if (hasMatchedField(conversation, 'agent_name')) {
-    labels.push(OPEN_AGENT_NAME)
+    labels.push(t('conversationSearch.matchedLabels.agent', { name: OPEN_AGENT_NAME }))
   }
 
   return labels
@@ -396,7 +400,7 @@ onMounted(() => {
       <div class="flex-shrink-0 px-4 sm:px-6 pt-6 pb-4">
         <!-- Header -->
         <div class="mb-8 text-center">
-          <h1 class="text-4xl font-bold text-gray-900 mb-2">对话历史</h1>
+          <h1 class="text-4xl font-bold text-gray-900 mb-2">{{ t('conversationSearch.title') }}</h1>
         </div>
 
         <!-- Search Box -->
@@ -406,7 +410,7 @@ onMounted(() => {
               v-model="searchQuery"
               data-testid="conversation-search-input"
               type="text"
-              placeholder="搜索对话标题、应用名称或消息内容..."
+              :placeholder="t('conversationSearch.placeholder')"
               class="w-full px-6 py-3 rounded-full border-2 border-gray-300 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-gray-900 placeholder-gray-500"
             />
             <svg class="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -431,13 +435,13 @@ onMounted(() => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </div>
-            <p class="text-gray-500">加载中...</p>
+            <p class="text-gray-500">{{ t('conversationSearch.loading') }}</p>
           </div>
         </div>
 
         <!-- Empty State -->
         <div v-else-if="filteredConversations.length === 0" class="flex items-center justify-center py-12">
-          <p class="text-gray-500 text-lg">暂无对话记录</p>
+          <p class="text-gray-500 text-lg">{{ t('conversationSearch.empty') }}</p>
         </div>
 
         <!-- Conversations List -->
@@ -495,7 +499,7 @@ onMounted(() => {
                         <template #icon>
                           <icon-edit />
                         </template>
-                        重命名
+                        {{ t('common.actions.rename') }}
                       </a-doption>
                       <a-doption
                         class="text-red-700"
@@ -504,7 +508,7 @@ onMounted(() => {
                         <template #icon>
                           <icon-delete />
                         </template>
-                        删除会话
+                        {{ t('common.actions.deleteConversation') }}
                       </a-doption>
                     </template>
                   </a-dropdown>
@@ -513,17 +517,17 @@ onMounted(() => {
             </div>
             <!-- 应用标签 -->
             <div v-if="conversation.app_name" class="mb-0.5">
-              <span
-                class="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 whitespace-nowrap inline-block"
-                v-html="highlightText(conversation.app_name)"
-              />
+                <span
+                  class="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 whitespace-nowrap inline-block"
+                  v-html="highlightText(conversation.app_name)"
+                />
             </div>
 
             <div
               v-if="searchQuery.trim() && !hasMessageKeywordMatch(conversation) && getNonMessageMatchLabels(conversation).length > 0"
               class="mb-0.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1"
             >
-              关键词命中{{ getNonMessageMatchLabels(conversation).join(' / ') }}，当前卡片没有命中消息正文
+              {{ t('conversationSearch.keywordMatch', { labels: getNonMessageMatchLabels(conversation).join(' / ') }) }}
             </div>
 
             <!-- 消息预览 -->
@@ -532,14 +536,14 @@ onMounted(() => {
               class="space-y-0.5 min-h-0 overflow-hidden"
             >
               <div v-if="shouldShowMessageField(conversation, 'human_message')" class="search-message-row">
-                <span class="search-message-prefix">Q:</span>
+                <span class="search-message-prefix">{{ t('conversationSearch.questionPrefix') }}</span>
                 <div
                   class="search-markdown-preview markdown-body"
                   v-html="renderMessagePreview(conversation, 'human_message')"
                 />
               </div>
               <div v-if="shouldShowMessageField(conversation, 'ai_message')" class="search-message-row">
-                <span class="search-message-prefix">A:</span>
+                <span class="search-message-prefix">{{ t('conversationSearch.answerPrefix') }}</span>
                 <div
                   class="search-markdown-preview markdown-body"
                   v-html="renderMessagePreview(conversation, 'ai_message')"

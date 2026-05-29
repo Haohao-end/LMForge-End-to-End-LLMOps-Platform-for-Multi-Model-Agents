@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, defineAsyncComponent } from 'vue'
 import AICodeAssistant from '@/components/AICodeAssistant.vue'
+import { useI18n } from 'vue-i18n'
 
 const PythonCodeEditor = defineAsyncComponent(
   () => import('@/components/PythonCodeEditor.vue'),
@@ -27,11 +28,44 @@ const props = defineProps({
   },
   title: {
     type: String,
-    default: 'Python 代码编辑器',
+    default: '',
   },
 })
 
 const emits = defineEmits(['update:visible', 'update:modelValue'])
+const { locale } = useI18n()
+const isEnglish = computed(() => locale.value === 'en-US')
+const editorPlaceholder = computed(() =>
+  isEnglish.value
+    ? `# Write Python code here
+# Example:
+def main(params):
+    # Read variables from input parameters
+    x = int(params.get('x', 0))
+    y = int(params.get('y', 0))
+
+    # Execute business logic
+    result = x + y
+
+    # Return the result. The field name must match the output parameter.
+    return {
+        'output': result
+    }`
+    : `# 在此编写 Python 代码
+# 示例：
+def main(params):
+    # 从输入参数中获取变量
+    x = int(params.get('x', 0))
+    y = int(params.get('y', 0))
+
+    # 执行业务逻辑
+    result = x + y
+
+    # 返回结果（参数名需与输出参数一致）
+    return {
+        'output': result
+    }`,
+)
 
 // 本地状态（不能直接修改 props）
 const localVisible = ref(props.visible)
@@ -120,7 +154,7 @@ const handleInsertCode = (code: string) => {
       <div class="flex items-center justify-between w-full pr-10">
         <div class="flex items-center gap-3">
           <icon-code :size="24" class="text-cyan-500" />
-          <span class="text-lg font-semibold">{{ title }}</span>
+          <span class="text-lg font-semibold">{{ title || (isEnglish ? 'Python Code Editor' : 'Python 代码编辑器') }}</span>
         </div>
         <div class="flex items-center gap-3">
           <!-- AI 助手按钮 -->
@@ -128,26 +162,26 @@ const handleInsertCode = (code: string) => {
             <template #icon>
               <icon-robot />
             </template>
-            Python代码生成AI助手
+            {{ isEnglish ? 'Python Code Generation AI Assistant' : 'Python代码生成AI助手' }}
           </a-button>
           <!-- 状态标签 -->
           <a-tag v-if="errorCount > 0" size="medium" color="red">
             <template #icon>
               <icon-exclamation-circle />
             </template>
-            {{ errorCount }} 个错误
+            {{ errorCount }} {{ isEnglish ? 'errors' : '个错误' }}
           </a-tag>
           <a-tag v-else-if="warningCount > 0" size="medium" color="orange">
             <template #icon>
               <icon-info-circle />
             </template>
-            {{ warningCount }} 个警告
+            {{ warningCount }} {{ isEnglish ? 'warnings' : '个警告' }}
           </a-tag>
           <a-tag v-else size="medium" color="green">
             <template #icon>
               <icon-check-circle />
             </template>
-            代码正常
+            {{ isEnglish ? 'Code OK' : '代码正常' }}
           </a-tag>
         </div>
       </div>
@@ -161,16 +195,16 @@ const handleInsertCode = (code: string) => {
         </template>
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4 text-sm">
-            <span>• 函数名必须为 <code class="bg-blue-100 px-1 rounded">main(params)</code></span>
-            <span>• 使用 <code class="bg-blue-100 px-1 rounded">params.get('key', default)</code> 获取参数</span>
-            <span>• 返回字典对象，参数名需与输出参数一致</span>
+            <span>{{ isEnglish ? '• The function name must be ' : '• 函数名必须为 ' }}<code class="bg-blue-100 px-1 rounded">main(params)</code></span>
+            <span>{{ isEnglish ? '• Use ' : '• 使用 ' }}<code class="bg-blue-100 px-1 rounded">params.get('key', default)</code>{{ isEnglish ? ' to get parameters' : ' 获取参数' }}</span>
+            <span>{{ isEnglish ? '• Return a dictionary and keep the field names consistent with the outputs' : '• 返回字典对象，参数名需与输出参数一致' }}</span>
           </div>
           <div class="flex items-center gap-2 text-xs text-gray-500">
-            <span>Ctrl+S 保存</span>
+            <span>{{ isEnglish ? 'Ctrl+S Save' : 'Ctrl+S 保存' }}</span>
             <span>|</span>
-            <span>Ctrl+/ 注释</span>
+            <span>{{ isEnglish ? 'Ctrl+/ Comment' : 'Ctrl+/ 注释' }}</span>
             <span>|</span>
-            <span>Esc 关闭</span>
+            <span>{{ isEnglish ? 'Esc Close' : 'Esc 关闭' }}</span>
           </div>
         </div>
       </a-alert>
@@ -180,20 +214,7 @@ const handleInsertCode = (code: string) => {
         ref="codeEditorRef"
         v-model="localCode"
         height="calc(68vh - 160px)"
-        placeholder="# 在此编写 Python 代码
-# 示例：
-def main(params):
-    # 从输入参数中获取变量
-    x = int(params.get('x', 0))
-    y = int(params.get('y', 0))
-
-    # 执行业务逻辑
-    result = x + y
-
-    # 返回结果（参数名需与输出参数一致）
-    return {
-        'output': result
-    }"
+        :placeholder="editorPlaceholder"
         @validate="handleCodeValidate"
       />
     </div>

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import CardGridSkeleton from '@/components/skeletons/CardGridSkeleton.vue'
 import ResourceCardDescription from '@/components/ResourceCardDescription.vue'
 import { getErrorMessage } from '@/utils/error'
 import { formatTimestampShort } from '@/utils/time-formatter'
 import { getUserAvatarUrl } from '@/utils/helper'
+import { getStoreCategoryDisplayName } from '@/utils/store-display'
 import { useAccountStore } from '@/stores/account'
 import {
   deleteMcpProvider,
@@ -18,12 +20,9 @@ import type { McpProvider } from '@/models/mcp'
 import CreateOrUpdateMcpModal from './components/CreateOrUpdateMcpModal.vue'
 
 const route = useRoute()
+const router = useRouter()
 const accountStore = useAccountStore()
-
-const props = defineProps({
-  createType: { type: String, required: true },
-})
-const emits = defineEmits(['update:create-type'])
+const { t, locale } = useI18n()
 
 const loading = ref(false)
 const providers = ref<McpProvider[]>([])
@@ -34,6 +33,19 @@ const showCreateOrUpdateMcpModalVisible = ref(false)
 const updateMcpProviderId = ref('')
 
 const searchWord = computed(() => String(route.query?.search_word ?? ''))
+
+const clearCreateTypeQuery = async () => {
+  const nextQuery = { ...route.query }
+  delete nextQuery.create_type
+  await router.replace({
+    path: route.path,
+    query: nextQuery,
+  })
+}
+
+const getCategoryLabel = (value: string) => {
+  return getStoreCategoryDisplayName(value, locale.value as 'zh-CN' | 'en-US')
+}
 
 const loadProviders = async (init = false) => {
   if (loading.value) return
@@ -66,7 +78,7 @@ const loadProviders = async (init = false) => {
       page.value += 1
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, '加载 MCP 列表失败'))
+    Message.error(getErrorMessage(error, t('space.mcp.loadFailed')))
   } finally {
     loading.value = false
   }
@@ -98,8 +110,8 @@ const handleCardClick = (provider: McpProvider) => {
 
 const handleDelete = (provider: McpProvider) => {
   Modal.warning({
-    title: '删除这个 MCP？',
-    content: '删除 MCP 是不可逆的，相关绑定配置不会自动恢复。',
+    title: t('space.mcp.deleteConfirmTitle'),
+    content: t('space.mcp.deleteConfirmContent'),
     hideCancel: false,
     onOk: async () => {
       try {
@@ -107,7 +119,7 @@ const handleDelete = (provider: McpProvider) => {
         Message.success(resp.message)
         await loadProviders(true)
       } catch (error: unknown) {
-        Message.error(getErrorMessage(error, '删除 MCP 失败'))
+        Message.error(getErrorMessage(error, t('space.mcp.deleteFailed')))
       }
     },
   })
@@ -121,7 +133,12 @@ const handleTogglePublish = async (provider: McpProvider) => {
     Message.success(resp.message)
     await loadProviders(true)
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, provider.is_public ? '取消发布失败' : '发布失败'))
+    Message.error(
+      getErrorMessage(
+        error,
+        provider.is_public ? t('space.mcp.unpublishFailed') : t('space.mcp.publishFailed'),
+      ),
+    )
   }
 }
 
@@ -135,20 +152,11 @@ watch(
 watch(
   () => route.query?.create_type,
   (newValue) => {
-    if (newValue === 'mcp') {
-      emits('update:create-type', 'mcp')
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  () => props.createType,
-  (newValue) => {
     if (newValue !== 'mcp') return
     openCreateModal()
-    emits('update:create-type', '')
+    void clearCreateTypeQuery()
   },
+  { immediate: true },
 )
 
 onMounted(async () => {
@@ -187,11 +195,11 @@ onMounted(async () => {
                 <div class="flex items-center gap-2 min-w-0">
                   <div class="text-base font-bold text-gray-900 truncate">{{ provider.label }}</div>
                   <a-tag size="small" :color="provider.is_public ? 'green' : 'orange'">
-                    {{ provider.is_public ? '已发布' : '草稿' }}
+                    {{ provider.is_public ? t('appStudio.shell.published') : t('appStudio.shell.draft') }}
                   </a-tag>
                 </div>
                 <div class="text-xs text-gray-500 line-clamp-1">
-                  {{ provider.name }} · {{ provider.transport }} · {{ provider.tool_count }} 个工具
+                  {{ provider.name }} · {{ provider.transport }} · {{ t('space.mcp.toolCount', { count: provider.tool_count }) }}
                 </div>
               </div>
             </div>
@@ -199,10 +207,10 @@ onMounted(async () => {
             <resource-card-description :text="provider.description" />
 
             <div class="flex items-center gap-2 flex-wrap mt-3">
-              <a-tag size="small" :color="provider.background">{{ provider.category }}</a-tag>
+              <a-tag size="small" :color="provider.background">{{ getCategoryLabel(provider.category) }}</a-tag>
               <a-tag size="small" color="arcoblue">{{ provider.transport }}</a-tag>
               <a-tag size="small" :color="provider.is_bindable ? 'green' : 'gray'">
-                {{ provider.is_bindable ? '可绑定' : '仅查看' }}
+                {{ provider.is_bindable ? t('space.mcp.bindable') : t('space.mcp.viewOnly') }}
               </a-tag>
             </div>
 
@@ -216,11 +224,11 @@ onMounted(async () => {
                 class="bg-blue-700"
                 :image-url="getUserAvatarUrl(provider.creator_avatar || accountStore.account.avatar, provider.creator_name || accountStore.account.name)"
               >
-                {{ (provider.creator_name || accountStore.account.name || '我')[0] }}
+                {{ (provider.creator_name || accountStore.account.name || t('common.status.unknown'))[0] }}
               </a-avatar>
               <div class="text-xs text-gray-400">
-                {{ provider.creator_name || accountStore.account.name || '我' }} ·
-                {{ formatTimestampShort(provider.updated_at || provider.created_at) }}
+                {{ provider.creator_name || accountStore.account.name || t('common.status.unknown') }} ·
+                {{ t('space.mcp.recentEdited', { time: formatTimestampShort(provider.updated_at || provider.created_at) }) }}
               </div>
             </div>
 
@@ -233,31 +241,31 @@ onMounted(async () => {
                 </a-button>
                 <template #content>
                   <a-doption @click="() => openEditModal(provider)">
-                    编辑
+                    {{ t('space.mcp.edit') }}
                   </a-doption>
                   <a-doption @click="() => handleTogglePublish(provider)">
-                    {{ provider.is_public ? '取消发布' : '发布到广场' }}
+                    {{ provider.is_public ? t('space.mcp.unpublish') : t('space.mcp.publish') }}
                   </a-doption>
                   <a-doption class="text-red-700" @click="() => handleDelete(provider)">
-                    删除
+                    {{ t('common.actions.delete') }}
                   </a-doption>
                 </template>
               </a-dropdown>
 
               <a-button
                 size="small"
-                type="primary"
-                class="rounded-lg"
-                @click.stop="openEditModal(provider)"
-              >
-                编辑
+              type="primary"
+              class="rounded-lg"
+              @click.stop="openEditModal(provider)"
+            >
+                {{ t('space.mcp.edit') }}
               </a-button>
             </div>
           </a-card>
         </a-col>
 
         <a-col v-if="providers.length === 0" :span="24">
-          <a-empty description="暂无 MCP" class="py-20" />
+          <a-empty :description="t('space.mcp.empty')" class="py-20" />
         </a-col>
       </a-row>
     </div>

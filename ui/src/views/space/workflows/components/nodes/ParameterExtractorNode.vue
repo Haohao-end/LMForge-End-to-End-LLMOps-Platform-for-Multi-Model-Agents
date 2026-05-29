@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Handle, type NodeProps, Position } from '@vue-flow/core'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<NodeProps>()
 
-const MODE_LABEL_MAP: Record<string, string> = {
-  auto: '自动(JSON/KV)',
-  json: '仅 JSON',
-  kv: '仅 Key-Value',
-}
+const { t } = useI18n()
+const MODE_LABEL_MAP = computed<Record<string, string>>(() => ({
+  auto: t('workflowEditor.extractModes.auto'),
+  json: t('workflowEditor.extractModes.json'),
+  kv: t('workflowEditor.extractModes.kv'),
+}))
 </script>
 
 <template>
@@ -27,17 +30,17 @@ const MODE_LABEL_MAP: Record<string, string> = {
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">提取模式</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.extractMode') }}</div>
       </div>
       <div class="text-xs text-gray-700 break-words w-full">
-        {{ MODE_LABEL_MAP[String(props.data?.mode ?? 'auto')] ?? '自动(JSON/KV)' }}
+        {{ MODE_LABEL_MAP[String(props.data?.mode ?? 'auto')] ?? MODE_LABEL_MAP.auto }}
       </div>
     </div>
 
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">输入文本</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.inputText') }}</div>
       </div>
       <div class="w-full flex flex-col gap-2 min-w-0">
         <div
@@ -56,7 +59,7 @@ const MODE_LABEL_MAP: Record<string, string> = {
               v-if="input.value.type === 'ref'"
               class="bg-white text-gray-500 border px-2 py-1 rounded break-words"
             >
-              引用 / {{ input.value.content.ref_var_name }}
+              {{ t('workflowEditor.referencePrefix') }} {{ input.value.content.ref_var_name }}
             </div>
             <div v-else class="text-gray-500 px-2 py-1 bg-white rounded break-words">
               {{ input.value.content || '-' }}
@@ -69,7 +72,7 @@ const MODE_LABEL_MAP: Record<string, string> = {
     <div class="flex flex-col items-start bg-gray-100 rounded-lg p-3 min-w-0">
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">提取字段</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.parameterExtractor.fieldLabel') }}</div>
       </div>
       <div class="flex flex-wrap gap-2 w-full min-w-0">
         <div

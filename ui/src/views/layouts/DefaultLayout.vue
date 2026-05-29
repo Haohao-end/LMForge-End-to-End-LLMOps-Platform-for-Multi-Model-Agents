@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
+import { useI18n } from 'vue-i18n'
 import { useLogout } from '@/hooks/use-auth'
 import LayoutSidebar from './components/LayoutSidebar.vue'
 import RecentConversationsGlobalPopover from './components/RecentConversationsGlobalPopover.vue'
@@ -21,7 +22,9 @@ const SettingModal = defineAsyncComponent(
 
 // 1.定义页面所需数据
 const settingModalVisible = ref(false)
-const settingModalInitialTab = ref<'profile' | 'security' | 'bindings' | 'devices'>('profile')
+const settingModalInitialTab = ref<'profile' | 'security' | 'bindings' | 'devices' | 'language'>(
+  'profile',
+)
 const loginModalVisible = ref(false)
 const loginRedirectPath = ref('')
 const sidebarCollapsed = ref(false)
@@ -36,6 +39,7 @@ const credentialStore = useCredentialStore()
 const accountStore = useAccountStore()
 const { handleLogout: handleLogoutHook } = useLogout()
 const { current_user, loadCurrentUser } = useGetCurrentUser()
+const { t } = useI18n()
 const isLoggedIn = computed(() => isCredentialLoggedIn(credentialStore.credential))
 const sidebarWidth = computed(() => (sidebarCollapsed.value ? 80 : 240))
 const isSearchActive = computed(() => route.path === '/search')
@@ -169,7 +173,7 @@ const openSettingsFromRoute = () => {
   if (route.query.settings !== 'account') return
 
   const tab = String(route.query.tab || 'profile')
-  if (tab === 'security' || tab === 'bindings' || tab === 'devices') {
+  if (tab === 'security' || tab === 'bindings' || tab === 'devices' || tab === 'language') {
     settingModalInitialTab.value = tab
   } else {
     settingModalInitialTab.value = 'profile'
@@ -182,12 +186,17 @@ const openSettingsFromRoute = () => {
   try {
     const oauthResult = JSON.parse(oauthResultRaw)
     const providerLabel = String(oauthResult.provider || '').toLowerCase()
-    const displayName = providerLabel === 'github' ? 'GitHub' : providerLabel === 'google' ? 'Google' : oauthResult.provider
+    const displayName =
+      providerLabel === 'github'
+        ? 'GitHub'
+        : providerLabel === 'google'
+          ? 'Google'
+          : oauthResult.provider
     if (oauthResult.action === 'bind') {
-      Message.success(`${displayName} 绑定成功`)
+      Message.success(t('layout.account.oauthBindSuccess', { provider: displayName }))
     }
   } catch {
-    Message.success('第三方账号绑定成功')
+    Message.success(t('layout.account.oauthBindSuccessFallback'))
   } finally {
     sessionStorage.removeItem(OAUTH_RESULT_STORAGE_KEY)
   }
@@ -228,12 +237,28 @@ watch(settingModalVisible, async (visible) => {
     <!-- 侧边栏 - 固定定位，不随右侧滚动 -->
     <a-layout-sider
       class="bg-gray-50 p-2 shadow-none flex-shrink-0 overflow-hidden sidebar-sider"
-      :style="{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px`, maxWidth: `${sidebarWidth}px`, position: 'fixed', left: 0, top: 0, bottom: 0, height: '100vh', zIndex: 10 }"
+      :style="{
+        width: `${sidebarWidth}px`,
+        minWidth: `${sidebarWidth}px`,
+        maxWidth: `${sidebarWidth}px`,
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        height: '100vh',
+        zIndex: 10,
+      }"
     >
-      <div class="bg-white rounded-lg px-2 py-1 flex flex-col min-h-0 overflow-hidden" style="height: calc(100vh - 16px)">
+      <div
+        class="bg-white rounded-lg px-2 py-1 flex flex-col min-h-0 overflow-hidden"
+        style="height: calc(100vh - 16px)"
+      >
         <!-- 顶部 Logo 和折叠按钮 -->
         <div class="flex-shrink-0 flex items-center justify-center">
-          <div v-if="!sidebarCollapsed" class="h-10 flex items-end justify-between w-full gap-0.5 pb-0">
+          <div
+            v-if="!sidebarCollapsed"
+            class="h-10 flex items-end justify-between w-full gap-0.5 pb-0"
+          >
             <div class="flex items-center justify-start flex-1 min-w-0 overflow-hidden">
               <icon-open-agent type="character" :size="130" class="flex-shrink-0" />
             </div>
@@ -241,16 +266,21 @@ watch(settingModalVisible, async (visible) => {
             <router-link
               to="/search"
               :class="`p-0.5 rounded-lg transition-colors flex-shrink-0 flex items-center justify-center h-7 w-7 ${isSearchActive ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' : 'text-gray-600 hover:bg-gray-100'}`"
-              :title="isSearchActive ? '历史对话' : ''"
+              :title="isSearchActive ? t('layout.sidebar.searchHistory') : ''"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
             </router-link>
             <button
               @click="sidebarCollapsed = !sidebarCollapsed"
               class="p-0.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0 flex items-center justify-center h-7 w-7"
-              :title="sidebarCollapsed ? '展开' : '折叠'"
+              :title="sidebarCollapsed ? t('layout.sidebar.expand') : t('layout.sidebar.collapse')"
             >
               <svg
                 class="w-4 h-4 text-gray-600"
@@ -275,7 +305,7 @@ watch(settingModalVisible, async (visible) => {
             <button
               @click="sidebarCollapsed = !sidebarCollapsed"
               class="p-0.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0 flex items-center justify-center h-7 w-7"
-              :title="sidebarCollapsed ? '展开' : '折叠'"
+              :title="sidebarCollapsed ? t('layout.sidebar.expand') : t('layout.sidebar.collapse')"
             >
               <svg
                 class="w-3.5 h-3.5 text-gray-600"
@@ -283,17 +313,32 @@ watch(settingModalVisible, async (visible) => {
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 5l7 7-7 7"
+                />
               </svg>
             </button>
             <!-- 搜索按钮 - 折叠时显示在折叠按钮下方，同一垂直线 -->
             <router-link
               to="/search"
               :class="`flex items-center justify-center h-7 w-7 rounded-lg cursor-pointer transition-all duration-200 flex-shrink-0 ${isSearchActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:text-gray-700 hover:bg-gray-100'}`"
-              :title="isSearchActive ? '历史对话' : ''"
+              :title="isSearchActive ? t('layout.sidebar.searchHistory') : ''"
             >
-              <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                class="w-3.5 h-3.5 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
             </router-link>
           </div>
@@ -312,7 +357,9 @@ watch(settingModalVisible, async (visible) => {
               <a-avatar
                 :size="32"
                 class="flex-shrink-0 text-sm bg-blue-700"
-                :image-url="getUserAvatarUrl(accountStore.account.avatar, accountStore.account.name)"
+                :image-url="
+                  getUserAvatarUrl(accountStore.account.avatar, accountStore.account.name)
+                "
               >
                 {{ accountStore.account.name[0] }}
               </a-avatar>
@@ -327,18 +374,20 @@ watch(settingModalVisible, async (visible) => {
                 <template #icon>
                   <icon-settings />
                 </template>
-                账号设置
+                {{ $t('layout.account.settings') }}
               </a-doption>
               <a-doption @click="handleLogout">
                 <template #icon>
                   <icon-poweroff />
                 </template>
-                退出登录
+                {{ $t('layout.account.logout') }}
               </a-doption>
             </template>
           </a-dropdown>
           <div v-show="!isLoggedIn" class="p-1.5 w-full">
-            <a-button long class="rounded-lg" @click="goHomeAndOpenLogin"> 登录 </a-button>
+            <a-button long class="rounded-lg" @click="goHomeAndOpenLogin">
+              {{ $t('layout.account.login') }}
+            </a-button>
           </div>
         </div>
       </div>
@@ -356,7 +405,7 @@ watch(settingModalVisible, async (visible) => {
     >
       <router-view v-slot="{ Component }">
         <keep-alive include="HomeView">
-          <component :is="Component" class="flex-1 min-h-0" />
+          <component :is="Component" :key="route.path" class="flex-1 min-h-0" />
         </keep-alive>
       </router-view>
     </a-layout-content>

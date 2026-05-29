@@ -5,22 +5,29 @@ import { onMounted, ref, watch } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import CreateOrUpdateAppModal from './components/CreateOrUpdateAppModal.vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import CardGridSkeleton from '@/components/skeletons/CardGridSkeleton.vue'
 import { getUserAvatarUrl } from '@/utils/helper'
 
 // 1.定义页面所需数据
 const route = useRoute()
 const router = useRouter()
-const props = defineProps({
-  createType: { type: String, default: '', required: true },
-})
-const emits = defineEmits(['update:create-type'])
+const { t } = useI18n()
 const createOrUpdateAppModalVisible = ref(false)
 const updateAppId = ref('')
 const accountStore = useAccountStore()
 const { handleCopyApp } = useCopyApp()
 const { loading: getAppsWithPageLoading, apps, paginator, loadApps } = useGetAppsWithPage()
 const { handleDeleteApp } = useDeleteApp()
+
+const clearCreateTypeQuery = async () => {
+  const nextQuery = { ...route.query }
+  delete nextQuery.create_type
+  await router.replace({
+    path: route.path,
+    query: nextQuery,
+  })
+}
 
 // 2.定义滚动数据分页处理器
 const handleScroll = (event: Event) => {
@@ -43,17 +50,6 @@ onMounted(async () => {
 })
 
 watch(
-  () => props.createType,
-  (newValue) => {
-    if (newValue === 'app') {
-      updateAppId.value = ''
-      createOrUpdateAppModalVisible.value = true
-      emits('update:create-type', '')
-    }
-  },
-)
-
-watch(
   () => route.query?.search_word,
   (newValue) => loadApps(true, String(newValue)),
 )
@@ -61,10 +57,10 @@ watch(
 watch(
   () => route.query?.create_type,
   (newValue) => {
-    if (newValue === 'app') {
-      updateAppId.value = ''
-      createOrUpdateAppModalVisible.value = true
-    }
+    if (newValue !== 'app') return
+    updateAppId.value = ''
+    createOrUpdateAppModalVisible.value = true
+    void clearCreateTypeQuery()
   },
   { immediate: true },
 )
@@ -124,7 +120,7 @@ const handleCardClick = (appId: string) => {
                   </a-button>
                   <template #content>
                     <router-link :to="{ name: 'space-apps-analysis', params: { app_id: app.id } }">
-                      <a-doption>分析</a-doption>
+                      <a-doption>{{ t('appStudio.list.analysis') }}</a-doption>
                     </router-link>
                     <a-doption
                       @click="
@@ -134,9 +130,9 @@ const handleCardClick = (appId: string) => {
                         }
                       "
                     >
-                      编辑应用
+                      {{ t('appStudio.list.editApp') }}
                     </a-doption>
-                    <a-doption @click="async () => await handleCopyApp(app.id)">创建副本</a-doption>
+                    <a-doption @click="async () => await handleCopyApp(app.id)">{{ t('appStudio.list.duplicate') }}</a-doption>
                     <a-doption
                       class="text-red-700"
                       @click="
@@ -147,7 +143,7 @@ const handleCardClick = (appId: string) => {
                           )
                       "
                     >
-                      删除
+                      {{ t('appStudio.list.delete') }}
                     </a-doption>
                   </template>
                 </a-dropdown>
@@ -160,10 +156,10 @@ const handleCardClick = (appId: string) => {
             <!-- 应用的归属者信息 -->
             <div class="flex items-center gap-1.5">
               <a-avatar :size="18" class="bg-blue-700" :image-url="getUserAvatarUrl(accountStore.account.avatar, accountStore.account.name)">
-                {{ (accountStore.account.name || '未知用户')[0] }}
+                {{ (accountStore.account.name || t('appStudio.list.unknownUser'))[0] }}
               </a-avatar>
               <div class="text-xs text-gray-400">
-                {{ accountStore.account.name }} · 最近编辑
+                {{ accountStore.account.name }} · {{ t('appStudio.list.recentEdited') }}
                 {{
                   moment((app.draft_updated_at || app.updated_at || app.created_at) * 1000).format(
                     'MM-DD HH:mm',
@@ -176,7 +172,7 @@ const handleCardClick = (appId: string) => {
         <!-- 没数据的UI状态 -->
         <a-col v-if="apps.length === 0" :span="24">
           <a-empty
-            description="没有可用的Agent智能体"
+            :description="t('appStudio.list.empty')"
             class="h-[400px] flex flex-col items-center justify-center"
           />
         </a-col>
@@ -187,12 +183,12 @@ const handleCardClick = (appId: string) => {
         <a-col v-if="getAppsWithPageLoading" :span="24" align="center">
           <a-space class="my-4">
             <a-spin />
-            <div class="text-gray-400">加载中</div>
+            <div class="text-gray-400">{{ t('appStudio.list.loading') }}</div>
           </a-space>
         </a-col>
         <!-- 数据加载完成 -->
         <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" align="center">
-          <div class="text-gray-400 my-4">数据已加载完成</div>
+          <div class="text-gray-400 my-4">{{ t('appStudio.list.loadedAll') }}</div>
         </a-col>
       </a-row>
     </template>
@@ -200,7 +196,11 @@ const handleCardClick = (appId: string) => {
     <create-or-update-app-modal
       v-model:visible="createOrUpdateAppModalVisible"
       v-model:app_id="updateAppId"
-      :callback="() => loadApps(true, String(route.query?.search_word ?? ''))"
+      :callback="
+        () => {
+          return loadApps(true, String(route.query?.search_word ?? ''))
+        }
+      "
     />
   </div>
 </template>

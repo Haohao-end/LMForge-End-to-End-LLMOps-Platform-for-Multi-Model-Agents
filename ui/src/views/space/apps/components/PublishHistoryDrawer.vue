@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFallbackHistoryToDraft, useGetPublishHistoriesWithPage } from '@/hooks/use-app'
 import { formatTimestampLong, formatTimestampShort } from '@/utils/time-formatter'
 
@@ -9,6 +10,7 @@ const props = defineProps({
   app: { type: Object, required: true },
 })
 const emits = defineEmits(['update:visible', 'loadDraftAppConfig'])
+const { t } = useI18n()
 const { loading, paginator, publishHistories, loadPublishHistories } =
   useGetPublishHistoriesWithPage()
 const { handleFallbackHistoryToDraft } = useFallbackHistoryToDraft()
@@ -44,7 +46,7 @@ watch(
   <!-- 发布历史配置抽屉组件 -->
   <a-drawer
     :visible="props.visible"
-    title="发布历史"
+    :title="t('appStudio.publishHistory.title')"
     :width="394"
     :footer="false"
     :drawer-style="{ backgroundColor: '#f9fafb' }"
@@ -65,7 +67,7 @@ watch(
           <div class="flex flex-col">
             <div class="text-gray-700 font-bold">{{ app?.name }}</div>
             <div class="text-xs text-gray-500">
-              最近编辑 · {{ formatTimestampLong(app?.draft_updated_at) }}
+              {{ t('appStudio.publishHistory.recentEdited', { time: formatTimestampLong(app?.draft_updated_at) }) }}
             </div>
           </div>
         </div>
@@ -76,7 +78,7 @@ watch(
       <a-divider />
       <!-- 记录总记录条数 -->
       <div class="text-gray-500 text-xs mb-[18px]">
-        共计 {{ paginator.total_record }} 条发布记录
+        {{ t('appStudio.publishHistory.totalRecords', { count: paginator.total_record }) }}
       </div>
       <!-- 底部的历史列表信息 -->
       <a-card
@@ -89,7 +91,7 @@ watch(
           <!-- 左侧版本信息 -->
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-2">
-              <div class="font-bold text-gray-900">版本</div>
+              <div class="font-bold text-gray-900">{{ t('appStudio.publishHistory.version') }}</div>
               <a-tag size="small" class="text-gray-700 rounded-lg !border !border-gray-100">
                 # {{ String(publishHistory.version).padStart(3, '0') }}
               </a-tag>
@@ -98,11 +100,11 @@ watch(
                 size="small"
                 class="text-gray-700 rounded-lg !border !border-gray-100"
               >
-                当前版本
+                {{ t('appStudio.publishHistory.currentVersion') }}
               </a-tag>
             </div>
             <div class="text-xs text-gray-500">
-              发布时间：{{ formatTimestampShort(publishHistory.created_at) }}
+              {{ t('appStudio.publishHistory.publishedAt', { time: formatTimestampShort(publishHistory.created_at) }) }}
             </div>
           </div>
           <!-- 回退按钮 -->
@@ -122,7 +124,7 @@ watch(
               }
             "
           >
-            回退
+            {{ t('appStudio.publishHistory.rollback') }}
           </a-button>
         </div>
       </a-card>
@@ -131,11 +133,11 @@ watch(
         <!-- 数据加载中 -->
         <a-space v-if="loading" class="my-4">
           <a-spin />
-          <div class="text-gray-400">加载中</div>
+          <div class="text-gray-400">{{ t('appStudio.publishHistory.loading') }}</div>
         </a-space>
         <!-- 数据加载完成 -->
         <div v-else-if="paginator.current_page > paginator.total_page" class="text-gray-400 my-4">
-          数据已加载完成
+          {{ t('appStudio.publishHistory.loadedAll') }}
         </div>
       </div>
     </a-spin>

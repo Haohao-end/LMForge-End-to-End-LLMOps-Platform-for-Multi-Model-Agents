@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { apiPrefix } from '@/config'
 import { useGetLanguageModel, useGetLanguageModels } from '@/hooks/use-language-model'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
+import {
+  getModelParameterDisplayHelp,
+  getModelParameterDisplayLabel,
+} from '@/utils/model-parameter-display'
 
 type ModelForm = {
   selectValue: string
@@ -39,6 +44,7 @@ const {
 } = useGetLanguageModel()
 const { language_models, loadLanguageModels } = useGetLanguageModels()
 const { handleUpdateDraftAppConfig } = useUpdateDraftAppConfig()
+const { t } = useI18n()
 const modelOptions = computed(() => {
   return language_models.value.map((language_model) => {
     return {
@@ -139,16 +145,16 @@ onMounted(() => {
     <template #content>
       <div class="bg-white px-6 py-5 shadow rounded-lg w-[460px]">
         <!-- 标题 -->
-        <div class="text-gray-700 text-base font-semibold mb-3">模型设置</div>
+        <div class="text-gray-700 text-base font-semibold mb-3">{{ t('appStudio.modelConfig.title') }}</div>
         <!-- 模型选择 -->
         <div class="flex flex-col gap-2 mb-2">
-          <div class="text-gray-700">模型</div>
+          <div class="text-gray-700">{{ t('appStudio.modelConfig.modelLabel') }}</div>
           <a-select
             v-model:model-value="form.selectValue"
             :options="modelOptions"
             size="small"
             class="rounded-lg mb-2"
-            placeholder="请选择Agent使用的大语言模型"
+            :placeholder="t('appStudio.modelConfig.modelPlaceholder')"
             @change="changeModel"
           >
             <template #label="{ data }">
@@ -178,7 +184,7 @@ onMounted(() => {
           </a-select>
         </div>
         <!-- 参数列表 -->
-        <div class="text-gray-700 mb-2">参数</div>
+        <div class="text-gray-700 mb-2">{{ t('appStudio.modelConfig.parametersTitle') }}</div>
         <a-spin :loading="getLanguageModelLoading" class="w-full">
           <div
             v-for="parameter in language_model?.parameters"
@@ -187,8 +193,12 @@ onMounted(() => {
           >
             <!-- 字段标签 -->
             <div class="flex items-center gap-2 text-gray-500 w-[120px] flex-shrink-0">
-              <div class="text-xs">{{ parameter?.label }}</div>
-              <a-tooltip :content="parameter?.help">
+              <div class="text-xs">
+                {{ getModelParameterDisplayLabel(parameter.name, String(parameter?.label || ''), t) }}
+              </div>
+              <a-tooltip
+                :content="getModelParameterDisplayHelp(parameter.name, String(parameter?.help || ''), t)"
+              >
                 <icon-question-circle />
               </a-tooltip>
             </div>
@@ -197,7 +207,7 @@ onMounted(() => {
               <a-select
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请选择参数值"
+                :placeholder="t('appStudio.modelConfig.parameterPlaceholder')"
                 :options="parameter.options"
               />
             </template>
@@ -205,10 +215,10 @@ onMounted(() => {
               <a-select
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请选择参数值"
+                :placeholder="t('appStudio.modelConfig.parameterPlaceholder')"
                 :options="[
-                  { label: '是', value: true },
-                  { label: '否', value: false },
+                  { label: t('appStudio.modelConfig.booleanYes'), value: true },
+                  { label: t('appStudio.modelConfig.booleanNo'), value: false },
                 ]"
               />
             </template>
@@ -226,18 +236,18 @@ onMounted(() => {
               <a-input
                 v-model:model-value="form.parameters[parameter.name]"
                 :default-value="parameter.default"
-                placeholder="请输入参数值"
+                :placeholder="t('appStudio.modelConfig.parameterInputPlaceholder')"
               />
             </template>
           </div>
         </a-spin>
         <!-- 携带上下文轮数 -->
-        <div class="text-gray-700 mb-2">输入及输出设置</div>
+        <div class="text-gray-700 mb-2">{{ t('appStudio.modelConfig.ioSettingsTitle') }}</div>
         <div class="flex items-center gap-2 h-8">
           <!-- 字段标签 -->
           <div class="flex items-center gap-2 text-gray-500 w-[120px] flex-shrink-0">
-            <div class="text-xs">携带上下文轮数</div>
-            <a-tooltip content="每次向Agent提问时需要携带的最近消息对话轮数，默认为3。">
+            <div class="text-xs">{{ t('appStudio.modelConfig.dialogRoundsLabel') }}</div>
+            <a-tooltip :content="t('appStudio.modelConfig.dialogRoundsHelp')">
               <icon-question-circle />
             </a-tooltip>
           </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
   useDeleteSegment,
@@ -13,6 +14,7 @@ import { formatTimestampShort } from '@/utils/time-formatter'
 // 1.定义页面所需的基础数据
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const createOrUpdateModalVisible = ref(false)
 const updateSegmentID = ref('')
 const { document, loadDocument } = useGetDocument()
@@ -95,7 +97,7 @@ onMounted(() => {
           <!-- 知识库信息 -->
           <div class="flex flex-col justify-between h-[40px]">
             <a-skeleton-line v-if="!document?.name" :widths="[100]" />
-            <div v-else class="text-gray-700">文档 / {{ document.name }}</div>
+            <div v-else class="text-gray-700">{{ t('space.datasets.documents.segments.documentPrefix') }} {{ document.name }}</div>
             <div v-if="!document?.name" class="flex items-center gap-2">
               <a-skeleton-line :widths="[60]" :line-height="18" />
               <a-skeleton-line :widths="[60]" :line-height="18" />
@@ -103,13 +105,13 @@ onMounted(() => {
             </div>
             <div v-else class="flex items-center gap-2">
               <a-tag size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
-                {{ document.segment_count }} 文档片段
+                {{ t('space.datasets.documents.segments.segmentCount', { count: document.segment_count }) }}
               </a-tag>
               <a-tag size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
-                {{ document.hit_count }} 命中
+                {{ t('space.datasets.documents.segments.hitCount', { count: document.hit_count }) }}
               </a-tag>
               <a-tag size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
-                {{ formatTimestampShort(document.updated_at) }} 最后编辑
+                {{ t('space.datasets.documents.segments.lastEdited', { time: formatTimestampShort(document.updated_at) }) }}
               </a-tag>
             </div>
           </div>
@@ -120,7 +122,7 @@ onMounted(() => {
         <!-- 左侧搜索框 -->
         <a-input-search
           :default-value="route.query?.search_word || ''"
-          placeholder="请输入关键词搜索片段"
+          :placeholder="t('space.datasets.documents.segments.searchPlaceholder')"
           class="w-[240px] bg-white rounded-lg border-gray-200"
           @search="
             (value: string) => {
@@ -141,7 +143,7 @@ onMounted(() => {
               class="w-2 h-2 bg-green-500 border border-green-700 rounded-sm"
             ></div>
             <div v-else class="w-2 h-2 bg-gray-500 border border-gray-200 rounded-sm"></div>
-            {{ document.enabled ? '可用' : '已禁用' }}
+            {{ document.enabled ? t('space.datasets.documents.segments.enabled') : t('space.datasets.documents.segments.disabled') }}
           </div>
           <a-button
             type="primary"
@@ -156,7 +158,7 @@ onMounted(() => {
             <template #icon>
               <icon-file />
             </template>
-            添加片段
+            {{ t('space.datasets.documents.segments.addSegment') }}
           </a-button>
         </a-space>
       </div>
@@ -179,7 +181,7 @@ onMounted(() => {
               </a-tag>
               <div class="flex items-center">
                 <div class="flex items-center gap-1 text-xs text-gray-700">
-                  {{ segment.enabled ? '已启用' : '已禁用' }}
+                  {{ segment.enabled ? t('space.datasets.documents.statuses.enabled') : t('space.datasets.documents.statuses.disabled') }}
                   <div
                     v-if="segment.enabled"
                     class="w-2 h-2 bg-green-500 border border-green-700 rounded-sm"
@@ -222,11 +224,11 @@ onMounted(() => {
               <div class="flex items-center gap-3">
                 <div class="flex items-center gap-1 text-xs text-gray-500">
                   <icon-bookmark />
-                  {{ segment.character_count }} 字符
+                  {{ segment.character_count }} {{ t('space.datasets.documents.columns.characterCount') }}
                 </div>
                 <div class="flex items-center gap-1 text-xs text-gray-500">
                   <icon-pushpin />
-                  {{ segment.hit_count }} 命中
+                  {{ segment.hit_count }} {{ t('space.datasets.documents.columns.hitCount') }}
                 </div>
               </div>
               <!-- 右侧删除 -->
@@ -260,7 +262,7 @@ onMounted(() => {
         <!-- 没数据的UI状态 -->
         <a-col v-if="segments.length === 0" :span="24">
           <a-empty
-            description="没有可用的文档片段"
+            :description="t('space.datasets.documents.empty.segments')"
             class="h-[400px] flex flex-col items-center justify-center"
           />
         </a-col>
@@ -271,12 +273,12 @@ onMounted(() => {
         <a-col v-if="loading" :span="24" align="center">
           <a-space class="my-4">
             <a-spin />
-            <div class="text-gray-400">加载中</div>
+            <div class="text-gray-400">{{ t('space.datasets.documents.segments.loading') }}</div>
           </a-space>
         </a-col>
         <!-- 数据加载完成 -->
         <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" align="center">
-          <div class="text-gray-400 my-4">数据已加载完成</div>
+          <div class="text-gray-400 my-4">{{ t('space.datasets.documents.segments.loadedAll') }}</div>
         </a-col>
       </a-row>
     </a-spin>

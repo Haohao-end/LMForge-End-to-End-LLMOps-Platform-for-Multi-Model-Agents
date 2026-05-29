@@ -2,6 +2,7 @@
 import { useGetDraftAppConfig } from '@/hooks/use-app'
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AgentAppAbility from './components/AgentAppAbility.vue'
 import ModelConfig from './components/ModelConfig.vue'
 import PresetPromptTextarea from './components/PresetPromptTextarea.vue'
@@ -19,6 +20,7 @@ const props = defineProps({
     required: true,
   },
 })
+const { t } = useI18n()
 const { draftAppConfigForm, loadDraftAppConfig } = useGetDraftAppConfig()
 const isDraftAppConfigRefreshing = ref(false)
 
@@ -56,7 +58,7 @@ watch(
       <div class="bg-gray-50 flex flex-col h-full">
         <!-- 顶部标题 -->
         <div class="flex items-center h-16 border-b p-4 gap-4">
-          <div class="text-lg text-gray-700">应用编排</div>
+          <div class="text-lg text-gray-700">{{ t('appStudio.detail.title') }}</div>
           <!-- LLM模型配置 -->
           <model-config :dialog_round="draftAppConfigForm.dialog_round"
             v-model:model_config="draftAppConfigForm.model_config" :app_id="String(route.params?.app_id)" />

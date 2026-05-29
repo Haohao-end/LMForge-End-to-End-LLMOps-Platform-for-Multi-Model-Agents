@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   useCreateApiToolProvider,
   useDeleteApiToolProvider,
@@ -20,6 +20,7 @@ import { typeMap } from '@/config'
 import { type FileItem, Form, type ValidatedError, Message } from '@arco-design/web-vue'
 import IconUploadGenerator from '@/components/IconUploadGenerator.vue'
 import { getUserAvatarUrl } from '@/utils/helper'
+import { useI18n } from 'vue-i18n'
 
 type HeaderItem = {
   key: string
@@ -43,10 +44,8 @@ type OpenapiToolPreview = {
 
 // 1.定义额面所需数据
 const route = useRoute()
-const props = defineProps({
-  createType: { type: String, required: true },
-})
-const emits = defineEmits(['update:create-type'])
+const { t } = useI18n()
+const router = useRouter()
 const accountStore = useAccountStore()
 const form = ref<{
   fileList: FileItem[]
@@ -88,24 +87,34 @@ const { loading: generateIconPreviewLoading, handleGenerateIconPreview } = useGe
 const formRef = ref<InstanceType<typeof Form>>()
 const showIdx = ref<number>(-1)
 const loading = ref<boolean>(false)
+const showCreateModal = ref<boolean>(false)
 const showUpdateModal = ref<boolean>(false)
 const showOpenapiSchemaExampleModal = ref<boolean>(false)
 const openapiAssistantQuestion = ref<string>('')
 const openapiAssistantContent = ref<string>('')
 const openapiAssistantLoading = ref<boolean>(false)
 
+const clearCreateTypeQuery = async () => {
+  const nextQuery = { ...route.query }
+  delete nextQuery.create_type
+  await router.replace({
+    path: route.path,
+    query: nextQuery,
+  })
+}
+
 // 定义上传图标处理器
 const handleUploadIcon = async (file: File) => {
   await handleUploadImage(file)
   form.value.icon = image_url.value
-  form.value.fileList = [{ uid: '1', name: '插件图标', url: image_url.value }]
-  Message.success('图标上传成功')
+  form.value.fileList = [{ uid: '1', name: t('space.tools.iconPlaceholder'), url: image_url.value }]
+  Message.success(t('space.tools.iconUploadSuccess'))
 }
 
 // 定义生成图标处理器
 const handleGenerateIcon = async () => {
   if (!form.value.name || form.value.name.trim() === '') {
-    Message.warning('请先输入插件名称')
+    Message.warning(t('space.tools.enterNameFirst'))
     return
   }
 
@@ -116,8 +125,8 @@ const handleGenerateIcon = async () => {
       const iconUrl = await handleRegenerateIcon(provider_id)
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '插件图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('space.tools.iconPlaceholder'), url: iconUrl }]
+        Message.success(t('space.tools.iconGenerateSuccess'))
       }
     }
     // 创建模式：调用 generateIconPreview
@@ -125,8 +134,8 @@ const handleGenerateIcon = async () => {
       const iconUrl = await handleGenerateIconPreview(form.value.name, '')
       if (iconUrl) {
         form.value.icon = iconUrl
-        form.value.fileList = [{ uid: '1', name: '插件图标', url: iconUrl }]
-        Message.success('图标生成成功')
+        form.value.fileList = [{ uid: '1', name: t('space.tools.iconPlaceholder'), url: iconUrl }]
+        Message.success(t('space.tools.iconGenerateSuccess'))
       }
     }
   } catch (_error: unknown) {
@@ -136,31 +145,31 @@ const handleGenerateIcon = async () => {
 
 const openapiSchemaInputExample = `{
   "server": "https://api.weather-service.com/v1",
-  "description": "提供全球实时天气和预报信息的API服务",
+  "description": "Provides global real-time weather and forecast APIs",
   "paths": {
     "/current": {
       "get": {
-        "description": "获取指定城市的当前天气信息",
+        "description": "Get current weather for a city",
         "operationId": "getCurrentWeather",
         "parameters": [
           {
             "name": "city",
             "in": "query",
-            "description": "城市名称，例如：Beijing",
+            "description": "City name, for example: Beijing",
             "required": true,
             "type": "str"
           },
           {
             "name": "units",
             "in": "query",
-            "description": "温度单位 (metric/imperial)，默认为metric",
+            "description": "Temperature unit (metric/imperial), default metric",
             "required": false,
             "type": "str"
           },
           {
             "name": "lang",
             "in": "query",
-            "description": "返回语言 (zh/en)，默认为en",
+            "description": "Response language (zh/en), default en",
             "required": false,
             "type": "str"
           }
@@ -169,27 +178,27 @@ const openapiSchemaInputExample = `{
     },
     "/forecast": {
       "get": {
-        "description": "获取指定城市未来7天的天气预报",
+        "description": "Get the 7-day forecast for a city",
         "operationId": "getWeatherForecast",
         "parameters": [
           {
             "name": "city",
             "in": "query",
-            "description": "城市名称，例如：Shanghai",
+            "description": "City name, for example: Shanghai",
             "required": true,
             "type": "str"
           },
           {
             "name": "days",
             "in": "query",
-            "description": "预报天数 (1-14)，默认为7",
+            "description": "Forecast days (1-14), default 7",
             "required": false,
             "type": "int"
           },
           {
             "name": "units",
             "in": "query",
-            "description": "温度单位 (metric/imperial)，默认为metric",
+            "description": "Temperature unit (metric/imperial), default metric",
             "required": false,
             "type": "str"
           }
@@ -216,7 +225,7 @@ const handleUseOpenapiSchemaExample = async () => {
   form.value.openapi_schema = openapiSchemaInputExample
   await handleValidateOpenAPISchema(form.value.openapi_schema)
   showOpenapiSchemaExampleModal.value = false
-  Message.success('已填充 OpenAPI Schema 示例')
+  Message.success(t('space.tools.aiFilled'))
 }
 
 const toggleOpenapiSchemaExampleModal = () => {
@@ -226,7 +235,7 @@ const toggleOpenapiSchemaExampleModal = () => {
 const handleGenerateOpenapiSchemaByAI = async () => {
   const question = openapiAssistantQuestion.value.trim()
   if (!question) {
-    Message.warning('请先输入插件能力描述，再执行AI补齐')
+    Message.warning(t('space.tools.aiDescriptionRequired'))
     return
   }
 
@@ -241,7 +250,7 @@ const handleGenerateOpenapiSchemaByAI = async () => {
     })
 
     if (response && typeof response === 'object' && 'code' in response) {
-      throw new Error(String((response as { message?: string }).message || 'AI 请求失败'))
+      throw new Error(String((response as { message?: string }).message || t('space.tools.aiFillFailed')))
     }
 
     const schemaText = extractOpenapiSchemaJson(openapiAssistantContent.value)
@@ -249,9 +258,9 @@ const handleGenerateOpenapiSchemaByAI = async () => {
     form.value.openapi_schema = JSON.stringify(schemaObject, null, 2)
 
     await handleValidateOpenAPISchema(form.value.openapi_schema)
-    Message.success('AI 已补齐 OpenAPI Schema')
+    Message.success(t('space.tools.aiFilled'))
   } catch (_error: unknown) {
-    Message.error('AI补齐失败，请调整描述后重试')
+    Message.error(t('space.tools.aiFillFailed'))
   } finally {
     openapiAssistantLoading.value = false
   }
@@ -311,7 +320,7 @@ const handleUpdate = async () => {
 
   // 3.3 更新form表单数据
   formRef.value?.resetFields()
-  form.value.fileList = [{ uid: '1', name: '插件图标', url: api_tool_provider.value.icon }]
+  form.value.fileList = [{ uid: '1', name: t('space.tools.iconPlaceholder'), url: api_tool_provider.value.icon }]
   form.value.icon = api_tool_provider.value.icon
   form.value.name = api_tool_provider.value.name
   form.value.openapi_schema = api_tool_provider.value.openapi_schema
@@ -348,7 +357,7 @@ const handleSubmit = async ({
   if (errors) return
 
   // 2.根据不同的类型发起不同的请求
-  if (props.createType === 'tool') {
+  if (showCreateModal.value) {
     // 3.调用处理器发起创建请求
     await handleCreateApiToolProvider(values as CreateApiToolProviderRequest)
   } else if (showUpdateModal.value) {
@@ -374,10 +383,11 @@ const handleCancel = () => {
   openapiAssistantQuestion.value = ''
   openapiAssistantContent.value = ''
   showOpenapiSchemaExampleModal.value = false
+  showCreateModal.value = false
 
   // 2.隐藏表单模态窗
-  emits('update:create-type', '')
   showUpdateModal.value = false
+  void clearCreateTypeQuery()
 }
 
 // 页面DOM加载完毕初始化数据
@@ -395,7 +405,9 @@ watch(
 watch(
   () => route.query?.create_type,
   (newValue) => {
-    if (newValue === 'tool') emits('update:create-type', 'tool')
+    if (newValue !== 'tool') return
+    showCreateModal.value = true
+    void clearCreateTypeQuery()
   },
   { immediate: true },
 )
@@ -428,7 +440,7 @@ watch(
             <div class="flex flex-col">
               <div class="text-base text-gray-900 font-bold">{{ provider.name }}</div>
               <div class="text-xs text-gray-500 line-clamp-1">
-                提供商 {{ provider.name }} · {{ provider.tools.length }} 插件
+                {{ t('space.tools.providerSummary', { name: provider.name, count: provider.tools.length }) }}
               </div>
             </div>
           </div>
@@ -439,10 +451,10 @@ watch(
           <!-- 提供商的发布信息 -->
           <div class="flex items-center gap-1.5">
             <a-avatar :size="18" class="bg-blue-700" :image-url="getUserAvatarUrl(accountStore.account.avatar, accountStore.account.name)">
-              {{ (accountStore.account.name || '未知用户')[0] }}
+              {{ (accountStore.account.name || t('common.status.unknown'))[0] }}
             </a-avatar>
             <div class="text-xs text-gray-400">
-              {{ accountStore.account.name }} · 最近编辑
+              {{ accountStore.account.name }} · {{ t('space.tools.recentEdited') }}
               {{ moment((provider.updated_at || provider.created_at) * 1000).format('MM-DD HH:mm') }}
             </div>
           </div>
@@ -451,7 +463,7 @@ watch(
       <!-- 没数据的UI状态 -->
       <a-col v-if="api_tool_providers.length === 0" :span="24">
         <a-empty
-          description="没有可用的API插件"
+          :description="t('space.tools.empty')"
           class="h-[400px] flex flex-col items-center justify-center"
         />
       </a-col>
@@ -459,23 +471,23 @@ watch(
     <!-- 加载器 -->
     <a-row v-if="paginator.total_page >= 2">
       <!-- 加载数据中 -->
-      <a-col v-if="getApiToolProvidersLoading" :span="24" align="center">
-        <a-space class="my-4">
-          <a-spin />
-          <div class="text-gray-400">加载中</div>
-        </a-space>
-      </a-col>
-      <!-- 数据加载完成 -->
-      <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" align="center">
-        <div class="text-gray-400 my-4">数据已加载完成</div>
-      </a-col>
+        <a-col v-if="getApiToolProvidersLoading" :span="24" align="center">
+          <a-space class="my-4">
+            <a-spin />
+            <div class="text-gray-400">{{ t('space.tools.loading') }}</div>
+          </a-space>
+        </a-col>
+        <!-- 数据加载完成 -->
+        <a-col v-else-if="paginator.current_page > paginator.total_page" :span="24" align="center">
+        <div class="text-gray-400 my-4">{{ t('space.tools.loadedAll') }}</div>
+        </a-col>
     </a-row>
     <!-- 卡片抽屉 -->
     <a-drawer
       :visible="showIdx != -1"
       :width="350"
       :footer="false"
-      title="工具详情"
+      :title="t('space.tools.detailTitle')"
       :drawer-style="{ background: '#F9FAFB' }"
       @cancel="showIdx = -1"
     >
@@ -491,14 +503,13 @@ watch(
               {{ api_tool_providers[showIdx].name }}
             </div>
             <div class="text-xs text-gray-500 line-clamp-1">
-              提供商 {{ api_tool_providers[showIdx].name }} ·
-              {{ api_tool_providers[showIdx].tools.length }} 插件
+              {{ t('space.tools.providerSummary', { name: api_tool_providers[showIdx].name, count: api_tool_providers[showIdx].tools.length }) }}
             </div>
           </div>
         </div>
         <!-- 提供商的描述信息 -->
         <div class="leading-[18px] text-gray-500 mb-4">
-          {{ api_tool_providers[showIdx].description }}
+          {{ api_tool_providers[showIdx].description || t('space.tools.noDescription') }}
         </div>
         <!-- 编辑按钮 -->
         <a-button
@@ -507,18 +518,18 @@ watch(
           long
           class="mb-2 rounded-lg"
           @click="handleUpdate"
-        >
-          <template #icon>
-            <icon-settings />
-          </template>
-          编辑工具
+          >
+            <template #icon>
+              <icon-settings />
+            </template>
+          {{ t('space.tools.edit') }}
         </a-button>
         <!-- 分隔符 -->
         <hr class="my-4" />
         <!-- 提供者工具 -->
         <div class="flex flex-col gap-2">
           <div class="text-xs text-gray-500">
-            包含 {{ api_tool_providers[showIdx].tools.length }} 个工具
+            {{ t('space.tools.containsTools', { count: api_tool_providers[showIdx].tools.length }) }}
           </div>
           <!-- 工具列表 -->
           <a-card
@@ -529,12 +540,12 @@ watch(
             <!-- 工具名称 -->
             <div class="font-bold text-gray-900 mb-2">{{ tool.name }}</div>
             <!-- 工具描述 -->
-            <div class="text-gray-500 text-xs">{{ tool.description }}</div>
+            <div class="text-gray-500 text-xs">{{ tool.description || t('space.tools.noDescription') }}</div>
             <!-- 工具参数 -->
             <div v-if="tool.inputs.length > 0" class="">
               <!-- 分隔符 -->
               <div class="flex items-center gap-2 my-4">
-                <div class="text-xs font-bold text-gray-500">参数</div>
+                <div class="text-xs font-bold text-gray-500">{{ t('space.tools.parameters') }}</div>
                 <hr class="flex-1" />
               </div>
               <!-- 参数列表 -->
@@ -544,7 +555,7 @@ watch(
                   <div class="flex items-center gap-2 text-xs">
                     <div class="text-gray-900 font-bold">{{ input.name }}</div>
                     <div class="text-gray-500">{{ typeMap[input.type] }}</div>
-                    <div v-if="input.required" class="text-red-700">必填</div>
+                    <div v-if="input.required" class="text-red-700">{{ t('space.tools.required') }}</div>
                   </div>
                   <!-- 参数描述信息 -->
                   <div class="text-xs text-gray-500">{{ input.description }}</div>
@@ -558,7 +569,7 @@ watch(
     <a-modal
       :visible="showOpenapiSchemaExampleModal"
       :width="760"
-      title="OpenAPI Schema 示例"
+      :title="t('space.tools.openapiSchemaExampleTitle')"
       :footer="false"
       :mask-closable="true"
       @cancel="showOpenapiSchemaExampleModal = false"
@@ -568,10 +579,10 @@ watch(
           class="w-full max-h-[460px] overflow-auto rounded border border-gray-200 bg-white p-3 text-[12px] leading-[18px] text-gray-700"
         >{{ openapiSchemaInputExample }}</pre>
         <div class="flex justify-end gap-2">
-          <a-button class="rounded-lg" @click="showOpenapiSchemaExampleModal = false">关闭</a-button>
-          <a-button type="primary" class="rounded-lg" @click="handleUseOpenapiSchemaExample">
-            使用示例
-          </a-button>
+        <a-button class="rounded-lg" @click="showOpenapiSchemaExampleModal = false">{{ t('space.tools.close') }}</a-button>
+        <a-button type="primary" class="rounded-lg" @click="handleUseOpenapiSchemaExample">
+            {{ t('space.tools.useExample') }}
+        </a-button>
         </div>
       </div>
     </a-modal>
@@ -579,7 +590,7 @@ watch(
     <!-- 新建/修改模态窗 -->
     <a-modal
       :width="630"
-      :visible="props.createType === 'tool' || showUpdateModal"
+      :visible="showCreateModal || showUpdateModal"
       hide-title
       :footer="false"
       modal-class="rounded-xl"
@@ -588,7 +599,7 @@ watch(
       <!-- 顶部标题 -->
       <div class="flex items-center justify-between">
         <div class="text-lg font-bold text-gray-700">
-          {{ props.createType === 'tool' ? '新建' : '更新' }}插件
+          {{ showCreateModal ? t('space.tools.createTitle') : t('space.tools.updateTitle') }}
         </div>
         <a-button type="text" class="!text-gray-700" size="small" @click="handleCancel">
           <template #icon>
@@ -602,7 +613,7 @@ watch(
           <a-form-item
             field="fileList"
             hide-label
-            :rules="[{ required: true, message: '插件图标不能为空' }]"
+            :rules="[{ required: true, message: t('space.tools.iconRequired') }]"
           >
             <IconUploadGenerator
               :name="form.name"
@@ -610,7 +621,7 @@ watch(
               :icon="form.icon"
               :file-list="form.fileList"
               :loading="regenerateIconLoading || generateIconPreviewLoading"
-              placeholder="插件"
+              :placeholder="t('space.tools.iconPlaceholder')"
               :on-upload="handleUploadIcon"
               :on-generate="handleGenerateIcon"
               @update:icon="(val) => (form.icon = val)"
@@ -619,13 +630,13 @@ watch(
           </a-form-item>
           <a-form-item
             field="name"
-            label="插件名称"
+            :label="t('space.tools.pluginName')"
             asterisk-position="end"
-            :rules="[{ required: true, message: '插件名称不能为空' }]"
+            :rules="[{ required: true, message: t('space.tools.pluginNameRequired') }]"
           >
             <a-input
               v-model="form.name"
-              placeholder="请输入插件名称，确保名称含义清晰"
+              :placeholder="t('space.tools.pluginNamePlaceholder')"
               show-word-limit
               :max-length="60"
             />
@@ -634,27 +645,27 @@ watch(
             field="openapi_schema"
             label="OpenAPI Schema"
             asterisk-position="end"
-            :rules="[{ required: true, message: 'OpenAPI Schema不能为空' }]"
+            :rules="[{ required: true, message: t('space.tools.openapiSchemaRequired') }]"
           >
             <div class="w-full flex flex-col gap-3">
               <div class="rounded-lg border border-gray-200 p-3 bg-gray-50">
                 <div class="flex items-center justify-between gap-2 mb-2">
-                  <div class="text-xs text-gray-600">支持直接粘贴 JSON 格式 Schema，也可通过 AI 自动补齐</div>
+                  <div class="text-xs text-gray-600">{{ t('space.tools.schemaHint') }}</div>
                   <a-button
                     size="mini"
                     type="text"
                     class="!text-gray-700"
                     @click="toggleOpenapiSchemaExampleModal"
                   >
-                    {{ showOpenapiSchemaExampleModal ? '隐藏示例' : '查看示例' }}
+                    {{ showOpenapiSchemaExampleModal ? t('space.tools.hideExample') : t('space.tools.showExample') }}
                   </a-button>
                 </div>
 
-                <div class="text-xs text-gray-600 mb-2">AI需求描述（支持多行输入）</div>
+                <div class="text-xs text-gray-600 mb-2">{{ t('space.tools.aiHint') }}</div>
                 <a-textarea
                   v-model="openapiAssistantQuestion"
                   :auto-size="{ minRows: 4, maxRows: 10 }"
-                  placeholder="输入你的需求，例如：\n1. 做一个电影搜索插件\n2. 支持按关键词搜索电影\n3. 支持按ID获取电影详情"
+                  :placeholder="t('space.tools.aiPlaceholder')"
                 />
                 <div class="mt-2">
                   <a-button
@@ -664,17 +675,17 @@ watch(
                     :loading="openapiAssistantLoading"
                     @click="handleGenerateOpenapiSchemaByAI"
                   >
-                    AI补齐 OpenAPI Schema
+                    {{ t('space.tools.aiAssist') }}
                   </a-button>
                 </div>
               </div>
 
               <div class="rounded-lg border border-gray-200 p-3">
-                <div class="text-xs text-gray-600 mb-2">OpenAPI Schema(JSON)</div>
+                <div class="text-xs text-gray-600 mb-2">{{ t('space.tools.openapiSchema') }}(JSON)</div>
                 <a-textarea
                   v-model="form.openapi_schema"
                   :auto-size="{ minRows: 12, maxRows: 24 }"
-                  placeholder="在此处输入或粘贴 OpenAPI Schema(JSON)"
+                  :placeholder="t('space.tools.openapiSchemaPlaceholder')"
                   @blur="
                     () => {
                       if (form.openapi_schema.trim() !== '') {
@@ -687,16 +698,16 @@ watch(
               </div>
             </div>
           </a-form-item>
-          <a-form-item label="可用工具">
+          <a-form-item :label="t('space.tools.availableTools')">
             <!-- 可用工具表格 -->
             <div class="rounded-lg border border-gray-200 w-full overflow-x-auto">
               <table class="w-full leading-[18px] text-xs text-gray-700 font-normal">
                 <thead class="text-gray-500">
                   <tr class="border-b border-gray-200">
-                    <th class="p-2 pl-3 font-medium">名称</th>
-                    <th class="p-2 pl-3 font-medium w-[236px]">描述</th>
-                    <th class="p-2 pl-3 font-medium">方法</th>
-                    <th class="p-2 pl-3 font-medium">路径</th>
+                    <th class="p-2 pl-3 font-medium">{{ t('space.tools.columns.name') }}</th>
+                    <th class="p-2 pl-3 font-medium w-[236px]">{{ t('space.tools.columns.description') }}</th>
+                    <th class="p-2 pl-3 font-medium">{{ t('space.tools.columns.method') }}</th>
+                    <th class="p-2 pl-3 font-medium">{{ t('space.tools.columns.path') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -714,15 +725,15 @@ watch(
               </table>
             </div>
           </a-form-item>
-          <a-form-item label="Headers">
+          <a-form-item :label="t('space.tools.headers')">
             <!-- 请求头表单 -->
             <div class="rounded-lg border border-gray-200 w-full overflow-x-auto">
               <table class="w-full leading-[18px] text-xs text-gray-700 font-normal mb-3">
                 <thead class="text-gray-500">
                   <tr class="border-b border-gray-200">
-                    <th class="p-2 pl-3 font-medium">Key</th>
-                    <th class="p-2 pl-3 font-medium">Value</th>
-                    <th class="p-2 pl-3 font-medium w-[50px]">操作</th>
+                    <th class="p-2 pl-3 font-medium">{{ t('space.tools.columns.key') }}</th>
+                    <th class="p-2 pl-3 font-medium">{{ t('space.tools.columns.value') }}</th>
+                    <th class="p-2 pl-3 font-medium w-[50px]">{{ t('space.tools.columns.action') }}</th>
                   </tr>
                 </thead>
                 <tbody v-if="form.headers.length > 0" class="border-b border-gray-200">
@@ -733,12 +744,12 @@ watch(
                   >
                     <td class="p-2 pl-3">
                       <a-form-item :field="`headers[${idx}].key`" hide-label class="m-0">
-                        <a-input v-model="header.key" placeholder="请输入请求头键名" />
+                        <a-input v-model="header.key" :placeholder="t('space.tools.headerKeyPlaceholder')" />
                       </a-form-item>
                     </td>
                     <td class="p-2 pl-3">
                       <a-form-item :field="`headers[${idx}].value`" hide-label class="m-0">
-                        <a-input v-model="header.value" placeholder="请输入请求头键值内容" />
+                        <a-input v-model="header.value" :placeholder="t('space.tools.headerValuePlaceholder')" />
                       </a-form-item>
                     </td>
                     <td class="p-2 pl-3">
@@ -764,7 +775,7 @@ watch(
                 <template #icon>
                   <icon-plus />
                 </template>
-                增加参数
+                {{ t('space.tools.addHeader') }}
               </a-button>
             </div>
           </a-form-item>
@@ -776,18 +787,18 @@ watch(
                 class="rounded-lg !text-red-700"
                 @click="handleDelete"
               >
-                删除
+                {{ t('space.tools.delete') }}
               </a-button>
             </div>
             <a-space :size="16">
-              <a-button class="rounded-lg" @click="handleCancel">取消</a-button>
+              <a-button class="rounded-lg" @click="handleCancel">{{ t('space.tools.cancel') }}</a-button>
               <a-button
                 :loading="updateApiToolProviderLoading || createApiToolProviderLoading"
                 type="primary"
                 html-type="submit"
                 class="rounded-lg"
               >
-                保存
+                {{ t('space.tools.save') }}
               </a-button>
             </a-space>
           </div>

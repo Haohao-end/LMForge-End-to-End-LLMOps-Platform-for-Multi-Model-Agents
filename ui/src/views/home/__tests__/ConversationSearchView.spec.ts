@@ -200,7 +200,7 @@ describe('ConversationSearchView', () => {
  await wrapper.get('[data-testid="conversation-search-input"]').setValue('Python')
  await flushPromises()
 
- expect(wrapper.text()).toContain('关键词命中标题')
+    expect(wrapper.text()).toContain('匹配来源：标题')
  expect(wrapper.text()).not.toContain('这个问题没有命中词')
  expect(wrapper.text()).not.toContain('这个回答也没有命中词')
  })
@@ -223,7 +223,7 @@ describe('ConversationSearchView', () => {
  await wrapper.get('[data-testid="conversation-search-input"]').setValue('OpenAgent')
  await flushPromises()
 
- expect(wrapper.text()).toContain('关键词命中OpenAgent')
+    expect(wrapper.text()).toContain('匹配来源：Agent · OpenAgent')
  expect(wrapper.text()).toContain('OpenAgent')
   })
 

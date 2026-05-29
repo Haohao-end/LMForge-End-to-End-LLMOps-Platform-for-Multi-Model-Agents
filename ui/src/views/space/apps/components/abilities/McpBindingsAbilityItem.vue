@@ -3,7 +3,9 @@ import { computed, nextTick, type PropType, ref, watch } from 'vue'
 import { useUpdateDraftAppConfig } from '@/hooks/use-app'
 import { cloneDeep, isEqual } from 'lodash'
 import { Message } from '@arco-design/web-vue'
+import { apiPrefix } from '@/config'
 import type { McpBinding, McpToolSnapshot } from '@/models/app'
+import { useI18n } from 'vue-i18n'
 import McpMarketplacePickerModal from './McpMarketplacePickerModal.vue'
 import { resolveMcpBindingStatus } from './mcp-status'
 
@@ -44,6 +46,7 @@ const props = defineProps({
     default: () => [],
   },
 })
+const { t } = useI18n()
 const emits = defineEmits(['update:mcp_bindings', 'reload-draft-app-config'])
 const { handleUpdateDraftAppConfig } = useUpdateDraftAppConfig()
 const mcpBindingsModalVisible = ref(false)
@@ -113,6 +116,71 @@ const syncLocalBindings = (newBindings: McpBindingForm[]) => {
 
 const getBindingStatus = (binding: McpBindingForm) => resolveMcpBindingStatus(binding, props.mcp_tool_snapshots || [])
 
+const normalizeIconUrl = (icon: string = '') => {
+  if (!icon) return ''
+  if (icon.startsWith('data:') || /^https?:\/\//.test(icon)) return icon
+  const fallbackOrigin = globalThis.location?.origin ?? 'http://localhost'
+  const apiUrl = new URL(apiPrefix, fallbackOrigin)
+  const basePath = apiUrl.pathname.replace(/\/+$/, '')
+  let path = icon.startsWith('/') ? icon : `/${icon}`
+
+  if (path.startsWith('/api/') && !basePath.startsWith('/api')) {
+    path = path.replace(/^\/api/, '')
+  }
+
+  if (basePath && basePath !== '/' && !path.startsWith(`${basePath}/`)) {
+    if (path.startsWith('/api/')) {
+      path = path.replace(/^\/api/, '')
+    }
+    return `${apiUrl.origin}${basePath}${path}`
+  }
+
+  return `${apiUrl.origin}${path}`
+}
+
+const avatarPalettes = [
+  ['#334155', '#0f172a'],
+  ['#0369a1', '#1d4ed8'],
+  ['#047857', '#0f766e'],
+  ['#c2410c', '#d97706'],
+  ['#be123c', '#e11d48'],
+  ['#0f766e', '#14b8a6'],
+]
+
+const hashString = (value: string) => {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 33 + value.charCodeAt(i)) >>> 0
+  }
+  return hash
+}
+
+const getBindingAvatarText = (binding: Pick<McpBinding, 'label' | 'name' | 'provider_key'>) => {
+  const source = (binding.label || binding.name || binding.provider_key || 'M').trim()
+  const latinParts = source.match(/[A-Za-z0-9]+/g)
+  if (latinParts && latinParts.length > 0) {
+    return latinParts
+      .slice(0, 2)
+      .map((item) => item[0]?.toUpperCase())
+      .join('')
+  }
+
+  const chineseParts = source.match(/[\u4e00-\u9fff]/g)
+  if (chineseParts && chineseParts.length > 0) {
+    return chineseParts.slice(0, 2).join('')
+  }
+
+  return source.slice(0, 2).toUpperCase()
+}
+
+const getBindingAvatarStyle = (binding: Pick<McpBinding, 'provider_key' | 'category' | 'label'>) => {
+  const palette = avatarPalettes[hashString(`${String(binding.provider_key || '').trim()}:${String(binding.category || '').trim()}:${String(binding.label || '').trim()}`) % avatarPalettes.length]
+  return {
+    background: `linear-gradient(135deg, ${palette[0]} 0%, ${palette[1]} 100%)`,
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+  }
+}
+
 const openEditModal = (idx: number) => {
   const binding = activateMcpBindings.value[idx]
   if (!binding) return
@@ -134,7 +202,7 @@ const parseJsonArray = (text: string) => {
   if (!normalized) return []
   const parsed = JSON.parse(normalized)
   if (!Array.isArray(parsed)) {
-    throw new Error('必须是数组')
+    throw new Error(t('appStudio.abilities.mcp.arrayExpected'))
   }
   return parsed
 }
@@ -144,7 +212,7 @@ const parseJsonObject = (text: string) => {
   if (!normalized) return {}
   const parsed = JSON.parse(normalized)
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('必须是对象')
+    throw new Error(t('appStudio.abilities.mcp.objectExpected'))
   }
   return parsed as Record<string, string>
 }
@@ -152,23 +220,23 @@ const parseJsonObject = (text: string) => {
 const handleSubmitBinding = async () => {
   const form = bindingForm.value
   if (!form.name.trim()) {
-    Message.warning('请填写 MCP 名称')
+    Message.warning(t('appStudio.abilities.mcp.nameRequired'))
     return
   }
   if (!form.description.trim()) {
-    Message.warning('请填写 MCP 描述')
+    Message.warning(t('appStudio.abilities.mcp.descriptionRequired'))
     return
   }
 
   const transport = String(form.transport || 'streamable_http').trim()
   if (['http', 'sse', 'streamable_http', 'streamable-http'].includes(transport)) {
     if (!String(form.url || '').trim()) {
-      Message.warning('请填写 MCP 地址')
+      Message.warning(t('appStudio.abilities.mcp.urlRequired'))
       return
     }
   }
   if (transport === 'stdio' && !String(form.command || '').trim()) {
-    Message.warning('请填写 MCP 命令')
+    Message.warning(t('appStudio.abilities.mcp.commandRequired'))
     return
   }
 
@@ -181,7 +249,9 @@ const handleSubmitBinding = async () => {
     })).filter((item) => item.key)
     env = parseJsonObject(form.env_text)
   } catch (error) {
-    Message.warning(`高级配置 JSON 格式错误: ${(error as Error).message}`)
+    Message.warning(
+      t('appStudio.abilities.mcp.advancedJsonError', { message: (error as Error).message }),
+    )
     return
   }
 
@@ -217,7 +287,7 @@ const handleSubmitBinding = async () => {
   const newBindings = [...activateMcpBindings.value]
   if (editingIndex.value === -1) {
     if (newBindings.length >= 5) {
-      Message.warning('MCP 绑定已超过 5 个，无法继续添加')
+      Message.warning(t('appStudio.abilities.mcp.maxReached'))
       return
     }
     newBindings.push(nextBinding)
@@ -253,12 +323,12 @@ const handleSelectMarketplaceBinding = async (binding: McpBinding) => {
   const nextBinding = normalizeBindingToForm(binding)
   const duplicate = activateMcpBindings.value.some((item) => isSameBinding(item, nextBinding))
   if (duplicate) {
-    Message.warning('该 MCP 已添加到当前应用')
+    Message.warning(t('appStudio.abilities.mcp.duplicateWarning'))
     return
   }
 
   if (activateMcpBindings.value.length >= 5) {
-    Message.warning('MCP 绑定已超过 5 个，无法继续添加')
+    Message.warning(t('appStudio.abilities.mcp.maxReached'))
     return
   }
 
@@ -271,7 +341,7 @@ const handleSelectMarketplaceBinding = async (binding: McpBinding) => {
   await nextTick()
   emits('update:mcp_bindings', cloneDeep(newBindings.map((item) => stripBindingForm(item))))
   emits('reload-draft-app-config')
-  Message.success('已添加 MCP 绑定')
+  Message.success(t('appStudio.abilities.mcp.addedSuccess'))
   showMarketplacePickerModal.value = false
 }
 
@@ -292,7 +362,7 @@ watch(
 <template>
   <a-collapse-item key="mcp_bindings" class="app-ability-item">
     <template #header>
-      <div class="text-gray-700 font-bold">MCP</div>
+      <div class="text-gray-700 font-bold">{{ t('appStudio.abilities.mcp.title') }}</div>
     </template>
     <template #extra>
       <a-button size="mini" type="text" class="!text-gray-700" @click.stop="openMarketplacePicker">
@@ -303,32 +373,50 @@ watch(
     </template>
 
     <div v-if="activateMcpBindings.length > 0" class="flex flex-col gap-2">
-        <div
+      <div
         v-for="(binding, idx) in activateMcpBindings"
         :key="`${binding.name}-${idx}`"
         class="flex items-start justify-between gap-3 bg-white p-3 rounded-lg cursor-pointer hover:shadow-sm group"
         @click="openEditModal(idx)"
       >
-        <div class="flex flex-col gap-1 min-w-0 flex-1">
-          <div class="flex items-center gap-2 min-w-0">
-            <div class="text-gray-700 font-bold truncate">{{ binding.name }}</div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              <a-tag size="small" :color="getBindingStatus(binding).color">
-                {{ getBindingStatus(binding).label }}
-              </a-tag>
-              <a-tooltip
-                v-if="getBindingStatus(binding).show_help && getBindingStatus(binding).tooltip"
-                :content="getBindingStatus(binding).tooltip"
-                position="top"
-              >
-                <icon-question-circle class="text-gray-400 text-sm" />
-              </a-tooltip>
+        <div class="flex items-start gap-3 min-w-0 flex-1">
+          <a-avatar
+            :size="34"
+            shape="square"
+            class="shrink-0 overflow-hidden"
+            :style="binding.icon ? { backgroundColor: '#f3f4f6' } : getBindingAvatarStyle(binding)"
+          >
+            <img
+              v-if="binding.icon"
+              :src="normalizeIconUrl(binding.icon)"
+              :alt="binding.label || binding.name"
+              class="w-full h-full object-cover"
+            />
+            <span v-else class="text-white font-semibold text-[12px] tracking-wide">
+              {{ getBindingAvatarText(binding) }}
+            </span>
+          </a-avatar>
+          <div class="flex flex-col gap-1 min-w-0 flex-1">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="text-gray-700 font-bold truncate">{{ binding.name }}</div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <a-tag size="small" :color="getBindingStatus(binding).color">
+                  {{ getBindingStatus(binding).label }}
+                </a-tag>
+                <a-tooltip
+                  v-if="getBindingStatus(binding).show_help && getBindingStatus(binding).tooltip"
+                  :content="getBindingStatus(binding).tooltip"
+                  position="top"
+                >
+                  <icon-question-circle class="text-gray-400 text-sm" />
+                </a-tooltip>
+              </div>
+              <a-tag size="small" color="arcoblue">{{ binding.transport }}</a-tag>
             </div>
-            <a-tag size="small" color="arcoblue">{{ binding.transport }}</a-tag>
-          </div>
-          <div class="text-xs text-gray-500 truncate">{{ binding.description }}</div>
-          <div class="text-xs text-gray-400 truncate">
-            {{ binding.url || binding.command || '未配置地址' }}
+            <div class="text-xs text-gray-500 truncate">{{ binding.description }}</div>
+            <div class="text-xs text-gray-400 truncate">
+              {{ binding.url || binding.command || t('appStudio.abilities.mcp.addressUnset') }}
+            </div>
           </div>
         </div>
         <a-button
@@ -344,7 +432,7 @@ watch(
       </div>
     </div>
     <div v-else class="text-xs text-gray-500 leading-[22px]">
-      点击右上角 + 从 MCP 广场添加 MCP，或点击已有条目继续编辑。绑定后可以在应用运行时动态加载服务器上的工具。
+      {{ t('appStudio.abilities.mcp.empty') }}
     </div>
   </a-collapse-item>
 
@@ -358,7 +446,11 @@ watch(
   >
     <div class="flex items-center justify-between mb-6">
       <div class="text-lg font-bold text-gray-700">
-        {{ editingIndex === -1 ? '新增 MCP 绑定' : '编辑 MCP 绑定' }}
+        {{
+          editingIndex === -1
+            ? t('appStudio.abilities.mcp.addModalTitle')
+            : t('appStudio.abilities.mcp.editModalTitle')
+        }}
       </div>
       <a-button type="text" class="!text-gray-700" size="small" @click="handleCancelMcpBindingsModal">
         <template #icon>
@@ -369,8 +461,12 @@ watch(
 
     <div class="h-[calc(100vh-180px)] overflow-scroll scrollbar-w-none">
       <div class="space-y-3">
-        <a-input v-model="bindingForm.name" placeholder="MCP 名称，例如 12306 MCP" />
-        <a-textarea v-model="bindingForm.description" :auto-size="{ minRows: 2, maxRows: 4 }" placeholder="MCP 描述" />
+        <a-input v-model="bindingForm.name" :placeholder="t('appStudio.abilities.mcp.namePlaceholder')" />
+        <a-textarea
+          v-model="bindingForm.description"
+          :auto-size="{ minRows: 2, maxRows: 4 }"
+          :placeholder="t('appStudio.abilities.mcp.descriptionPlaceholder')"
+        />
         <div class="grid grid-cols-2 gap-3">
           <a-select v-model="bindingForm.transport" placeholder="Transport">
             <a-option value="streamable_http">streamable_http</a-option>
@@ -378,29 +474,43 @@ watch(
             <a-option value="sse">sse</a-option>
             <a-option value="stdio">stdio</a-option>
           </a-select>
-          <a-input-number v-model="bindingForm.timeout_seconds" :min="1" :max="600" placeholder="超时秒数" />
+          <a-input-number
+            v-model="bindingForm.timeout_seconds"
+            :min="1"
+            :max="600"
+            :placeholder="t('appStudio.abilities.mcp.timeoutPlaceholder')"
+          />
         </div>
-        <a-input v-model="bindingForm.url" placeholder="MCP 地址（HTTP / SSE）" />
-        <a-input v-model="bindingForm.command" placeholder="stdio 命令（可选）" />
+        <a-input v-model="bindingForm.url" :placeholder="t('appStudio.abilities.mcp.urlPlaceholder')" />
+        <a-input
+          v-model="bindingForm.command"
+          :placeholder="t('appStudio.abilities.mcp.commandPlaceholder')"
+        />
         <a-switch v-model="bindingForm.enabled">
-          <template #checked>已启用</template>
-          <template #unchecked>已停用</template>
+          <template #checked>{{ t('appStudio.abilities.mcp.enabledChecked') }}</template>
+          <template #unchecked>{{ t('appStudio.abilities.mcp.enabledUnchecked') }}</template>
         </a-switch>
-        <a-input v-model="bindingForm.tool_names_text" placeholder="工具白名单，英文逗号分隔（可选）" />
-        <a-input v-model="bindingForm.args_text" placeholder="stdio args，英文逗号分隔（可选）" />
+        <a-input
+          v-model="bindingForm.tool_names_text"
+          :placeholder="t('appStudio.abilities.mcp.toolNamesPlaceholder')"
+        />
+        <a-input
+          v-model="bindingForm.args_text"
+          :placeholder="t('appStudio.abilities.mcp.argsPlaceholder')"
+        />
         <a-textarea
           v-model="bindingForm.headers_text"
           :auto-size="{ minRows: 3, maxRows: 8 }"
-          placeholder='请求头 JSON 数组，例如 [{"key":"Authorization","value":"Bearer xxx"}]'
+          :placeholder="t('appStudio.abilities.mcp.headersPlaceholder')"
         />
         <a-textarea
           v-model="bindingForm.env_text"
           :auto-size="{ minRows: 3, maxRows: 8 }"
-          placeholder='stdio env JSON 对象，例如 {"API_KEY":"xxx"}'
+          :placeholder="t('appStudio.abilities.mcp.envPlaceholder')"
         />
         <div class="flex justify-end gap-2 pt-2">
-          <a-button @click="handleCancelMcpBindingsModal">取消</a-button>
-          <a-button type="primary" @click="handleSubmitBinding">保存</a-button>
+          <a-button @click="handleCancelMcpBindingsModal">{{ t('common.actions.cancel') }}</a-button>
+          <a-button type="primary" @click="handleSubmitBinding">{{ t('common.actions.save') }}</a-button>
         </div>
       </div>
     </div>

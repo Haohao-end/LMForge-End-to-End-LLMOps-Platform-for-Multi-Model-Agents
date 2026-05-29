@@ -2,6 +2,7 @@
 import { useRoute } from 'vue-router'
 import { useCancelPublish, useGetApp, usePublish, useShareAppToSquare, useUnshareAppFromSquare } from '@/hooks/use-app'
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import PublishHistoryDrawer from '@/views/space/apps/components/PublishHistoryDrawer.vue'
 import { formatTimestampTime } from '@/utils/time-formatter'
 
@@ -13,6 +14,7 @@ const { loading: publishLoading, handlePublish } = usePublish()
 const { handleCancelPublish } = useCancelPublish()
 const { loading: shareLoading, handleShareAppToSquare } = useShareAppToSquare()
 const { handleUnshareAppFromSquare } = useUnshareAppFromSquare()
+const { t } = useI18n()
 
 onMounted(async () => await loadApp(String(route.params?.app_id)))
 
@@ -54,14 +56,14 @@ const refreshPublishedView = () => {
             <div v-else class="flex items-center gap-2">
               <div class="flex items-center h-[18px] text-xs text-gray-500">
                 <icon-user />
-                个人空间
+                {{ t('appStudio.shell.personalSpace') }}
               </div>
               <div class="flex items-center h-[18px] text-xs text-gray-500">
                 <icon-schedule />
-                {{ app.status === 'draft' ? '草稿' : '已发布' }}
+                {{ app.status === 'draft' ? t('appStudio.shell.draft') : t('appStudio.shell.published') }}
               </div>
               <a-tag size="small" class="rounded h-[18px] leading-[18px] bg-gray-200 text-gray-500">
-                已自动保存 {{ formatTimestampTime(app.draft_updated_at) }}
+                {{ t('appStudio.shell.autoSavedAt', { time: formatTimestampTime(app.draft_updated_at) }) }}
               </a-tag>
             </div>
           </div>
@@ -75,35 +77,35 @@ const refreshPublishedView = () => {
             class="text-base font-bold text-gray-500"
             active-class="!text-blue-700"
           >
-            编排
+            {{ t('appStudio.shell.tabs.orchestration') }}
           </router-link>
           <router-link
             :to="{ name: 'space-apps-published', params: { app_id: String(route.params?.app_id) } }"
             class="text-base font-bold text-gray-500"
             active-class="!text-blue-700"
           >
-            发布配置
+            {{ t('appStudio.shell.tabs.publishing') }}
           </router-link>
           <router-link
             :to="{ name: 'space-apps-analysis', params: { app_id: String(route.params?.app_id) } }"
             class="text-base font-bold text-gray-500"
             active-class="!text-blue-700"
           >
-            统计分析
+            {{ t('appStudio.shell.tabs.analytics') }}
           </router-link>
           <router-link
             :to="{ name: 'space-apps-versions', params: { app_id: String(route.params?.app_id) } }"
             class="text-base font-bold text-gray-500"
             active-class="!text-blue-700"
           >
-            版本对比
+            {{ t('appStudio.shell.tabs.versions') }}
           </router-link>
           <router-link
             :to="{ name: 'space-apps-prompt-compare', params: { app_id: String(route.params?.app_id) } }"
             class="text-base font-bold text-gray-500"
             active-class="!text-blue-700"
           >
-            对比测试
+            {{ t('appStudio.shell.tabs.promptCompare') }}
           </router-link>
         </a-space>
       </div>
@@ -134,7 +136,7 @@ const refreshPublishedView = () => {
                 }
               "
             >
-              更新发布
+              {{ t('appStudio.shell.publishUpdate') }}
             </a-button>
             <a-dropdown position="br">
               <a-button
@@ -157,7 +159,7 @@ const refreshPublishedView = () => {
                     }
                   "
                 >
-                  更新配置
+                  {{ t('appStudio.shell.publishConfigOnly') }}
                 </a-doption>
                 <a-doption
                   :disabled="app.status !== 'published'"
@@ -178,7 +180,7 @@ const refreshPublishedView = () => {
                     }
                   "
                 >
-                  {{ app.is_public ? '取消分享到广场' : '分享到广场' }}
+                  {{ app.is_public ? t('appStudio.shell.unshareFromSquare') : t('appStudio.shell.shareToSquare') }}
                 </a-doption>
                 <a-doption
                   :disabled="app.status === 'draft'"
@@ -193,7 +195,7 @@ const refreshPublishedView = () => {
                     }
                   "
                 >
-                  取消发布
+                  {{ t('appStudio.shell.cancelPublish') }}
                 </a-doption>
               </template>
             </a-dropdown>

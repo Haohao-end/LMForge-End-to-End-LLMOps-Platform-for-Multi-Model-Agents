@@ -5,6 +5,7 @@ import Button from '@arco-design/web-vue/es/button'
 import Card from '@arco-design/web-vue/es/card'
 import Checkbox from '@arco-design/web-vue/es/checkbox'
 import Collapse from '@arco-design/web-vue/es/collapse'
+import ConfigProvider from '@arco-design/web-vue/es/config-provider'
 import Divider from '@arco-design/web-vue/es/divider'
 import Drawer from '@arco-design/web-vue/es/drawer'
 import Dropdown from '@arco-design/web-vue/es/dropdown'
@@ -123,6 +124,7 @@ const arcoComponents = [
   Card,
   Checkbox,
   Collapse,
+  ConfigProvider,
   Divider,
   Drawer,
   Dropdown,

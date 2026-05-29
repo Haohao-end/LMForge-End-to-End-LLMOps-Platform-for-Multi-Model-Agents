@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
 interface Props {
   visible: boolean
   onClick?: () => void
@@ -11,6 +14,8 @@ withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   click: []
 }>()
+const { locale } = useI18n()
+const isEnglish = computed(() => locale.value === 'en-US')
 
 const handleClick = () => {
   emit('click')
@@ -33,7 +38,7 @@ const handleAfterEnter = (el: Element) => {
       v-if="visible"
       @click="handleClick"
       class="fixed bottom-8 right-8 z-40 w-12 h-12 rounded-full bg-white/40 backdrop-blur-md border border-white/60 hover:bg-white/50 hover:border-white/80 transition-all duration-300 flex items-center justify-center shadow-lg shadow-blue-500/10 hover:shadow-lg hover:shadow-blue-500/20 group"
-      aria-label="回到顶部"
+      :aria-label="isEnglish ? 'Back to top' : '回到顶部'"
     >
       <svg
         class="w-5 h-5 text-gray-700 group-hover:text-blue-600 transition-colors"

@@ -4,6 +4,7 @@ import { useVueFlow } from '@vue-flow/core'
 import { cloneDeep, debounce } from 'lodash'
 import { type ValidatedError } from '@arco-design/web-vue'
 import { getReferencedVariables } from '@/utils/helper'
+import { useI18n } from 'vue-i18n'
 
 type NodeInputField = {
   name: string
@@ -53,6 +54,7 @@ const props = defineProps({
 })
 const emits = defineEmits(['update:visible', 'updateNode'])
 const { nodes, edges } = useVueFlow()
+const { t } = useI18n()
 const form = ref<IfElseNodeForm>({
   id: '',
   type: '',
@@ -74,24 +76,24 @@ const debounceAutoSave = debounce(() => {
 
 // 运算符选项
 const operatorOptions = [
-  { label: '等于', value: 'equals' },
-  { label: '不等于', value: 'not_equals' },
-  { label: '包含', value: 'contains' },
-  { label: '不包含', value: 'not_contains' },
-  { label: '开始于', value: 'starts_with' },
-  { label: '结束于', value: 'ends_with' },
-  { label: '为空', value: 'is_empty' },
-  { label: '不为空', value: 'is_not_empty' },
-  { label: '大于', value: 'greater_than' },
-  { label: '小于', value: 'less_than' },
-  { label: '大于等于', value: 'greater_than_or_equal' },
-  { label: '小于等于', value: 'less_than_or_equal' },
+  { label: t('workflowEditor.operators.equals'), value: 'equals' },
+  { label: t('workflowEditor.operators.not_equals'), value: 'not_equals' },
+  { label: t('workflowEditor.operators.contains'), value: 'contains' },
+  { label: t('workflowEditor.operators.not_contains'), value: 'not_contains' },
+  { label: t('workflowEditor.operators.starts_with'), value: 'starts_with' },
+  { label: t('workflowEditor.operators.ends_with'), value: 'ends_with' },
+  { label: t('workflowEditor.operators.is_empty'), value: 'is_empty' },
+  { label: t('workflowEditor.operators.is_not_empty'), value: 'is_not_empty' },
+  { label: t('workflowEditor.operators.greater_than'), value: 'greater_than' },
+  { label: t('workflowEditor.operators.less_than'), value: 'less_than' },
+  { label: t('workflowEditor.operators.greater_than_or_equal'), value: 'greater_than_or_equal' },
+  { label: t('workflowEditor.operators.less_than_or_equal'), value: 'less_than_or_equal' },
 ]
 
 // 逻辑运算符选项
 const logicalOperatorOptions = [
-  { label: '且 (AND)', value: 'and' },
-  { label: '或 (OR)', value: 'or' },
+  { label: t('workflowEditor.logicOptions.and'), value: 'and' },
+  { label: t('workflowEditor.logicOptions.or'), value: 'or' },
 ]
 
 // 节点可引用的变量选项
@@ -234,7 +236,7 @@ onBeforeUnmount(() => {
     <div v-if="isReadonly" class="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
       <div class="flex items-center gap-2 text-orange-700">
         <icon-lock class="flex-shrink-0" />
-        <span class="text-sm font-medium">预览模式：所有配置仅供查看，无法修改</span>
+        <span class="text-sm font-medium">{{ t('workflowEditor.previewMode') }}</span>
       </div>
     </div>
 
@@ -245,7 +247,7 @@ onBeforeUnmount(() => {
         </a-avatar>
         <a-input
           v-model:model-value="form.title"
-          :disabled="isReadonly" placeholder="请输入标题"
+          :disabled="isReadonly" :placeholder="t('workflowEditor.titlePlaceholder')"
           class="!bg-white text-gray-700 font-semibold px-2"
         />
       </div>
@@ -265,7 +267,7 @@ onBeforeUnmount(() => {
       :auto-size="{ minRows: 3, maxRows: 5 }"
       v-model="form.description"
       :disabled="isReadonly" class="rounded-lg text-gray-700 !text-xs"
-      placeholder="输入描述..."
+      :placeholder="t('workflowEditor.descriptionPlaceholder')"
     />
 
     <a-divider class="my-2" />
@@ -273,11 +275,11 @@ onBeforeUnmount(() => {
     <a-form size="mini" :model="form" :disabled="isReadonly" layout="vertical">
       <!-- 输入变量 -->
       <div class="flex flex-col gap-2 mb-3">
-        <div class="flex items-center gap-2 text-gray-700 font-semibold">输入参数</div>
+        <div class="flex items-center gap-2 text-gray-700 font-semibold">{{ t('workflowEditor.inputParameters') }}</div>
         <div class="flex items-center gap-1 text-xs text-gray-500 mb-2">
-          <div class="w-[30%]">参数名</div>
-          <div class="w-[24%]">类型</div>
-          <div class="w-[46%]">值</div>
+          <div class="w-[30%]">{{ t('workflowEditor.parameterName') }}</div>
+          <div class="w-[24%]">{{ t('workflowEditor.parameterType') }}</div>
+          <div class="w-[46%]">{{ t('workflowEditor.parameterValue') }}</div>
         </div>
         <div
           v-for="(input, idx) in form.inputs"
@@ -285,7 +287,7 @@ onBeforeUnmount(() => {
           class="flex items-center gap-1"
         >
           <div class="w-[30%] flex-shrink-0">
-            <a-input v-model="input.name" size="mini" placeholder="参数名" class="!px-2" />
+            <a-input v-model="input.name" size="mini" :placeholder="t('workflowEditor.parameterName')" class="!px-2" />
           </div>
           <div class="w-[24%] flex-shrink-0">
             <a-select
@@ -293,11 +295,11 @@ onBeforeUnmount(() => {
               v-model="input.type"
               class="px-2"
               :options="[
-                { label: '引用', value: 'ref' },
-                { label: 'STRING', value: 'string' },
-                { label: 'INT', value: 'int' },
-                { label: 'FLOAT', value: 'float' },
-                { label: 'BOOLEAN', value: 'boolean' },
+                { label: t('workflowEditor.variableTypes.ref'), value: 'ref' },
+                { label: t('workflowEditor.variableTypes.string'), value: 'string' },
+                { label: t('workflowEditor.variableTypes.int'), value: 'int' },
+                { label: t('workflowEditor.variableTypes.float'), value: 'float' },
+                { label: t('workflowEditor.variableTypes.boolean'), value: 'boolean' },
               ]"
             />
           </div>
@@ -306,11 +308,11 @@ onBeforeUnmount(() => {
               v-if="input.type !== 'ref'"
               size="mini"
               v-model="input.content"
-              placeholder="值"
+              :placeholder="t('workflowEditor.parameterValue')"
             />
             <a-select
               v-else
-              placeholder="选择引用"
+              :placeholder="t('workflowEditor.selectReference')"
               size="mini"
               tag-nowrap
               v-model="input.ref"
@@ -325,13 +327,13 @@ onBeforeUnmount(() => {
         </div>
         <a-button v-if="!isReadonly" type="dashed" size="mini" long @click="addFormInputField">
           <icon-plus />
-          添加参数
+          {{ t('workflowEditor.addField') }}
         </a-button>
       </div>
 
       <!-- 条件配置 -->
       <div class="flex flex-col gap-2 mb-3">
-        <div class="flex items-center gap-2 text-gray-700 font-semibold">条件配置</div>
+        <div class="flex items-center gap-2 text-gray-700 font-semibold">{{ t('workflowEditor.ifElse.title') }}</div>
         <div
           v-for="(condition, idx) in form.conditions"
           :key="idx"
@@ -341,14 +343,14 @@ onBeforeUnmount(() => {
             <a-input
               size="mini"
               v-model="condition.variable_name"
-              placeholder="变量名"
+              :placeholder="t('workflowEditor.variableName')"
               class="flex-1"
             />
             <a-button v-if="!isReadonly" type="text" size="mini" status="danger" @click="removeCondition(idx)">
               <icon-delete />
             </a-button>
           </div>
-          <a-select size="mini" v-model="condition.operator" placeholder="运算符">
+          <a-select size="mini" v-model="condition.operator" :placeholder="t('workflowEditor.logic')">
             <a-option
               v-for="op in operatorOptions"
               :key="op.value"
@@ -360,17 +362,17 @@ onBeforeUnmount(() => {
             v-if="!['is_empty', 'is_not_empty'].includes(condition.operator)"
             size="mini"
             v-model="condition.compare_value"
-            placeholder="比较值"
+            :placeholder="t('workflowEditor.parameterValue')"
           />
         </div>
         <a-button v-if="!isReadonly" type="dashed" size="mini" long @click="addCondition">
           <icon-plus />
-          添加条件
+          {{ t('workflowEditor.ifElse.addCondition') }}
         </a-button>
       </div>
 
       <!-- 逻辑运算符 -->
-      <a-form-item v-if="form.conditions?.length > 1" field="logical_operator" label="多条件逻辑">
+      <a-form-item v-if="form.conditions?.length > 1" field="logical_operator" :label="t('workflowEditor.logic')">
         <a-radio-group v-model="form.logical_operator" size="mini">
           <a-radio
             v-for="op in logicalOperatorOptions"

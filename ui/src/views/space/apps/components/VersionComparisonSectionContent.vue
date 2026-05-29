@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { apiPrefix } from '@/config'
+import { getModelParameterDisplayLabel } from '@/utils/model-parameter-display'
 
 const props = defineProps<{
   sectionKey: string
@@ -8,14 +10,7 @@ const props = defineProps<{
   compareValue: unknown
   side: 'left' | 'right'
 }>()
-
-const parameterLabelMap: Record<string, string> = {
-  temperature: '温度',
-  top_p: 'Top P',
-  max_tokens: '最大输出',
-  frequency_penalty: '频率惩罚',
-  presence_penalty: '存在惩罚',
-}
+const { t } = useI18n()
 
 const isPlainObject = (value: unknown): value is Record<string, any> => {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -23,18 +18,22 @@ const isPlainObject = (value: unknown): value is Record<string, any> => {
 
 const renderText = (value: unknown) => {
   if (value === null || value === undefined || value === '') {
-    return '未设置'
+    return t('appStudio.versions.sectionContent.unset')
   }
 
   if (typeof value === 'boolean') {
-    return value ? '已启用' : '未启用'
+    return value
+      ? t('appStudio.versions.sectionContent.enabled')
+      : t('appStudio.versions.sectionContent.disabled')
   }
 
   return String(value)
 }
 
 const renderEnableLabel = (enabled: boolean) => {
-  return enabled ? '已启用' : '未启用'
+  return enabled
+    ? t('appStudio.versions.sectionContent.enabled')
+    : t('appStudio.versions.sectionContent.disabled')
 }
 
 const renderEnableColor = (enabled: boolean) => {
@@ -109,14 +108,14 @@ const getItemStatusClass = (status: 'same' | 'added' | 'removed') => {
 
 const getItemStatusLabel = (status: 'same' | 'added' | 'removed') => {
   if (status === 'added') {
-    return '新增'
+    return t('appStudio.versions.sectionContent.added')
   }
 
   if (status === 'removed') {
-    return '已移除'
+    return t('appStudio.versions.sectionContent.removed')
   }
 
-  return '保留'
+  return t('appStudio.versions.sectionContent.retained')
 }
 
 const getItemStatusColor = (status: 'same' | 'added' | 'removed') => {
@@ -136,15 +135,15 @@ const buildTextDiffSegments = (value: unknown, compareValue: unknown) => {
   const targetText = compareValue === null || compareValue === undefined ? '' : String(compareValue)
 
   if (!currentText && !targetText) {
-    return [{ text: '未设置', changed: false }]
+    return [{ text: t('appStudio.versions.sectionContent.unset'), changed: false }]
   }
 
   if (currentText === targetText) {
-    return [{ text: currentText || '未设置', changed: false }]
+    return [{ text: currentText || t('appStudio.versions.sectionContent.unset'), changed: false }]
   }
 
   if (!currentText) {
-    return [{ text: '未设置', changed: true }]
+    return [{ text: t('appStudio.versions.sectionContent.unset'), changed: true }]
   }
 
   if (!targetText) {
@@ -211,13 +210,13 @@ const parameterEntries = computed(() => {
     : {}
   const allKeys = Array.from(new Set([...Object.keys(parameters), ...Object.keys(compareParameters)]))
   const orderedKeys = [
-    ...Object.keys(parameterLabelMap).filter((key) => allKeys.includes(key)),
-    ...allKeys.filter((key) => !(key in parameterLabelMap)).sort(),
+    ...['temperature', 'top_p', 'max_tokens', 'frequency_penalty', 'presence_penalty'].filter((key) => allKeys.includes(key)),
+    ...allKeys.filter((key) => !['temperature', 'top_p', 'max_tokens', 'frequency_penalty', 'presence_penalty'].includes(key)).sort(),
   ]
 
   return orderedKeys.map((key) => ({
     key,
-    label: parameterLabelMap[key] || key,
+    label: getModelParameterDisplayLabel(key, key, t),
     value: renderText(parameters[key]),
     changed: isDifferent(parameters[key], compareParameters[key]),
   }))
@@ -241,13 +240,13 @@ const openingStatementSegments = computed(() =>
 const retrievalItems = computed(() => [
   {
     key: 'retrieval_strategy',
-    label: '检索策略',
+    label: t('appStudio.versions.sectionContent.retrievalStrategy'),
     value:
       objectValue.value.retrieval_strategy === 'full_text'
-        ? '全文检索'
+        ? t('appStudio.versions.sectionContent.retrievalStrategies.fullText')
         : objectValue.value.retrieval_strategy === 'hybrid_search'
-          ? '混合检索'
-          : '相似性检索',
+          ? t('appStudio.versions.sectionContent.retrievalStrategies.hybrid')
+          : t('appStudio.versions.sectionContent.retrievalStrategies.semantic'),
     changed: isDifferent(
       objectValue.value.retrieval_strategy,
       compareObjectValue.value.retrieval_strategy,
@@ -255,13 +254,13 @@ const retrievalItems = computed(() => [
   },
   {
     key: 'k',
-    label: '召回数量',
+    label: t('appStudio.versions.sectionContent.recallCount'),
     value: renderText(objectValue.value.k),
     changed: isDifferent(objectValue.value.k, compareObjectValue.value.k),
   },
   {
     key: 'score',
-    label: '相似度阈值',
+    label: t('appStudio.versions.sectionContent.similarityThreshold'),
     value: renderText(objectValue.value.score),
     changed: isDifferent(objectValue.value.score, compareObjectValue.value.score),
   },
@@ -276,9 +275,11 @@ const experienceItems = computed(() => {
   return [
     {
       key: 'long_term_memory',
-      label: '长期记忆',
+      label: t('appStudio.versions.sectionContent.longTermMemory'),
       enabled: longTermMemoryEnabled,
-      detail: longTermMemoryEnabled ? '会在对话中召回历史记忆。' : '不会召回长期记忆。',
+      detail: longTermMemoryEnabled
+        ? t('appStudio.versions.sectionContent.longTermMemoryEnabled')
+        : t('appStudio.versions.sectionContent.longTermMemoryDisabled'),
       changed: isDifferent(
         objectValue.value.long_term_memory,
         compareObjectValue.value.long_term_memory,
@@ -286,9 +287,11 @@ const experienceItems = computed(() => {
     },
     {
       key: 'speech_to_text',
-      label: '语音输入',
+      label: t('appStudio.versions.sectionContent.speechToText'),
       enabled: speechToTextEnabled,
-      detail: speechToTextEnabled ? '支持语音转文本输入。' : '不支持语音输入。',
+      detail: speechToTextEnabled
+        ? t('appStudio.versions.sectionContent.speechToTextEnabled')
+        : t('appStudio.versions.sectionContent.speechToTextDisabled'),
       changed: isDifferent(
         objectValue.value.speech_to_text,
         compareObjectValue.value.speech_to_text,
@@ -296,11 +299,16 @@ const experienceItems = computed(() => {
     },
     {
       key: 'text_to_speech',
-      label: '语音输出',
+      label: t('appStudio.versions.sectionContent.textToSpeech'),
       enabled: textToSpeechEnabled,
       detail: textToSpeechEnabled
-        ? `音色 ${renderText(objectValue.value.text_to_speech?.voice)} · ${objectValue.value.text_to_speech?.auto_play ? '自动播放' : '手动播放'}`
-        : '不支持语音播报。',
+        ? t('appStudio.versions.sectionContent.textToSpeechEnabled', {
+            voice: renderText(objectValue.value.text_to_speech?.voice),
+            mode: objectValue.value.text_to_speech?.auto_play
+              ? t('appStudio.versions.sectionContent.autoPlay')
+              : t('appStudio.versions.sectionContent.manualPlay'),
+          })
+        : t('appStudio.versions.sectionContent.textToSpeechDisabled'),
       changed: isDifferent(
         objectValue.value.text_to_speech,
         compareObjectValue.value.text_to_speech,
@@ -308,9 +316,11 @@ const experienceItems = computed(() => {
     },
     {
       key: 'suggested_after_answer',
-      label: '回答后建议问题',
+      label: t('appStudio.versions.sectionContent.suggestedAfterAnswer'),
       enabled: suggestedAfterAnswerEnabled,
-      detail: suggestedAfterAnswerEnabled ? '回答后会生成推荐追问。' : '回答后不生成推荐追问。',
+      detail: suggestedAfterAnswerEnabled
+        ? t('appStudio.versions.sectionContent.suggestedAfterAnswerEnabled')
+        : t('appStudio.versions.sectionContent.suggestedAfterAnswerDisabled'),
       changed: isDifferent(
         objectValue.value.suggested_after_answer,
         compareObjectValue.value.suggested_after_answer,
@@ -371,7 +381,10 @@ const getTextListItemStatus = (item: string, compareItems: string[]) => {
 const getListItemName = (item: Record<string, any>, fallback: string) => {
   if (props.sectionKey === 'tools') {
     const providerLabel =
-      item.provider?.label || item.provider?.name || item.provider_id || '未知提供方'
+      item.provider?.label
+      || item.provider?.name
+      || item.provider_id
+      || t('appStudio.versions.sectionContent.unknownProvider')
     const toolLabel = item.tool?.label || item.tool?.name || item.tool_id || fallback
     return `${providerLabel} / ${toolLabel}`
   }
@@ -381,10 +394,10 @@ const getListItemName = (item: Record<string, any>, fallback: string) => {
 
 const getListItemDescription = (item: Record<string, any>) => {
   if (props.sectionKey === 'tools') {
-    return item.tool?.description || item.provider?.description || '暂无插件说明'
+    return item.tool?.description || item.provider?.description || t('appStudio.versions.sectionContent.noToolDescription')
   }
 
-  return item.description || '暂无说明'
+  return item.description || t('appStudio.versions.sectionContent.noDescription')
 }
 
 const getListItemIcon = (item: Record<string, any>) => {
@@ -406,10 +419,10 @@ const getListItemIcon = (item: Record<string, any>) => {
       <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
         <div class="flex flex-wrap items-center gap-2">
           <div :class="modelNameChanged ? 'rounded-lg bg-blue-100/80 px-1.5 py-1' : ''">
-            <a-tag color="arcoblue" size="small">模型 {{ modelName }}</a-tag>
+            <a-tag color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.model', { name: modelName }) }}</a-tag>
           </div>
           <div :class="modelProviderChanged ? 'rounded-lg bg-blue-100/80 px-1.5 py-1' : ''">
-            <a-tag bordered size="small">提供方 {{ modelProvider }}</a-tag>
+            <a-tag bordered size="small">{{ t('appStudio.versions.sectionContent.provider', { name: modelProvider }) }}</a-tag>
           </div>
         </div>
         <div v-if="parameterEntries.length" class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -421,22 +434,22 @@ const getListItemIcon = (item: Record<string, any>) => {
           >
             <div class="flex items-center justify-between gap-2">
               <div class="text-xs text-gray-500">{{ entry.label }}</div>
-              <a-tag v-if="entry.changed" color="arcoblue" size="small">已修改</a-tag>
+              <a-tag v-if="entry.changed" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
             </div>
             <div class="mt-1 text-sm font-medium text-gray-700">{{ entry.value }}</div>
           </div>
         </div>
-        <div v-else class="mt-4 text-sm text-gray-400">未配置模型参数</div>
+        <div v-else class="mt-4 text-sm text-gray-400">{{ t('appStudio.versions.sectionContent.noModelParameters') }}</div>
       </div>
     </template>
 
     <template v-else-if="sectionKey === 'dialog_round'">
       <div :class="getChangedCardClass(dialogRoundChanged)">
-        <div class="text-xs text-gray-500">上下文保留策略</div>
+        <div class="text-xs text-gray-500">{{ t('appStudio.versions.sectionContent.contextRetention') }}</div>
         <div class="mt-2 flex flex-wrap items-center gap-2">
-          <a-tag color="arcoblue" size="small">对话轮次 {{ dialogRoundValue }}</a-tag>
-          <a-tag v-if="dialogRoundChanged" color="arcoblue" size="small">已修改</a-tag>
-          <span class="text-sm text-gray-500">用于控制对话时保留的历史消息轮数。</span>
+          <a-tag color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.dialogRounds', { count: dialogRoundValue }) }}</a-tag>
+          <a-tag v-if="dialogRoundChanged" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
+          <span class="text-sm text-gray-500">{{ t('appStudio.versions.sectionContent.dialogRoundsHint') }}</span>
         </div>
       </div>
     </template>
@@ -445,8 +458,8 @@ const getListItemIcon = (item: Record<string, any>) => {
       <div :class="getChangedCardClass(isDifferent(value, compareValue))">
         <div class="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
           <div class="flex items-center justify-between gap-2">
-            <span>人设与回复逻辑</span>
-            <a-tag v-if="isDifferent(value, compareValue)" color="arcoblue" size="small">已修改</a-tag>
+            <span>{{ t('appStudio.versions.sectionContent.presetPromptTitle') }}</span>
+            <a-tag v-if="isDifferent(value, compareValue)" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
           </div>
         </div>
         <div class="bg-gray-50 px-4 py-4">
@@ -481,7 +494,16 @@ const getListItemIcon = (item: Record<string, any>) => {
             </a-avatar>
             <div class="min-w-0">
               <div class="line-clamp-1 text-sm font-bold text-gray-700">
-                {{ getListItemName(item, `未命名${sectionKey === 'tools' ? '插件' : sectionKey === 'workflows' ? '工作流' : '知识库'}`) }}
+                {{
+                  getListItemName(
+                    item,
+                    sectionKey === 'tools'
+                      ? t('appStudio.versions.sectionContent.unnamedTool')
+                      : sectionKey === 'workflows'
+                        ? t('appStudio.versions.sectionContent.unnamedWorkflow')
+                        : t('appStudio.versions.sectionContent.unnamedDataset'),
+                  )
+                }}
               </div>
               <div class="mt-1 line-clamp-1 text-xs text-gray-500">
                 {{ getListItemDescription(item) }}
@@ -499,10 +521,10 @@ const getListItemIcon = (item: Record<string, any>) => {
       >
         {{
           sectionKey === 'tools'
-            ? '未配置扩展插件'
+            ? t('appStudio.versions.sectionContent.noTools')
             : sectionKey === 'workflows'
-              ? '未配置工作流'
-              : '未配置知识库'
+              ? t('appStudio.versions.sectionContent.noWorkflows')
+              : t('appStudio.versions.sectionContent.noDatasets')
         }}
       </div>
     </template>
@@ -517,7 +539,7 @@ const getListItemIcon = (item: Record<string, any>) => {
         >
           <div class="flex items-center justify-between gap-2">
             <div class="text-xs text-gray-500">{{ item.label }}</div>
-            <a-tag v-if="item.changed" color="arcoblue" size="small">已修改</a-tag>
+            <a-tag v-if="item.changed" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
           </div>
           <div class="mt-1 text-sm font-medium text-gray-700">{{ item.value }}</div>
         </div>
@@ -531,13 +553,13 @@ const getListItemIcon = (item: Record<string, any>) => {
           :class="getChangedCardClass(isDifferent(objectValue.opening_statement, compareObjectValue.opening_statement))"
         >
           <div class="flex items-center justify-between gap-2">
-            <div class="text-xs text-gray-500">开场白</div>
+            <div class="text-xs text-gray-500">{{ t('appStudio.versions.sectionContent.openingStatement') }}</div>
             <a-tag
               v-if="isDifferent(objectValue.opening_statement, compareObjectValue.opening_statement)"
               color="arcoblue"
               size="small"
             >
-              已修改
+              {{ t('appStudio.versions.sectionContent.modified') }}
             </a-tag>
           </div>
           <div class="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-gray-700">
@@ -552,7 +574,7 @@ const getListItemIcon = (item: Record<string, any>) => {
           </div>
         </div>
         <div class="rounded-2xl border border-gray-200 bg-white p-4">
-          <div class="text-xs text-gray-500">开场问题</div>
+          <div class="text-xs text-gray-500">{{ t('appStudio.versions.sectionContent.openingQuestions') }}</div>
           <div v-if="openingQuestions.length" class="mt-3 space-y-2">
             <div
               v-for="question in openingQuestions"
@@ -571,7 +593,7 @@ const getListItemIcon = (item: Record<string, any>) => {
               </div>
             </div>
           </div>
-          <div v-else class="mt-2 text-sm text-gray-400">未配置开场问题</div>
+          <div v-else class="mt-2 text-sm text-gray-400">{{ t('appStudio.versions.sectionContent.noOpeningQuestions') }}</div>
         </div>
       </div>
     </template>
@@ -590,7 +612,7 @@ const getListItemIcon = (item: Record<string, any>) => {
               <a-tag :color="renderEnableColor(item.enabled)" size="small">
                 {{ renderEnableLabel(item.enabled) }}
               </a-tag>
-              <a-tag v-if="item.changed" color="arcoblue" size="small">已修改</a-tag>
+              <a-tag v-if="item.changed" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
             </div>
           </div>
           <div class="mt-2 text-xs leading-5 text-gray-500">{{ item.detail }}</div>
@@ -602,31 +624,31 @@ const getListItemIcon = (item: Record<string, any>) => {
       <div class="space-y-3">
         <div :class="getChangedCardClass(reviewConfigChanged)">
           <div class="flex items-center justify-between gap-3">
-            <div class="text-sm font-medium text-gray-700">内容审核</div>
+            <div class="text-sm font-medium text-gray-700">{{ t('appStudio.versions.sectionContent.reviewConfig') }}</div>
             <div class="flex items-center gap-2">
               <a-tag :color="renderEnableColor(reviewConfigEnabled)" size="small">
                 {{ renderEnableLabel(reviewConfigEnabled) }}
               </a-tag>
-              <a-tag v-if="reviewConfigChanged" color="arcoblue" size="small">已修改</a-tag>
+              <a-tag v-if="reviewConfigChanged" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
             </div>
           </div>
           <div class="mt-3 grid gap-3 sm:grid-cols-2">
             <div :class="inputReviewChanged ? 'rounded-xl border border-blue-200 bg-blue-50/70 p-3' : 'rounded-xl border border-gray-200 bg-gray-50 p-3'">
               <div class="flex items-center justify-between gap-2">
-                <div class="text-xs text-gray-500">输入审核</div>
-                <a-tag v-if="inputReviewChanged" color="arcoblue" size="small">已修改</a-tag>
+                <div class="text-xs text-gray-500">{{ t('appStudio.versions.sectionContent.inputReview') }}</div>
+                <a-tag v-if="inputReviewChanged" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
               </div>
               <div class="mt-1 text-sm font-medium text-gray-700">
                 {{ renderEnableLabel(inputReviewEnabled) }}
               </div>
               <div class="mt-1 text-xs text-gray-500">
-                违规回复：{{ renderText(objectValue.inputs_config?.preset_response) }}
+                {{ t('appStudio.versions.sectionContent.violationReply', { value: renderText(objectValue.inputs_config?.preset_response) }) }}
               </div>
             </div>
             <div :class="outputReviewChanged ? 'rounded-xl border border-blue-200 bg-blue-50/70 p-3' : 'rounded-xl border border-gray-200 bg-gray-50 p-3'">
               <div class="flex items-center justify-between gap-2">
-                <div class="text-xs text-gray-500">输出审核</div>
-                <a-tag v-if="outputReviewChanged" color="arcoblue" size="small">已修改</a-tag>
+                <div class="text-xs text-gray-500">{{ t('appStudio.versions.sectionContent.outputReview') }}</div>
+                <a-tag v-if="outputReviewChanged" color="arcoblue" size="small">{{ t('appStudio.versions.sectionContent.modified') }}</a-tag>
               </div>
               <div class="mt-1 text-sm font-medium text-gray-700">
                 {{ renderEnableLabel(outputReviewEnabled) }}
@@ -635,7 +657,7 @@ const getListItemIcon = (item: Record<string, any>) => {
           </div>
         </div>
         <div :class="getChangedCardClass(isDifferent(reviewKeywords, compareReviewKeywords))">
-          <div class="text-xs text-gray-500">敏感关键词</div>
+          <div class="text-xs text-gray-500">{{ t('appStudio.versions.sectionContent.sensitiveKeywords') }}</div>
           <div v-if="reviewKeywords.length" class="mt-3 flex flex-wrap gap-2">
             <a-tag
               v-for="keyword in reviewKeywords"
@@ -647,14 +669,14 @@ const getListItemIcon = (item: Record<string, any>) => {
               {{ keyword }} · {{ getItemStatusLabel(getTextListItemStatus(keyword, compareReviewKeywords)) }}
             </a-tag>
           </div>
-          <div v-else class="mt-2 text-sm text-gray-400">未配置敏感关键词</div>
+          <div v-else class="mt-2 text-sm text-gray-400">{{ t('appStudio.versions.sectionContent.noSensitiveKeywords') }}</div>
         </div>
       </div>
     </template>
 
     <template v-else>
       <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-400">
-        当前区块暂不支持可视化展示
+        {{ t('appStudio.versions.sectionContent.unsupportedSection') }}
       </div>
     </template>
   </div>

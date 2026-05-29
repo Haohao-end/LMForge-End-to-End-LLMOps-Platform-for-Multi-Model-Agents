@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Handle, type NodeProps, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
 
 // 1.定义自定义组件所需数据
 const props = defineProps<NodeProps>()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -24,7 +26,7 @@ const props = defineProps<NodeProps>()
       <!-- 标题 -->
       <div class="flex items-center gap-2 mb-2 text-gray-700">
         <icon-caret-down />
-        <div class="text-xs font-semibold">输出数据</div>
+        <div class="text-xs font-semibold">{{ t('workflowEditor.outputData') }}</div>
       </div>
       <!-- 输出变量列表 -->
       <div class="w-full flex flex-col gap-2 min-w-0">
@@ -46,7 +48,7 @@ const props = defineProps<NodeProps>()
               v-if="output.value.type == 'ref'"
               class="bg-white text-gray-500 border px-2 py-1 rounded break-words"
             >
-              引用 / {{ output.value.content.ref_var_name }}
+              {{ t('workflowEditor.referencePrefix') }} {{ output.value.content.ref_var_name }}
             </div>
             <div v-else class="text-gray-500 px-2 py-1 bg-white rounded break-words">
               {{ output.value.content || '-' }}

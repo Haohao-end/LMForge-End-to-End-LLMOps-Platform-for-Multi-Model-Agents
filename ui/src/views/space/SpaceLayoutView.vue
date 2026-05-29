@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import storage from '@/utils/storage'
 import { isCredentialLoggedIn } from '@/utils/auth'
 import { useRoute, useRouter } from 'vue-router'
@@ -8,19 +9,17 @@ import { AUTH_REQUIRED_EVENT } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const credentialStore = useCredentialStore()
 const isLoggedIn = computed(() => isCredentialLoggedIn(credentialStore.credential))
 const unauthDescription = computed(() => {
-  if (route.path.startsWith('/space/apps')) return '请你登录查看你的Agent！'
-  if (route.path.startsWith('/space/tools')) return '请你登录查看你的插件！'
-  if (route.path.startsWith('/space/workflows')) return '请你登录查看你的工作流！'
-  if (route.path.startsWith('/space/mcp')) return '请你登录查看你的MCP！'
-  if (route.path.startsWith('/space/datasets')) return '请你登录查看你的知识库！'
-  if (route.path.startsWith('/space/likes')) return '请你登录查看你的点赞内容！'
-  if (route.path.startsWith('/space/favorites')) return '请你登录查看你的收藏内容！'
-  return '请你登录查看你的个人空间内容！'
+  if (route.path.startsWith('/space/apps')) return t('space.unauth.apps')
+  if (route.path.startsWith('/space/tools')) return t('space.unauth.tools')
+  if (route.path.startsWith('/space/workflows')) return t('space.unauth.workflows')
+  if (route.path.startsWith('/space/mcp')) return t('space.unauth.mcp')
+  if (route.path.startsWith('/space/datasets')) return t('space.unauth.datasets')
+  return t('space.unauth.default')
 })
-const createType = ref<string>('')
 const pendingCreateType = ref<string>('')
 const searchWord = ref(String(route.query?.search_word ?? ''))
 const SPACE_APPS_SEARCH_DRAFT_STORAGE_KEY = 'draft:space-apps:search-word'
@@ -36,7 +35,13 @@ const openLoginModal = () => {
 
 const handleCreate = (type: 'app' | 'tool' | 'workflow' | 'dataset' | 'mcp') => {
   if (isLoggedIn.value) {
-    createType.value = type
+    void router.replace({
+      path: route.path,
+      query: {
+        ...route.query,
+        create_type: type,
+      },
+    })
     return
   }
   pendingCreateType.value = type
@@ -89,9 +94,13 @@ watch(
     if (!loggedIn || !pendingCreateType.value) return
     const targetCreateType = pendingCreateType.value
     pendingCreateType.value = ''
-    createType.value = ''
-    await nextTick()
-    createType.value = targetCreateType
+    void router.replace({
+      path: route.path,
+      query: {
+        ...route.query,
+        create_type: targetCreateType,
+      },
+    })
   },
   { immediate: true },
 )
@@ -108,7 +117,7 @@ watch(
           <a-avatar :size="32" class="bg-blue-700">
             <icon-user :size="18" />
           </a-avatar>
-          <div class="text-lg font-medium text-gray-900">个人空间</div>
+          <div class="text-lg font-medium text-gray-900">{{ $t('space.title') }}</div>
         </div>
         <!-- 创建按钮 -->
         <a-button
@@ -117,7 +126,7 @@ watch(
           class="rounded-lg"
           @click="handleCreate('app')"
         >
-          创建 AI 应用
+          {{ $t('space.createApp') }}
         </a-button>
         <a-button
           v-if="route.path.startsWith('/space/tools')"
@@ -125,7 +134,7 @@ watch(
           class="rounded-lg"
           @click="handleCreate('tool')"
         >
-          创建自定义插件
+          {{ $t('space.createTool') }}
         </a-button>
         <a-button
           v-if="route.path.startsWith('/space/workflows')"
@@ -133,7 +142,7 @@ watch(
           class="rounded-lg"
           @click="handleCreate('workflow')"
         >
-          创建工作流
+          {{ $t('space.createWorkflow') }}
         </a-button>
         <a-button
           v-if="route.path.startsWith('/space/mcp')"
@@ -141,7 +150,7 @@ watch(
           class="rounded-lg"
           @click="handleCreate('mcp')"
         >
-          创建 MCP
+          {{ $t('space.createMcp') }}
         </a-button>
         <a-button
           v-if="route.path.startsWith('/space/datasets')"
@@ -149,7 +158,7 @@ watch(
           class="rounded-lg"
           @click="handleCreate('dataset')"
         >
-          创建知识库
+          {{ $t('space.createDataset') }}
         </a-button>
       </div>
       <!-- 导航按钮+搜索框 -->
@@ -161,56 +170,42 @@ watch(
             class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
             active-class="bg-gray-100"
           >
-            AI应用
+            {{ $t('space.nav.apps') }}
           </router-link>
           <router-link
             to="/space/tools"
             class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
             active-class="bg-gray-100"
           >
-            插件
+            {{ $t('space.nav.tools') }}
           </router-link>
           <router-link
             to="/space/workflows"
             class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
             active-class="bg-gray-100"
           >
-            工作流
+            {{ $t('space.nav.workflows') }}
           </router-link>
           <router-link
             to="/space/mcp"
             class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
             active-class="bg-gray-100"
           >
-            MCP
+            {{ $t('space.nav.mcp') }}
           </router-link>
           <router-link
             to="/space/datasets"
             class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
             active-class="bg-gray-100"
           >
-            知识库
-          </router-link>
-          <router-link
-            to="/space/likes"
-            class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
-            active-class="bg-gray-100"
-          >
-            我的点赞
-          </router-link>
-          <router-link
-            to="/space/favorites"
-            class="rounded-lg text-gray-700 px-3 h-8 leading-8 hover:bg-gray-200 transition-all"
-            active-class="bg-gray-100"
-          >
-            我的收藏
+            {{ $t('space.nav.datasets') }}
           </router-link>
         </div>
         <!-- 右侧搜索 -->
         <a-input-search
           v-model="searchWord"
           :disabled="!isLoggedIn"
-          placeholder="输入关键词进行搜索"
+          :placeholder="t('space.searchPlaceholder')"
           class="w-[240px] bg-white rounded-lg border-gray-300"
           @search="search"
         />
@@ -218,7 +213,7 @@ watch(
     </div>
     <!-- 中间内容 -->
     <div v-if="isLoggedIn" class="min-h-0 flex-1 overflow-hidden">
-      <router-view v-model:create-type="createType" />
+      <router-view />
     </div>
     <div v-else class="flex-1 flex items-center justify-center">
       <a-empty :description="unauthDescription" />

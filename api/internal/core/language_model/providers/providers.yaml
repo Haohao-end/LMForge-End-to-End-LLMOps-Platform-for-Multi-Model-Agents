@@ -1,11 +1,17 @@
-- name: openai
-  label: OpenAI
-  description: OpenAI提供的模型，例如gpt-5.2、gpt-5.2-pro、gpt-4o等。
-  icon: icon.svg
-  background: "#E5E7EB"
+- name: atlascloud
+  label: Atlas Cloud
+  description: Atlas Cloud 提供 OpenAI 兼容的模型接入，可通过统一 API 调用 deepseek-v4-pro（deepseek-ai/deepseek-v4-pro）、deepseek-v3-0324（deepseek-ai/DeepSeek-V3-0324）等聊天模型。
+  icon: icon.png
+  background: "#FFFFFF"
   supported_model_types:
     - chat
-    - completion
+- name: deepseek
+  label: DeepSeek
+  description: DeepSeek提供的模型，例如deepseek-v4-flash、deepseek-v4-pro、deepseek-chat、deepseek-reasoner等。
+  icon: icon.png
+  background: "#FFFFFF"
+  supported_model_types:
+    - chat
 - name: moonshot
   label: 月之暗面
   description: Moonshot提供的模型，例如moonshot-v1-8k、moonshot-v1-32k和moonshot-v1-128k。
@@ -23,13 +29,6 @@
 - name: wenxin
   label: 文心一言
   description: 百度文心一言提供的模型，例如ERNIE-3.5、ERNIE-4等。
-  icon: icon.png
-  background: "#FFFFFF"
-  supported_model_types:
-    - chat
-- name: deepseek
-  label: DeepSeek
-  description: DeepSeek提供的模型，例如deepseek-v4-flash、deepseek-v4-pro、deepseek-chat、deepseek-reasoner等。
   icon: icon.png
   background: "#FFFFFF"
   supported_model_types:
@@ -62,10 +61,11 @@
   background: "#FFFFFF"
   supported_model_types:
     - chat
-- name: atlascloud
-  label: Atlas Cloud
-  description: Atlas Cloud 提供 OpenAI 兼容的模型接入，可通过统一 API 调用 deepseek-ai/DeepSeek-V3-0324 等聊天模型。
-  icon: icon.png
-  background: "#FFFFFF"
+- name: openai
+  label: OpenAI
+  description: OpenAI提供的模型，例如gpt-5.2、gpt-5.2-pro、gpt-4o等。
+  icon: icon.svg
+  background: "#E5E7EB"
   supported_model_types:
     - chat
+    - completion

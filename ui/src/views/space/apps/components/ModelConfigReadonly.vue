@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 // 只读版本的模型配置组件
+const { t } = useI18n()
 const props = defineProps({
   model_config: {
     type: Object,
@@ -14,7 +16,7 @@ const props = defineProps({
 })
 
 const modelDisplayName = computed(() => {
-  if (!props.model_config?.model) return '未配置'
+  if (!props.model_config?.model) return t('appStudio.modelConfig.unsetModel')
   return props.model_config.model
 })
 </script>

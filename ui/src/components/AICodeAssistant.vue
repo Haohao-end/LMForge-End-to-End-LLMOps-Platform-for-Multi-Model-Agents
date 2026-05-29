@@ -6,6 +6,7 @@ import { useMarkdownRenderer } from '@/hooks/use-markdown-renderer'
 import { getErrorMessage } from '@/utils/error'
 import 'github-markdown-css'
 import 'highlight.js/styles/github.css'
+import { useI18n } from 'vue-i18n'
 
 const { renderMarkdown, handleMarkdownCopyClick } = useMarkdownRenderer()
 
@@ -21,6 +22,8 @@ const props = defineProps({
 })
 
 const emits = defineEmits(['update:visible', 'insert-code'])
+const { locale } = useI18n()
+const isEnglish = computed(() => locale.value === 'en-US')
 
 const localVisible = computed({
   get: () => props.visible,
@@ -65,7 +68,7 @@ const handleClose = () => {
 const handleSubmit = async () => {
   const question = userQuestion.value.trim()
   if (!question) {
-    Message.warning('请输入需求描述')
+    Message.warning(isEnglish.value ? 'Please describe your request' : '请输入需求描述')
     return
   }
 
@@ -80,14 +83,14 @@ const handleSubmit = async () => {
     })
 
     if (response && typeof response === 'object' && 'code' in response) {
-      throw new Error(String((response as { message?: string }).message || 'AI 请求失败'))
+      throw new Error(String((response as { message?: string }).message || (isEnglish.value ? 'AI request failed' : 'AI 请求失败')))
     }
 
     if (!aiResponse.value.trim()) {
-      Message.warning('AI 未返回内容，请重试')
+      Message.warning(isEnglish.value ? 'AI returned no content. Please try again.' : 'AI 未返回内容，请重试')
     }
   } catch (error: unknown) {
-    Message.error(getErrorMessage(error, 'AI 请求失败，请稍后重试'))
+    Message.error(getErrorMessage(error, isEnglish.value ? 'AI request failed. Please try again later.' : 'AI 请求失败，请稍后重试'))
   } finally {
     isLoading.value = false
   }
@@ -95,12 +98,12 @@ const handleSubmit = async () => {
 
 const handleInsertCode = () => {
   if (!canUseCode.value) {
-    Message.warning('未检测到可插入的代码块')
+    Message.warning(isEnglish.value ? 'No insertable code block detected' : '未检测到可插入的代码块')
     return
   }
 
   emits('insert-code', generatedCode.value)
-  Message.success('代码已插入')
+  Message.success(isEnglish.value ? 'Code inserted' : '代码已插入')
   handleClose()
 }
 
@@ -120,7 +123,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
         <div class="flex h-12 items-center justify-between border-b border-gray-200 px-4">
           <div class="flex items-center gap-2">
             <icon-robot class="text-blue-600" :size="18" />
-            <span class="text-sm font-semibold text-gray-800">Python代码生成AI助手</span>
+            <span class="text-sm font-semibold text-gray-800">{{ isEnglish ? 'Python Code Generation AI Assistant' : 'Python代码生成AI助手' }}</span>
           </div>
           <a-button type="text" size="mini" class="!text-gray-500" @click="handleClose">
             <template #icon>
@@ -133,7 +136,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           <div v-if="aiResponse || isLoading" class="max-h-[360px] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-3">
             <div v-if="isLoading" class="mb-2 flex items-center gap-2 text-xs text-gray-500">
               <a-spin size="14" />
-              <span>AI 正在生成代码...</span>
+              <span>{{ isEnglish ? 'AI is generating code...' : 'AI 正在生成代码...' }}</span>
             </div>
 
             <div
@@ -148,7 +151,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
                 <template #icon>
                   <icon-plus />
                 </template>
-                插入编辑器
+                {{ isEnglish ? 'Insert into editor' : '插入编辑器' }}
               </a-button>
             </div>
           </div>
@@ -159,7 +162,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
               type="text"
               class="flex-1 bg-transparent text-sm outline-0"
               :disabled="isLoading"
-              placeholder="描述你想要的 Python 代码，例如：解析参数并返回统计结果"
+              :placeholder="isEnglish ? 'Describe the Python code you want, for example: parse parameters and return statistics' : '描述你想要的 Python 代码，例如：解析参数并返回统计结果'"
               @keydown.enter.prevent="handleSubmit"
             />
             <a-button

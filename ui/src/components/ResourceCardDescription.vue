@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 withDefaults(defineProps<{
   text?: string
   fallback?: string
 }>(), {
   text: '',
-  fallback: '暂无描述',
+  fallback: '',
 })
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="text-sm text-gray-600 h-[60px] line-clamp-3">
-    {{ text || fallback }}
+    {{ text || fallback || t('chat.resource.noDescription') }}
   </div>
 </template>
 
