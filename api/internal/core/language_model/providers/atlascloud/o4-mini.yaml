@@ -1,11 +1,11 @@
-model: deepseek-v3-0324
-label: deepseek-ai/DeepSeek-V3-0324
+model: o4-mini
+label: openai/o4-mini
 model_type: chat
 features:
 - tool_call
 - agent_thought
 attributes:
-  model: deepseek-ai/DeepSeek-V3-0324
+  model: openai/o4-mini
 parameters:
 - name: temperature
   use_template: temperature

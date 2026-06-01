@@ -1,11 +1,11 @@
-model: deepseek-v3-0324
-label: deepseek-ai/DeepSeek-V3-0324
+model: deepseek-v3-1
+label: deepseek-ai/DeepSeek-V3.1
 model_type: chat
 features:
 - tool_call
 - agent_thought
 attributes:
-  model: deepseek-ai/DeepSeek-V3-0324
+  model: deepseek-ai/DeepSeek-V3.1
 parameters:
 - name: temperature
   use_template: temperature

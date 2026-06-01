@@ -1,11 +1,11 @@
-model: deepseek-v3-0324
-label: deepseek-ai/DeepSeek-V3-0324
+model: glm-4-7
+label: zai-org/glm-4.7
 model_type: chat
 features:
 - tool_call
 - agent_thought
 attributes:
-  model: deepseek-ai/DeepSeek-V3-0324
+  model: zai-org/glm-4.7
 parameters:
 - name: temperature
   use_template: temperature

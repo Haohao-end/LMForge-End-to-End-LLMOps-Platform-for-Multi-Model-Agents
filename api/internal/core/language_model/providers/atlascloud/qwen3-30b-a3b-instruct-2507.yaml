@@ -1,11 +1,11 @@
-model: deepseek-v3-0324
-label: deepseek-ai/DeepSeek-V3-0324
+model: qwen3-30b-a3b-instruct-2507
+label: Qwen/Qwen3-30B-A3B-Instruct-2507
 model_type: chat
 features:
 - tool_call
 - agent_thought
 attributes:
-  model: deepseek-ai/DeepSeek-V3-0324
+  model: Qwen/Qwen3-30B-A3B-Instruct-2507
 parameters:
 - name: temperature
   use_template: temperature

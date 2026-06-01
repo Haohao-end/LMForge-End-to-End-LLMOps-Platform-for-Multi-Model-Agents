@@ -1,11 +1,11 @@
-model: deepseek-v3-0324
-label: deepseek-ai/DeepSeek-V3-0324
+model: kimi-k2-instruct-0905
+label: moonshotai/Kimi-K2-Instruct-0905
 model_type: chat
 features:
 - tool_call
 - agent_thought
 attributes:
-  model: deepseek-ai/DeepSeek-V3-0324
+  model: moonshotai/Kimi-K2-Instruct-0905
 parameters:
 - name: temperature
   use_template: temperature

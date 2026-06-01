@@ -1,11 +1,11 @@
-model: deepseek-v3-0324
-label: deepseek-ai/DeepSeek-V3-0324
+model: gemini-2-5-flash
+label: google/gemini-2.5-flash
 model_type: chat
 features:
 - tool_call
 - agent_thought
 attributes:
-  model: deepseek-ai/DeepSeek-V3-0324
+  model: google/gemini-2.5-flash
 parameters:
 - name: temperature
   use_template: temperature
