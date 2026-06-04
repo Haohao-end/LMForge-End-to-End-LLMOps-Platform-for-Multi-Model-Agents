@@ -745,12 +745,14 @@ class TestConversationServiceBasics:
             def __init__(self, all_result=None):
                 self._all_result = all_result if all_result is not None else []
                 self.filter_calls = []
+                self.order_by_calls = []
 
             def filter(self, *args, **_kwargs):
                 self.filter_calls.append(args)
                 return self
 
             def order_by(self, *_args, **_kwargs):
+                self.order_by_calls.append(_args)
                 return self
 
             def options(self, *_args, **_kwargs):
@@ -795,6 +797,14 @@ class TestConversationServiceBasics:
         assert paginator.paginate_called is True
         assert len(id_query.filter_calls[0]) == 5
         assert message_query.filter_calls[0][0].right.value == [message_1.id, message_2.id]
+        assert tuple(str(arg) for arg in id_query.order_by_calls[0]) == (
+            "message.created_at DESC",
+            "message.id DESC",
+        )
+        assert tuple(str(arg) for arg in message_query.order_by_calls[0]) == (
+            "message.created_at DESC",
+            "message.id DESC",
+        )
 
     def test_get_conversation_messages_with_page_should_normalize_row_like_paginated_ids(
         self, monkeypatch

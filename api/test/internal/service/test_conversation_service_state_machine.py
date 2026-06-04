@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.agent.usage_utils import summarize_agent_thoughts
 from internal.entity.conversation_entity import MessageStatus
 from internal.model import Conversation, Message
 from internal.service.conversation_service import ConversationService
@@ -129,9 +130,8 @@ def _simulate_expected_state(
     conversation_name: str,
 ) -> _ExpectedState:
     create_count = 0
-    total_latency = 0.0
     message_answers: list[str] = []
-    message_latencies: list[float] = []
+    message_count = 0
     summary_count = 0
     rename_count = 0
     terminal_status = None
@@ -143,11 +143,10 @@ def _simulate_expected_state(
 
         if event in _CREATE_EVENTS:
             create_count += 1
-            total_latency += thought.latency
 
         if event == QueueEvent.AGENT_MESSAGE.value:
             message_answers.append(thought.answer)
-            message_latencies.append(total_latency)
+            message_count += 1
             if long_term_memory_enabled:
                 summary_count += 1
             if conversation_is_new or current_name == "New Conversation":
@@ -159,6 +158,9 @@ def _simulate_expected_state(
             terminal_status = event
             terminal_error = thought.observation
             break
+
+    total_latency = summarize_agent_thoughts(agent_thoughts).latency
+    message_latencies = [total_latency] * message_count
 
     return _ExpectedState(
         create_count=create_count,

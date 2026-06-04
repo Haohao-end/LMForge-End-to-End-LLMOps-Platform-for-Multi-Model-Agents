@@ -1,4 +1,5 @@
 import queue
+import os
 import time
 import uuid
 from queue import Queue
@@ -6,6 +7,7 @@ from typing import Generator
 from uuid import UUID
 from redis import Redis
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.agent.failure_utils import build_failure_observation, classify_failure_event
 from internal.entity.conversation_entity import InvokeFrom
 
 
@@ -15,6 +17,8 @@ class AgentQueueManager:
     invoke_from: InvokeFrom
     redis_client: Redis
     _queues: dict[str, Queue]
+    _terminal_events: dict[str, set[str]]
+    _DEFAULT_LISTEN_TIMEOUT_SECONDS: int = 1800
 
     def __init__(
             self,
@@ -26,6 +30,7 @@ class AgentQueueManager:
         self.user_id = user_id
         self.invoke_from = invoke_from
         self._queues = {}
+        self._terminal_events = {}
 
         # 2.内部初始化redis_client
         from app.http.module import injector
@@ -34,7 +39,7 @@ class AgentQueueManager:
     def listen(self, task_id: UUID) -> Generator:
         """监听队列返回的生成式数据"""
         # 1.定义基础数据记录超时时间、开始时间、最后一次ping通时间
-        listen_timeout = 600
+        listen_timeout = self._read_listen_timeout_seconds()
         start_time = time.time()
         last_ping_time = 0
 
@@ -77,17 +82,46 @@ class AgentQueueManager:
                         event=QueueEvent.STOP.value,
                     ))
 
+    @classmethod
+    def _read_listen_timeout_seconds(cls) -> int:
+        """读取监听超时时间，默认放宽到长任务可完成的范围。"""
+        raw_value = str(os.getenv("AGENT_LISTEN_TIMEOUT_SECONDS", "")).strip()
+        if not raw_value:
+            return cls._DEFAULT_LISTEN_TIMEOUT_SECONDS
+
+        try:
+            parsed_value = int(raw_value)
+        except ValueError:
+            return cls._DEFAULT_LISTEN_TIMEOUT_SECONDS
+
+        return parsed_value if parsed_value > 0 else cls._DEFAULT_LISTEN_TIMEOUT_SECONDS
+
     def stop_listen(self, task_id: UUID) -> None:
         """停止监听队列信息"""
         self.queue(task_id).put(None)
 
     def publish_error(self, task_id: UUID, error) -> None:
         """发布错误信息到队列"""
+        if isinstance(error, BaseException):
+            self.publish_failure(task_id, error)
+            return
+
         self.publish(task_id, AgentThought(
             id=uuid.uuid4(),
             task_id=task_id,
             event=QueueEvent.ERROR.value,
             observation=str(error),
+        ))
+
+    def publish_failure(self, task_id: UUID, error, context: str = "") -> None:
+        """发布已归类的异常终态事件。"""
+        failure_event = classify_failure_event(error)
+        observation = build_failure_observation(error, context)
+        self.publish(task_id, AgentThought(
+            id=uuid.uuid4(),
+            task_id=task_id,
+            event=failure_event.value,
+            observation=observation,
         ))
 
     def _is_stopped(self, task_id: UUID) -> bool:
@@ -101,11 +135,27 @@ class AgentQueueManager:
 
     def publish(self, task_id: UUID, agent_thought: AgentThought) -> None:
         """发布事件信息到队列"""
+        event_value = str(getattr(agent_thought.event, "value", agent_thought.event) or "")
+        terminal_events = {
+            QueueEvent.STOP.value,
+            QueueEvent.ERROR.value,
+            QueueEvent.TIMEOUT.value,
+            QueueEvent.AGENT_END.value,
+        }
+        if self._terminal_events.get(str(task_id)):
+            if event_value not in self._terminal_events.get(str(task_id), set()):
+                return
+        if event_value in terminal_events:
+            task_terminal_events = self._terminal_events.setdefault(str(task_id), set())
+            if event_value in task_terminal_events:
+                return
+            task_terminal_events.add(event_value)
+
         # 1.将事件添加到队列中
         self.queue(task_id).put(agent_thought)
 
         # 2.检测事件类型是否为需要停止的类型，涵盖STOP、ERROR、TIMEOUT、AGENT_END
-        if agent_thought.event in [QueueEvent.STOP.value, QueueEvent.ERROR.value, QueueEvent.TIMEOUT.value, QueueEvent.AGENT_END.value]:
+        if event_value in terminal_events:
             self.stop_listen(task_id)
 
     def queue(self, task_id: UUID) -> Queue:

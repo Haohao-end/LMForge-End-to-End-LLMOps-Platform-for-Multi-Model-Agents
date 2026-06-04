@@ -227,7 +227,7 @@ watch(
       </div>
     </div>
     <!-- 中间内容 -->
-    <div v-if="isLoggedIn" class="min-h-0 flex-1 overflow-hidden">
+    <div v-if="isLoggedIn" class="flex min-h-0 flex-1 overflow-hidden">
       <router-view />
     </div>
     <div v-else class="flex-1 flex items-center justify-center">

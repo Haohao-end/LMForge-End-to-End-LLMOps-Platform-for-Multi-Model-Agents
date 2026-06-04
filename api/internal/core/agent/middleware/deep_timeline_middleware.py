@@ -16,6 +16,7 @@ from langchain.tools.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.agent.entities.tool_policy_entity import ToolPolicy
 
 
 def _stringify(value: Any, default: str = "") -> str:
@@ -32,22 +33,20 @@ def _stringify(value: Any, default: str = "") -> str:
 class DeepTimelineMiddleware(AgentMiddleware):
     """将 deepagents 的内置工具调用转成可直接渲染的时间线事件。"""
 
-    _IMAGE_RESULT_TOOL_NAMES = {
-        "qwen_image_text_to_image",
-        "qwen_image_edit",
-        "qwen_image_edit_2509",
-    }
-
     def __init__(
         self,
         *,
         task_id: UUID,
         publisher: Callable[[UUID, AgentThought], None],
+        tool_policy: ToolPolicy | None = None,
     ) -> None:
         super().__init__()
         self.task_id = task_id
         self.publisher = publisher
+        self.tool_policy = tool_policy or ToolPolicy()
         self._tool_steps: dict[str, UUID] = {}
+        self._latest_todo_step_id: UUID | None = None
+        self._latest_todos: list[dict[str, Any]] = []
 
     def publish_step(
         self,
@@ -63,12 +62,14 @@ class DeepTimelineMiddleware(AgentMiddleware):
         latency: float = 0,
     ) -> None:
         payload = dict(tool_input or {})
+        extra_timeline = dict(payload.pop("timeline", {}) or {})
         payload["timeline"] = {
             "step_type": step_type,
             "status": status,
             "title": title,
             "detail": detail,
             "technical_detail": technical_detail,
+            **extra_timeline,
         }
         self.publisher(
             self.task_id,
@@ -148,6 +149,31 @@ class DeepTimelineMiddleware(AgentMiddleware):
             artifact["mime_type"] = mime_type
         return artifact
 
+    @staticmethod
+    def _build_tool_timeline_metadata(
+        *,
+        phase: str,
+        preview: str = "",
+        preview_kind: str = "",
+        result_preview: str = "",
+        result_kind: str = "",
+        error_kind: str = "",
+        recovered: bool = False,
+        recoverable: bool = False,
+        output_empty: bool = False,
+    ) -> dict[str, Any]:
+        return {
+            "phase": phase,
+            "preview": preview,
+            "preview_kind": preview_kind,
+            "result_preview": result_preview,
+            "result_kind": result_kind,
+            "error_kind": error_kind,
+            "recovered": recovered,
+            "recoverable": recoverable,
+            "output_empty": output_empty,
+        }
+
     def publish_complete(
         self,
         self_summary: str,
@@ -157,6 +183,7 @@ class DeepTimelineMiddleware(AgentMiddleware):
         total_token_count: int = 0,
         total_price: float = 0.0,
     ) -> None:
+        self._publish_final_todo_snapshot()
         self.publisher(
             self.task_id,
             AgentThought(
@@ -190,6 +217,119 @@ class DeepTimelineMiddleware(AgentMiddleware):
         return uuid.uuid4()
 
     @staticmethod
+    def _normalize_todo_status(status: Any) -> str:
+        normalized = str(status or "").strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "completed": "completed",
+            "complete": "completed",
+            "done": "completed",
+            "success": "completed",
+            "succeeded": "completed",
+            "finished": "completed",
+            "error": "error",
+            "failed": "error",
+            "fail": "error",
+            "failure": "error",
+            "in_progress": "in_progress",
+            "progress": "in_progress",
+            "running": "in_progress",
+            "working": "in_progress",
+            "doing": "in_progress",
+            "start": "in_progress",
+            "pending": "pending",
+            "todo": "pending",
+            "to_do": "pending",
+            "wait": "pending",
+            "waiting": "pending",
+            "not_started": "pending",
+        }
+        return aliases.get(normalized, "pending")
+
+    @classmethod
+    def _normalize_todo_items(cls, todos: Any) -> list[dict[str, Any]]:
+        if not isinstance(todos, list):
+            return []
+
+        normalized_todos: list[dict[str, Any]] = []
+        for index, todo in enumerate(todos):
+            if isinstance(todo, dict):
+                content = str(
+                    todo.get("content")
+                    or todo.get("text")
+                    or todo.get("description")
+                    or todo.get("title")
+                    or todo.get("name")
+                    or ""
+                ).strip()
+                title = str(todo.get("title") or todo.get("name") or content).strip()
+                if not content and not title:
+                    continue
+                normalized_todos.append({
+                    **todo,
+                    "content": content or title,
+                    "title": title or content,
+                    "status": cls._normalize_todo_status(todo.get("status")),
+                    "position": index,
+                })
+                continue
+
+            text = str(todo or "").strip()
+            if text:
+                normalized_todos.append({
+                    "content": text,
+                    "title": text,
+                    "status": "pending",
+                    "position": index,
+                })
+        return normalized_todos
+
+    def _remember_todos(self, *, step_id: UUID, tool_args: dict[str, Any]) -> None:
+        todos = self._normalize_todo_items(tool_args.get("todos", []))
+        if not todos:
+            return
+        self._latest_todo_step_id = step_id
+        self._latest_todos = todos
+
+    def _publish_final_todo_snapshot(self) -> None:
+        if not self._latest_todo_step_id or not self._latest_todos:
+            return
+
+        finalized_todos = []
+        for todo in self._latest_todos:
+            status = self._normalize_todo_status(todo.get("status"))
+            final_status = "error" if status == "error" else "completed"
+            finalized_todos.append({
+                **todo,
+                "status": final_status,
+            })
+
+        snapshot_step_id = uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"{self.task_id}:{self._latest_todo_step_id}:final_snapshot",
+        )
+        detail = "待办事项最终快照"
+        self.publish_step(
+            step_id=snapshot_step_id,
+            step_type="reflection",
+            status="success",
+            title="待办事项归档",
+            detail=detail,
+            technical_detail="\n".join(
+                f"{index + 1}. {todo.get('content') or todo.get('title') or ''} [{todo.get('status')}]"
+                for index, todo in enumerate(finalized_todos)
+            ),
+            tool="write_todos",
+            tool_input={
+                "todos": finalized_todos,
+                "timeline": {
+                    "phase": "final_snapshot",
+                    "source_step_id": str(self._latest_todo_step_id),
+                },
+            },
+            latency=0,
+        )
+
+    @staticmethod
     def _classify_tool(tool_name: str) -> tuple[str, str]:
         if tool_name == "write_todos":
             return "plan", "拆解任务"
@@ -197,6 +337,8 @@ class DeepTimelineMiddleware(AgentMiddleware):
             return "subagent", "调用子任务"
         if tool_name == "execute":
             return "tool", "执行代码"
+        if tool_name in {"write_file", "save_file"}:
+            return "artifact", "写文件"
         return "tool", f"调用工具：{tool_name}"
 
     @staticmethod
@@ -255,6 +397,10 @@ class DeepTimelineMiddleware(AgentMiddleware):
         step_type, title = self._classify_tool(tool_name)
         step_id = self._get_step_id(request.tool_call)
         start_at = time.perf_counter()
+        preview = self._build_start_detail(tool_name, tool_args)
+        preview_kind = "command" if tool_name == "execute" else "protocol" if tool_name in {"write_file", "save_file"} else "summary"
+        result_kind = "stdout" if tool_name == "execute" else "output"
+        recoverable = tool_name in {"write_file", "save_file"}
 
         self.publish_step(
             step_id=step_id,
@@ -263,41 +409,88 @@ class DeepTimelineMiddleware(AgentMiddleware):
             title=title,
             detail=self._build_start_detail(tool_name, tool_args),
             tool=tool_name,
-            tool_input=tool_args,
+            tool_input={
+                **tool_args,
+                "timeline": self._build_tool_timeline_metadata(
+                    phase="start",
+                    preview=preview,
+                    preview_kind=preview_kind,
+                    result_kind=result_kind,
+                    recoverable=recoverable,
+                ),
+            },
             latency=0,
         )
 
         try:
             result = handler(request)
         except Exception as e:
+            status = "warning" if recoverable else "error"
+            error_kind = "protocol_error" if recoverable else "tool_error"
             self.publish_step(
                 step_id=step_id,
                 step_type=step_type,
-                status="error",
-                title=title,
-                detail=f"{title}失败",
+                status=status,
+                title="写文件协议待修复" if recoverable else title,
+                detail="检测到可恢复的写文件协议，等待后续恢复" if recoverable else f"{title}失败",
                 technical_detail=f"{type(e).__name__}: {e}",
                 tool=tool_name,
-                tool_input=tool_args,
+                tool_input={
+                    **tool_args,
+                    "timeline": self._build_tool_timeline_metadata(
+                        phase="warning" if recoverable else "error",
+                        preview=preview,
+                        preview_kind=preview_kind,
+                        result_kind=result_kind,
+                        error_kind=error_kind,
+                        recoverable=recoverable,
+                    ),
+                },
                 latency=time.perf_counter() - start_at,
             )
             raise
 
         result_preview = self._extract_result_content(result)[:1200]
         status = "error" if isinstance(result, ToolMessage) and getattr(result, "status", "") == "error" else "success"
+        error_kind = ""
+        if recoverable and status == "error":
+            status = "warning"
+            error_kind = "protocol_error"
+        if status == "success" and tool_name == "write_todos":
+            self._remember_todos(step_id=step_id, tool_args=tool_args)
+
+        publish_title = title
+        publish_detail = result_preview or preview or f"{title}完成"
+        if recoverable and status == "warning":
+            publish_title = "写文件协议待修复"
+            publish_detail = "检测到可恢复的写文件协议，等待后续恢复"
+
         self.publish_step(
             step_id=step_id,
             step_type=step_type,
             status=status,
-            title=title,
-            detail=result_preview or f"{title}完成",
+            title=publish_title,
+            detail=publish_detail,
             technical_detail=result_preview,
             tool=tool_name,
-            tool_input=tool_args,
+            tool_input={
+                **tool_args,
+                "timeline": self._build_tool_timeline_metadata(
+                    phase="success" if status == "success" else "warning",
+                    preview=preview,
+                    preview_kind=preview_kind,
+                    result_preview=result_preview,
+                    result_kind=result_kind,
+                    error_kind=error_kind,
+                    recovered=False,
+                    recoverable=recoverable,
+                    output_empty=not bool(result_preview),
+                ),
+            },
             latency=time.perf_counter() - start_at,
         )
 
-        if status == "success" and tool_name in self._IMAGE_RESULT_TOOL_NAMES:
+        if status == "success" and self.tool_policy.is_image_result_tool(tool_name):
             image_urls = self._extract_inline_image_urls(result_preview)
             for image_index, image_url in enumerate(image_urls, start=1):
                 self.publish_artifact(

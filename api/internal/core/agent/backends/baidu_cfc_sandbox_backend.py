@@ -54,8 +54,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_TIMEOUT = 60  # 单次命令默认超时（秒）
-_SANDBOX_LIFETIME = 300  # 沙箱最长存活时间（秒）
+_DEFAULT_TIMEOUT = 600  # 单次命令默认超时（秒）
+_SANDBOX_LIFETIME = 1800  # 沙箱最长存活时间（秒）
 _DEFAULT_FALLBACK_TEMPLATE_ALIAS = "code-interpreter-v1"
 
 

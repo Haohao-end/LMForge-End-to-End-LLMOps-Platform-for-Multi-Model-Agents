@@ -61,10 +61,6 @@ class AppConfigService(BaseService):
         if self.skill_service is None:
             self.skill_service = SkillService(self.db)
 
-    def __post_init__(self) -> None:
-        if self.skill_service is None:
-            self.skill_service = SkillService(self.db)
-
     @staticmethod
     def _build_agent_runtime_tool_name(app_id: UUID | str) -> str:
         """生成子 Agent 工具名，确保在 LangChain 中唯一且稳定。"""
@@ -340,7 +336,7 @@ class AppConfigService(BaseService):
             self.update(draft_app_config, skills=validate_skills)
 
         # 10.将数据转换成字典后返回
-        return self._process_and_transformer_app_config(
+        result = self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
@@ -421,7 +417,7 @@ class AppConfigService(BaseService):
             self.update(app_config, skills=validate_skills)
 
         # 10.将数据转换成字典后返回
-        return self._process_and_transformer_app_config(
+        result = self._process_and_transformer_app_config(
             validate_model_config,
             tools,
             workflows,
@@ -1000,8 +996,6 @@ class AppConfigService(BaseService):
             })
 
         return workflows, validate_workflows
-
-
 
 
 

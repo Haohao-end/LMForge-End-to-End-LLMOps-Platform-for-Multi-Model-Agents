@@ -144,4 +144,133 @@ describe('DeepAgentTimeline.vue', () => {
 
     expect(wrapper.find('.image-stub').attributes('data-src')).toBe('https://example.com/2.png')
   })
+
+  it('renders finalized todo snapshots without active progress dots', () => {
+    const wrapper = mountTimeline({
+      thoughts: [
+        {
+          id: 'todo-step-1',
+          event: QueueEvent.deepStep,
+          thought: '待办事项已完成',
+          tool: 'write_todos',
+          tool_input: {
+            todos: [
+              { content: '规划章节结构', status: 'completed' },
+              { content: '生成 Markdown 文件', status: 'completed' },
+            ],
+            timeline: {
+              step_type: 'plan',
+              status: 'success',
+              title: '拆解任务',
+              detail: '待办事项已完成',
+            },
+          },
+        },
+      ],
+    })
+
+    expect(wrapper.findAll('.deep-agent-todo-item')).toHaveLength(2)
+    expect(wrapper.text()).toContain('规划章节结构')
+    expect(wrapper.text()).toContain('生成 Markdown 文件')
+    expect(wrapper.findAll('.deep-agent-todo__dot').every(dot => !dot.classes().includes('animate-pulse'))).toBe(true)
+  })
+
+  it('renders command and result previews for execute steps', () => {
+    const wrapper = mountTimeline({
+      thoughts: [
+        {
+          id: 'execute-step-1',
+          event: QueueEvent.deepStep,
+          thought: '正在执行代码',
+          tool: 'execute',
+          tool_input: {
+            timeline: {
+              step_type: 'tool',
+              status: 'success',
+              title: '执行代码',
+              detail: '命令已执行',
+              preview: 'python3 -c "print(1)"',
+              preview_kind: 'command',
+              result_preview: '1\n',
+              result_kind: 'stdout',
+              error_kind: '',
+              recovered: false,
+              recoverable: false,
+              output_empty: false,
+            },
+          },
+        },
+      ],
+    })
+
+    expect(wrapper.text()).toContain('命令预览')
+    expect(wrapper.text()).toContain('结果预览')
+    expect(wrapper.text()).toContain('python3 -c "print(1)"')
+    expect(wrapper.text()).toContain('1')
+  })
+
+  it('renders recoverable write_file warnings and recovered attachment states', () => {
+    const warningWrapper = mountTimeline({
+      thoughts: [
+        {
+          id: 'write-step-warning',
+          event: QueueEvent.deepStep,
+          thought: '检测到可恢复的写文件协议',
+          tool: 'write_file',
+          tool_input: {
+            timeline: {
+              step_type: 'artifact',
+              status: 'warning',
+              title: '写文件协议待修复',
+              detail: '检测到可恢复的写文件协议，正在尝试恢复附件：SpaceX_IPO_Prospectus_Draft.txt',
+              preview: 'write_file -> SpaceX_IPO_Prospectus_Draft.txt',
+              preview_kind: 'protocol',
+              result_preview: '',
+              result_kind: 'artifact',
+              error_kind: 'protocol_error',
+              recovered: false,
+              recoverable: true,
+              output_empty: true,
+            },
+          },
+        },
+      ],
+    })
+
+    expect(warningWrapper.text()).toContain('可恢复协议错误')
+    expect(warningWrapper.text()).toContain('协议预览')
+    expect(warningWrapper.text()).toContain('无输出')
+    expect(warningWrapper.text()).toContain('write_file -> SpaceX_IPO_Prospectus_Draft.txt')
+
+    const recoveredWrapper = mountTimeline({
+      thoughts: [
+        {
+          id: 'write-step-recovered',
+          event: QueueEvent.deepStep,
+          thought: '已将文件写入沙箱',
+          tool: 'write_file',
+          tool_input: {
+            timeline: {
+              step_type: 'artifact',
+              status: 'success',
+              title: '已自动修复并恢复附件',
+              detail: '已将 SpaceX_IPO_Prospectus_Draft.txt 写入沙箱，准备重新扫描产物',
+              preview: 'write_file -> SpaceX_IPO_Prospectus_Draft.txt',
+              preview_kind: 'protocol',
+              result_preview: '已写入 SpaceX_IPO_Prospectus_Draft.txt',
+              result_kind: 'artifact',
+              error_kind: 'protocol_error',
+              recovered: true,
+              recoverable: true,
+              output_empty: false,
+            },
+          },
+        },
+      ],
+    })
+
+    expect(recoveredWrapper.text()).toContain('已自动修复并恢复附件')
+    expect(recoveredWrapper.text()).toContain('结果预览')
+    expect(recoveredWrapper.text()).toContain('已写入 SpaceX_IPO_Prospectus_Draft.txt')
+  })
 })

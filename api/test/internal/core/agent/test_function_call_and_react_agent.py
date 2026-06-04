@@ -9,6 +9,7 @@ from langchain_core.outputs import LLMResult
 from internal.core.agent.agents.function_call_agent import FunctionCallAgent
 from internal.core.agent.agents.react_agent import ReACTAgent
 from internal.core.agent.entities.agent_entity import DATASET_RETRIEVAL_TOOL_NAME, AgentConfig, MAX_ITERATION_RESPONSE
+from internal.core.agent.entities.tool_policy_entity import ToolPolicy
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
 from internal.core.language_model.entities.model_entity import BaseLanguageModel, ModelFeature
 from internal.entity.conversation_entity import InvokeFrom
@@ -78,12 +79,16 @@ class _FakeQueueManager:
     def __init__(self):
         self.published = []
         self.errors = []
+        self.failures = []
 
     def publish(self, task_id, thought):
         self.published.append((task_id, thought))
 
     def publish_error(self, task_id, error):
         self.errors.append((task_id, error))
+
+    def publish_failure(self, task_id, error, context=""):
+        self.failures.append((task_id, error, context))
 
 
 def _build_agent_config(**overrides):
@@ -94,6 +99,7 @@ def _build_agent_config(**overrides):
         "preset_prompt": "preset",
         "enable_long_term_memory": False,
         "tools": [],
+        "tool_policy": ToolPolicy(),
         "review_config": {
             "enable": False,
             "keywords": [],
@@ -262,9 +268,9 @@ def test_function_call_agent_llm_node_should_handle_message_and_thought_and_erro
 
     assert llm_message.bound_tools == config_message.tools
     assert message_result["iteration_count"] == 1
-    assert message_result["messages"][0].content == "hello world"
+    assert message_result["messages"][0].content == "hello **"
     assert QueueEvent.AGENT_END in events
-    assert any(thought.thought == "**" for _, thought in agent_message.agent_queue_manager.published if thought.event == QueueEvent.AGENT_MESSAGE)
+    assert any("**" in thought.thought for _, thought in agent_message.agent_queue_manager.published if thought.event == QueueEvent.AGENT_MESSAGE)
 
     llm_thought = _NodeLLM(
         features=[],
@@ -281,7 +287,7 @@ def test_function_call_agent_llm_node_should_handle_message_and_thought_and_erro
     agent_error = _new_function_call_agent(llm_error, _build_agent_config())
     with pytest.raises(RuntimeError, match="llm-broken"):
         agent_error._llm_node({"task_id": task_id, "messages": [HumanMessage(content="q")], "iteration_count": 0})
-    assert "LLM节点发生错误" in agent_error.agent_queue_manager.errors[0][1]
+    assert "LLM节点发生错误" in agent_error.agent_queue_manager.failures[0][2]
 
 
 def test_function_call_agent_llm_node_should_cover_none_chunk_and_no_generation_type(monkeypatch):
@@ -308,7 +314,7 @@ def test_function_call_agent_llm_node_should_cover_none_chunk_and_no_generation_
     result_gathered_none = agent_gathered_none._llm_node(
         {"task_id": task_id, "messages": [HumanMessage(content="q")], "iteration_count": 0}
     )
-    assert result_gathered_none["messages"][0].content == "c"
+    assert result_gathered_none["messages"][0].content == "abc"
 
     # 3) 覆盖 generation_type 为空，最终既不进 thought 也不进 message
     llm_no_type = _NodeLLM(
@@ -319,7 +325,9 @@ def test_function_call_agent_llm_node_should_cover_none_chunk_and_no_generation_
     agent_no_type = _new_function_call_agent(llm_no_type, _build_agent_config())
     result_no_type = agent_no_type._llm_node({"task_id": task_id, "messages": [HumanMessage(content="q")], "iteration_count": 0})
     assert result_no_type["messages"][0].content == ""
-    assert agent_no_type.agent_queue_manager.published == []
+    assert len(agent_no_type.agent_queue_manager.published) == 1
+    assert agent_no_type.agent_queue_manager.published[0][1].event == QueueEvent.AGENT_MESSAGE
+    assert agent_no_type.agent_queue_manager.published[0][1].thought == ""
 
 
 def test_function_call_agent_llm_node_should_stop_when_iteration_limit_reached():
@@ -472,8 +480,64 @@ def test_function_call_agent_tools_node_should_resolve_common_agent_aliases():
 
     assert dataset_tool.invocations == [{}]
     assert train_tool.invocations == []
-    assert "请从当前可用工具列表中重新选择" in json.loads(agent.agent_queue_manager.published[-1][1].observation)
-    assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in json.loads(agent.agent_queue_manager.published[-1][1].observation)
+    published_observation = agent.agent_queue_manager.published[-1][1].observation
+    assert "请从当前可用工具列表中重新选择" in published_observation
+    assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in published_observation
+
+
+def test_function_call_agent_tools_node_should_use_configured_tool_policy():
+    class _Tool:
+        def __init__(self, name, result=None, error=None):
+            self.name = name
+            self._result = result
+            self._error = error
+            self.invocations = []
+
+        def invoke(self, args):
+            self.invocations.append(args)
+            if self._error is not None:
+                raise self._error
+            return self._result
+
+    config = _build_agent_config(
+        tools=[
+            _Tool("custom_dataset_tool", result="retrieved"),
+            _Tool("custom_hard_fail_tool", error=RuntimeError("boom")),
+        ],
+        tool_policy=ToolPolicy(
+            dataset_retrieval_tool_name="recall_dataset",
+            hard_fail_tool_names=("custom_hard_fail_tool",),
+            tool_alias_synonyms={"recall_dataset": "custom_dataset_tool"},
+            image_result_tool_names=("custom_image_tool",),
+        ),
+    )
+    agent = _new_function_call_agent(_NodeLLM(features=[]), config)
+    task_id = uuid4()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        agent._tools_node(
+            {
+                "task_id": task_id,
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {"id": "1", "name": "recall_dataset", "args": {}},
+                            {"id": "2", "name": "custom_hard_fail_tool", "args": {}},
+                        ],
+                    )
+                ],
+            }
+        )
+
+    assert config.tools[0].invocations == [{}]
+    assert agent.agent_queue_manager.failures
+    failure_task_id, failure_error, failure_context = agent.agent_queue_manager.failures[-1]
+    assert failure_task_id == task_id
+    assert "custom_hard_fail_tool" in failure_context
+    assert isinstance(failure_error, RuntimeError)
+    first_event = agent.agent_queue_manager.published[0][1]
+    assert first_event.event == QueueEvent.DATASET_RETRIEVAL
 
 
 def test_function_call_agent_tools_node_should_refeed_available_tools_when_12306_alias_mismatches():
@@ -506,7 +570,7 @@ def test_function_call_agent_tools_node_should_refeed_available_tools_when_12306
     )
 
     assert train_tool.invocations == []
-    published_observation = json.loads(agent.agent_queue_manager.published[-1][1].observation)
+    published_observation = agent.agent_queue_manager.published[-1][1].observation
     assert "请从当前可用工具列表中重新选择" in published_observation
     assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in published_observation
 
@@ -541,7 +605,7 @@ def test_function_call_agent_tools_node_should_refeed_available_tools_when_gener
     )
 
     assert train_tool.invocations == []
-    published_observation = json.loads(agent.agent_queue_manager.published[-1][1].observation)
+    published_observation = agent.agent_queue_manager.published[-1][1].observation
     assert "请从当前可用工具列表中重新选择" in published_observation
     assert "mcp__12306-mcp__12306_mcp_query_ticket_price" in published_observation
 

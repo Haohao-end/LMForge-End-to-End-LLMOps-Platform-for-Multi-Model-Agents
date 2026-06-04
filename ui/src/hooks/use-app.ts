@@ -29,6 +29,7 @@ import {
   unshareAppFromSquare,
 } from '@/services/app'
 import { Message, Modal } from '@arco-design/web-vue'
+import { mergeChatHistoryMessages } from '@/views/shared/chat-stream'
 import type {
   AppVersion,
   CreateAppRequest,
@@ -458,7 +459,10 @@ export const useDeleteDebugConversation = () => {
 export const useGetDebugConversationMessagesWithPage = () => {
   // 1.定义hooks所需数据
   const loading = ref(false)
-  const messages = ref<GetDebugConversationMessagesWithPageResponse['data']['list']>([])
+  type DebugConversationMessage = GetDebugConversationMessagesWithPageResponse['data']['list'][number] & {
+    render_id: string
+  }
+  const messages = ref<DebugConversationMessage[]>([])
   const created_at = ref(0)
   const defaultPaginator = {
     current_page: 1,
@@ -503,10 +507,14 @@ export const useGetDebugConversationMessagesWithPage = () => {
 
       // 2.5 追加或者覆盖数据
       if (init) {
-        messages.value = data.list
+        messages.value = mergeChatHistoryMessages(data.list, 'debug-conversation-history')
+        // Keep a stable snapshot cursor so later page loads continue the same slice.
+        created_at.value = messages.value[0]?.created_at ?? 0
       } else {
-        messages.value.push(...data.list)
-        created_at.value = data.list[0]?.created_at ?? 0
+        messages.value = mergeChatHistoryMessages(
+          [...messages.value, ...data.list],
+          'debug-conversation-history',
+        )
       }
     } finally {
       loading.value = false

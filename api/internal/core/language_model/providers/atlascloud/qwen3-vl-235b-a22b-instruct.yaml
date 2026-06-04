@@ -1,0 +1,28 @@
+model: qwen3-vl-235b-a22b-instruct
+label: Qwen/Qwen3-VL-235B-A22B-Instruct
+model_type: chat
+features:
+- tool_call
+- agent_thought
+- image_input
+context_window: 131072
+max_output_tokens: 32768
+attributes:
+  model: Qwen/Qwen3-VL-235B-A22B-Instruct
+parameters:
+- name: temperature
+  use_template: temperature
+  default: 0.7
+- name: top_p
+  use_template: top_p
+  default: 1
+- name: max_tokens
+  use_template: max_tokens
+  default: 4096
+  max: 32768
+metadata:
+  pricing:
+    input: 0.3
+    output: 1.5
+    unit: 0.001
+    currency: RMB

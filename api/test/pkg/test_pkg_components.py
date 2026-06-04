@@ -253,7 +253,20 @@ class TestPaginatorPasswordResponseAndDB:
 
             stream_response = compact_generate_response((chunk for chunk in ["a", "b"]))
             assert stream_response.mimetype == "text/event-stream"
+            assert stream_response.headers["Cache-Control"] == "no-cache"
+            assert stream_response.headers["Connection"] == "keep-alive"
+            assert stream_response.headers["X-Accel-Buffering"] == "no"
             assert stream_response.get_data(as_text=True) == "ab"
+
+            def _failing_stream():
+                yield "event: ping\ndata:{}\n\n"
+                raise TimeoutError("gateway timed out")
+
+            failing_response = compact_generate_response(_failing_stream())
+            failing_body = failing_response.get_data(as_text=True)
+            assert "event: timeout" in failing_body
+            assert "流式响应执行失败" in failing_body
+            assert "gateway timed out" in failing_body
 
     def test_sqlalchemy_auto_commit_should_commit_and_rollback(self, monkeypatch):
         app = Flask(__name__)

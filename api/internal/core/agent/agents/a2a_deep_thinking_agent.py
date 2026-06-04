@@ -80,11 +80,12 @@ class A2ADeepThinkingAgent(DeepThinkingAgent):
                     buffered_text_chunks.append(self._apply_output_review(content))
         except Exception as e:
             logging.exception("A2A 深度思考 LLM 节点发生错误: %s", e)
-            self.agent_queue_manager.publish_error(
+            self.agent_queue_manager.publish_failure(
                 state["task_id"],
-                f"LLM节点发生错误, 错误信息: {str(e)}",
+                e,
+                context="LLM节点发生错误",
             )
-            raise e
+            raise
 
         if gathered is None:
             return {

@@ -136,12 +136,22 @@ watch(
   { immediate: true },
 )
 
-onMounted(async () => await loadApp())
+onMounted(async () => await loadApp())
+
+watch(
+  () => route.params?.app_id,
+  async (newValue, oldValue) => {
+    const newAppId = String(newValue ?? '').trim()
+    const oldAppId = String(oldValue ?? '').trim()
+    if (!newAppId || newAppId === oldAppId) return
+    await loadApp()
+  },
+)
 </script>
 
 <template>
   <!-- 外层容器 -->
-  <div class="min-h-screen flex flex-col h-full overflow-hidden">
+  <div class="flex flex-1 min-h-0 w-full flex-col overflow-hidden">
     <!-- 顶部导航 -->
     <div
       class="h-[77px] flex-shrink-0 bg-gray-50 p-4 flex items-center justify-between relative border-b"
@@ -217,8 +227,8 @@ onMounted(async () => await loadApp())
       </div>
     </div>
     <!-- 底部内容区 -->
-    <div class="flex-1 min-h-0">
-      <router-view :app="app" />
+    <div class="flex min-h-0 flex-1 overflow-hidden">
+      <router-view :key="String(route.params?.app_id ?? '')" :app="app" />
     </div>
   </div>
 </template>

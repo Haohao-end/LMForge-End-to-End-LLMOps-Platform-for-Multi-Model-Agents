@@ -1,5 +1,6 @@
 # 使用 Debian12 的 Python3.11 版本作为基础镜像
-FROM python:3.11-slim-bookworm AS base
+ARG PYTHON_IMAGE=python:3.11-slim-bookworm
+FROM ${PYTHON_IMAGE} AS base
 
 # 设置 shell 为 bash（可选）
 SHELL ["/bin/bash", "-c"]

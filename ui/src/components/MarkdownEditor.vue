@@ -11,12 +11,14 @@ const props = defineProps({
   maxLength: { type: Number, default: 5000 },
   minHeight: { type: String, default: '200px' },
   showToolbar: { type: Boolean, default: true },
+  toolbarVariant: { type: String as () => 'full' | 'compact', default: 'full' },
   defaultMode: { type: String as () => 'edit' | 'preview' | 'split', default: 'edit' },
 })
 
 const emits = defineEmits(['update:modelValue', 'blur'])
 const { t } = useI18n()
 const resolvedPlaceholder = computed(() => props.placeholder || t('chat.markdown.placeholder'))
+const isCompactToolbar = computed(() => props.toolbarVariant === 'compact')
 
 // 编辑模式: edit(编辑), preview(预览), split(分屏)
 const mode = ref<'edit' | 'preview' | 'split'>(props.defaultMode)
@@ -208,77 +210,129 @@ const handleMarkdownClick = async (event: MouseEvent) => {
     <div v-if="props.showToolbar" class="editor-toolbar">
       <div class="editor-toolbar-group">
         <a-space :size="4">
-        <!-- 标题 -->
-        <a-dropdown trigger="hover" position="bottom">
-          <a-button size="mini" class="toolbar-btn">
-            <template #icon>
-              <icon-font-colors />
-            </template>
-          </a-button>
-          <template #content>
-            <a-doption @click="insertMarkdown('h1')">
-              <span class="text-2xl font-bold">H1</span>
-            </a-doption>
-            <a-doption @click="insertMarkdown('h2')">
-              <span class="text-xl font-bold">H2</span>
-            </a-doption>
-            <a-doption @click="insertMarkdown('h3')">
-              <span class="text-lg font-bold">H3</span>
-            </a-doption>
-          </template>
-        </a-dropdown>
+          <template v-if="isCompactToolbar">
+            <a-button size="mini" class="toolbar-btn toolbar-text-btn" @click="insertMarkdown('h1')">
+              H1
+            </a-button>
+            <a-button size="mini" class="toolbar-btn toolbar-text-btn" @click="insertMarkdown('h2')">
+              H2
+            </a-button>
+            <a-button size="mini" class="toolbar-btn toolbar-text-btn" @click="insertMarkdown('h3')">
+              H3
+            </a-button>
 
-        <a-divider direction="vertical" class="!my-0" />
+            <a-divider direction="vertical" class="!my-0" />
 
-        <!-- 文本样式 -->
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('bold')">
-          <template #icon>
-            <icon-bold />
-          </template>
-        </a-button>
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('italic')">
-          <template #icon>
-            <icon-italic />
-          </template>
-        </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('bold')">
+              <template #icon>
+                <icon-bold />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('italic')">
+              <template #icon>
+                <icon-italic />
+              </template>
+            </a-button>
 
-        <a-divider direction="vertical" class="!my-0" />
+            <a-divider direction="vertical" class="!my-0" />
 
-        <!-- 列表 -->
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ul')">
-          <template #icon>
-            <icon-unordered-list />
-          </template>
-        </a-button>
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ol')">
-          <template #icon>
-            <icon-ordered-list />
-          </template>
-        </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ul')">
+              <template #icon>
+                <icon-unordered-list />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ol')">
+              <template #icon>
+                <icon-ordered-list />
+              </template>
+            </a-button>
 
-        <a-divider direction="vertical" class="!my-0" />
+            <a-divider direction="vertical" class="!my-0" />
 
-        <!-- 其他 -->
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('quote')">
-          <template #icon>
-            <icon-quote />
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('code')">
+              <template #icon>
+                <icon-code />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('link')">
+              <template #icon>
+                <icon-link />
+              </template>
+            </a-button>
           </template>
-        </a-button>
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('code')">
-          <template #icon>
-            <icon-code />
+          <template v-else>
+            <!-- 标题 -->
+            <a-dropdown trigger="hover" position="bottom">
+              <a-button size="mini" class="toolbar-btn">
+                <template #icon>
+                  <icon-font-colors />
+                </template>
+              </a-button>
+              <template #content>
+                <a-doption @click="insertMarkdown('h1')">
+                  <span class="text-2xl font-bold">H1</span>
+                </a-doption>
+                <a-doption @click="insertMarkdown('h2')">
+                  <span class="text-xl font-bold">H2</span>
+                </a-doption>
+                <a-doption @click="insertMarkdown('h3')">
+                  <span class="text-lg font-bold">H3</span>
+                </a-doption>
+              </template>
+            </a-dropdown>
+
+            <a-divider direction="vertical" class="!my-0" />
+
+            <!-- 文本样式 -->
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('bold')">
+              <template #icon>
+                <icon-bold />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('italic')">
+              <template #icon>
+                <icon-italic />
+              </template>
+            </a-button>
+
+            <a-divider direction="vertical" class="!my-0" />
+
+            <!-- 列表 -->
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ul')">
+              <template #icon>
+                <icon-unordered-list />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ol')">
+              <template #icon>
+                <icon-ordered-list />
+              </template>
+            </a-button>
+
+            <a-divider direction="vertical" class="!my-0" />
+
+            <!-- 其他 -->
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('quote')">
+              <template #icon>
+                <icon-quote />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('code')">
+              <template #icon>
+                <icon-code />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('codeblock')">
+              <template #icon>
+                <icon-code-block />
+              </template>
+            </a-button>
+            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('link')">
+              <template #icon>
+                <icon-link />
+              </template>
+            </a-button>
           </template>
-        </a-button>
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('codeblock')">
-          <template #icon>
-            <icon-code-block />
-          </template>
-        </a-button>
-        <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('link')">
-          <template #icon>
-            <icon-link />
-          </template>
-        </a-button>
         </a-space>
       </div>
 
@@ -369,6 +423,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   overflow: hidden;
   background: #fff;
   height: 100%; /* 关键：占满父容器高度 */
+  min-width: 0;
 }
 
 .editor-toolbar {
@@ -410,6 +465,14 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   background: #e5e7eb;
 }
 
+.toolbar-text-btn {
+  min-width: 36px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 .editor-body {
   display: flex;
   flex: 1;
@@ -419,8 +482,9 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 
 .editor-body.split-mode {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  min-height: max(600px, var(--editor-min-height, 200px));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* Split mode should still be sized by the parent container.
+     A hard 600px floor clips the preview in shorter layouts. */
 }
 
 .editor-pane {
@@ -430,6 +494,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   position: relative;
   overflow: hidden;
   min-height: 0; /* 关键：允许 flex 子元素正确计算高度 */
+  min-width: 0;
 }
 
 .split-mode .editor-pane {
@@ -479,9 +544,10 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 
 .preview-pane {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   background: #fff;
   min-height: 0; /* 关键：允许 flex 子元素正确计算高度 */
+  min-width: 0;
   scroll-behavior: auto; /* 禁用平滑滚动，避免抖动 */
   will-change: scroll-position; /* 提示浏览器优化滚动性能 */
   transform: translateZ(0); /* 启用硬件加速 */

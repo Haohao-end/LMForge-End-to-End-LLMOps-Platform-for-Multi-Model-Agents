@@ -3,6 +3,7 @@ import type {
   GetConversationMessagesWithPageResponse,
   GetRecentConversationsResponse,
 } from '@/models/conversation'
+import { mergeChatHistoryMessages } from '@/views/shared/chat-stream'
 import {
   deleteConversation,
   deleteMessage,
@@ -16,7 +17,10 @@ import { Message, Modal } from '@arco-design/web-vue'
 export const useGetConversationMessagesWithPage = () => {
   // 1.定义hooks所需数据
   const loading = ref(false)
-  const messages = ref<GetConversationMessagesWithPageResponse['data']['list']>([])
+  type ConversationMessage = GetConversationMessagesWithPageResponse['data']['list'][number] & {
+    render_id: string
+  }
+  const messages = ref<ConversationMessage[]>([])
   const created_at = ref(0)
   const defaultPaginator = {
     current_page: 1,
@@ -59,10 +63,14 @@ export const useGetConversationMessagesWithPage = () => {
 
       // 2.5 追加或者覆盖数据
       if (init) {
-        messages.value = data.list
+        messages.value = mergeChatHistoryMessages(data.list, 'conversation-history')
+        // Keep a stable snapshot cursor so later page loads continue the same slice.
+        created_at.value = messages.value[0]?.created_at ?? 0
       } else {
-        messages.value.push(...data.list)
-        created_at.value = data.list[0]?.created_at ?? 0
+        messages.value = mergeChatHistoryMessages(
+          [...messages.value, ...data.list],
+          'conversation-history',
+        )
       }
     } finally {
       loading.value = false

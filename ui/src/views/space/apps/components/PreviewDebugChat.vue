@@ -26,9 +26,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import {
   applyChatStreamEvent,
+  withChatRenderId,
   type StreamMessage,
   type StreamState,
 } from '@/views/shared/chat-stream'
+import {
+  CHAT_MESSAGE_MIN_ITEM_SIZE,
+  buildChatMessageSizeDependencies,
+} from '@/views/shared/chat-message-size'
 import { normalizeMessageMetrics, type MessageMetrics } from '@/views/shared/chat-metrics'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
@@ -106,11 +111,15 @@ const task_id = ref('')
 type ScrollerLike = {
   $el?: HTMLElement
   scrollToBottom?: () => void
+  scrollToItem?: (index: number) => void
+  forceUpdate?: (clear?: boolean) => void
 }
 const scroller = ref<ScrollerLike | null>(null)
 const scrollHeight = ref(0)
 const shouldAutoScrollToBottom = ref(true)
 const isStreamingResponse = ref(false)
+const isRouteMessageFocusActive = ref(false)
+const routeMessageFocusRequestId = ref(0)
 const selectedConversationId = ref(String(route.query.conversation_id || '').trim())
 const enableDeepThinking = ref(false)
 const accountStore = useAccountStore()
@@ -121,6 +130,7 @@ const {
 const {
   loading: getDebugConversationMessagesWithPageLoading,
   messages,
+  paginator,
   loadDebugConversationMessages,
 } = useGetDebugConversationMessagesWithPage()
 const { loading: debugChatLoading, handleDebugChat } = useDebugChat()
@@ -188,26 +198,154 @@ const loadConversationMessages = async (init: boolean = false) => {
   )
 }
 
-const scrollToMessage = (targetMessageId: string) => {
+const getRenderedMessageIndex = (targetMessageId: string) => {
   const normalizedMessageId = normalizeMessageId(targetMessageId)
-  if (!normalizedMessageId) return
+  if (!normalizedMessageId) return -1
 
-  nextTick(() => {
-    const scrollerElement = scroller.value?.$el as HTMLElement | undefined
-    if (!scrollerElement) return
-    const targetElement = scrollerElement.querySelector(
-      `[data-index="${normalizedMessageId}"]`,
-    ) as HTMLElement | null
-    if (!targetElement) return
-    targetElement.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' })
+  return messages.value
+    .slice()
+    .reverse()
+    .findIndex((item) => normalizeMessageId(item.id) === normalizedMessageId)
+}
+
+const waitForAnimationFrame = async () => {
+  if (typeof requestAnimationFrame !== 'function') {
+    return
+  }
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve())
   })
 }
 
-const focusRouteMessageIfNeeded = () => {
+const waitForScrollerLayout = async () => {
+  await nextTick()
+  await waitForAnimationFrame()
+  await nextTick()
+  await waitForAnimationFrame()
+}
+
+const scrollToMessage = async (targetMessageId: string) => {
+  const normalizedMessageId = normalizeMessageId(targetMessageId)
+  if (!normalizedMessageId) return false
+
+  const targetIndex = getRenderedMessageIndex(normalizedMessageId)
+  if (targetIndex < 0) return false
+
+  const resolveTargetElement = () => {
+    const scrollerElement = scroller.value?.$el as HTMLElement | undefined
+    if (!scrollerElement) return null
+
+    const targetElements = Array.from(
+      scrollerElement.querySelectorAll(`[data-index="${normalizedMessageId}"]`),
+    ) as HTMLElement[]
+
+    return (
+      targetElements.find((element) => {
+        const itemView = element.closest('.vue-recycle-scroller__item-view') as HTMLElement | null
+        if (!itemView) return false
+
+        const transform = String(itemView.style.transform ?? '')
+        if (transform.includes('-9999')) {
+          return false
+        }
+
+        const itemRect = itemView.getBoundingClientRect()
+        const scrollerRect = scrollerElement.getBoundingClientRect()
+        const hasMeasurableLayout =
+          itemRect.width > 0 ||
+          itemRect.height > 0 ||
+          scrollerRect.width > 0 ||
+          scrollerRect.height > 0
+
+        if (!hasMeasurableLayout) {
+          return true
+        }
+
+        return (
+          itemRect.bottom > scrollerRect.top &&
+          itemRect.top < scrollerRect.bottom &&
+          itemRect.right > scrollerRect.left &&
+          itemRect.left < scrollerRect.right
+        )
+      }) ?? null
+    )
+  }
+
+  const performScroll = async (attempt: number) => {
+    if (attempt > 0 && typeof scroller.value?.forceUpdate === 'function') {
+      scroller.value.forceUpdate()
+    }
+    if (typeof scroller.value?.scrollToItem === 'function') {
+      scroller.value.scrollToItem(targetIndex)
+    }
+    await waitForScrollerLayout()
+    return resolveTargetElement()
+  }
+
+  let targetElement: HTMLElement | null = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    targetElement = await performScroll(attempt)
+    if (targetElement) {
+      return true
+    }
+  }
+
+  return false
+}
+
+const focusRouteMessageIfNeeded = async () => {
   const targetMessageId = normalizeMessageId(route.query.message_id)
   if (!targetMessageId) return false
-  scrollToMessage(targetMessageId)
-  return true
+
+  const targetConversationId = normalizeConversationId(
+    route.query.conversation_id || selectedConversationId.value,
+  )
+  if (!targetConversationId) return false
+
+  const focusRequestId = routeMessageFocusRequestId.value + 1
+  routeMessageFocusRequestId.value = focusRequestId
+  isRouteMessageFocusActive.value = true
+
+  const isFocusRequestStillValid = () => {
+    return (
+      routeMessageFocusRequestId.value === focusRequestId &&
+      normalizeConversationId(route.query.conversation_id) === targetConversationId &&
+      normalizeConversationId(selectedConversationId.value) === targetConversationId &&
+      normalizeMessageId(route.query.message_id) === targetMessageId
+    )
+  }
+
+  try {
+    if (getRenderedMessageIndex(targetMessageId) >= 0 && (await scrollToMessage(targetMessageId))) {
+      return true
+    }
+
+    while (isFocusRequestStillValid() && paginator.value.current_page <= paginator.value.total_page) {
+      const beforePage = paginator.value.current_page
+      await loadConversationMessages(false)
+
+      if (!isFocusRequestStillValid()) {
+        return false
+      }
+
+      if (await scrollToMessage(targetMessageId)) {
+        return true
+      }
+
+      if (paginator.value.current_page === beforePage) {
+        break
+      }
+    }
+
+    return false
+  } catch {
+    return false
+  } finally {
+    if (routeMessageFocusRequestId.value === focusRequestId) {
+      isRouteMessageFocusActive.value = false
+    }
+  }
 }
 
 const handleQueryKeydown = (event: KeyboardEvent) => {
@@ -313,10 +451,12 @@ const handleScroll = async (event: UIEvent) => {
   if (
     scrollTop <= 0 &&
     !isStreamingResponse.value &&
+    !isRouteMessageFocusActive.value &&
     !getDebugConversationMessagesWithPageLoading.value
   ) {
     saveScrollHeight()
     await loadConversationMessages(false)
+    await nextTick()
     restoreScrollPosition()
   }
 }
@@ -351,11 +491,12 @@ const handleSubmit = async () => {
   stopAudioStream()
 
   // 5.4 往消息列表中添加基础人类消息
-  messages.value.unshift({
+  messages.value.unshift(withChatRenderId({
     id: '',
     conversation_id: '',
     query: query.value,
     image_urls: image_urls.value,
+    input_parts: [],
     answer: '',
     answer_parts: [],
     artifacts: [],
@@ -364,7 +505,7 @@ const handleSubmit = async () => {
     agent_thoughts: [],
     created_at: 0,
     suggested_questions: [],
-  } as (typeof messages.value)[number])
+  }, 'space-app-debug'))
   await nextTick(() => {
     startAutoScrollTicker()
     scrollChatToBottom()
@@ -511,15 +652,13 @@ onMounted(async () => {
   restoreSpaceAppDebugQueryDraft()
   selectedConversationId.value = normalizeConversationId(route.query.conversation_id)
   await loadConversationMessages(true)
-  const hasFocusedTargetMessage = focusRouteMessageIfNeeded()
-
-  await nextTick(() => {
-    // 指定了message_id时优先定位上下文，否则默认滚动到底部
-    if (!hasFocusedTargetMessage) {
-      scrollChatToBottom()
-    }
-    adjustQueryTextareaHeight()
-  })
+  const hasFocusedTargetMessage = await focusRouteMessageIfNeeded()
+  await nextTick()
+  // 指定了message_id时优先定位上下文，否则默认滚动到底部
+  if (!hasFocusedTargetMessage) {
+    scrollChatToBottom()
+  }
+  adjustQueryTextareaHeight()
 })
 
 watch(
@@ -532,7 +671,8 @@ watch(
 
     selectedConversationId.value = newConversationId
     await loadConversationMessages(true)
-    if (!focusRouteMessageIfNeeded()) {
+    const hasFocusedTargetMessage = await focusRouteMessageIfNeeded()
+    if (!hasFocusedTargetMessage) {
       await nextTick(() => scrollChatToBottom())
     }
   },
@@ -544,7 +684,7 @@ watch(
     const newMessageId = normalizeMessageId(newValue)
     const oldMessageId = normalizeMessageId(oldValue)
     if (!newMessageId || newMessageId === oldMessageId) return
-    scrollToMessage(newMessageId)
+    void focusRouteMessageIfNeeded()
   },
 )
 
@@ -584,13 +724,25 @@ onUnmounted(() => {
           <dynamic-scroller
             ref="scroller"
             :items="messages.slice().reverse()"
-            :min-item-size="1"
+            :min-item-size="CHAT_MESSAGE_MIN_ITEM_SIZE"
+            key-field="render_id"
             @scroll="handleScroll"
             @wheel.passive="handleScrollerWheel"
             class="flex-1 min-h-0 overflow-y-auto scrollbar-w-none"
           >
             <template v-slot="{ item, active }">
-              <dynamic-scroller-item :item="item" :active="active" :data-index="item.id">
+              <dynamic-scroller-item
+                :key="item.render_id"
+                :item="item"
+                :active="active"
+                :data-index="item.id"
+                :size-dependencies="
+                  buildChatMessageSizeDependencies(
+                    item,
+                    item.id === message_id && debugChatLoading,
+                  )
+                "
+              >
                 <div class="flex flex-col gap-6 py-6">
                   <human-message
                     data-scroll-item

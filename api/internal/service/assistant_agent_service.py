@@ -4,6 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Lock
 from typing import Any, Generator
 from uuid import UUID
 
@@ -258,6 +259,7 @@ class AssistantAgentService(BaseService):
                 enable_long_term_memory=True,
                 enable_deep_thinking=bool(req.enable_deep_thinking.data),
                 runtime_flask_app=current_app._get_current_object(),
+                language_model_service=self.language_model_service,
                 tools=tools,
             ),
         )
@@ -537,7 +539,7 @@ class AssistantAgentService(BaseService):
         paginated_ids = paginator.paginate(
             self.db.session.query(Message.id)
             .filter(*filters)
-            .order_by(desc(Message.created_at))
+            .order_by(desc(Message.created_at), desc(Message.id))
         )
 
         # 5. 加载完整的消息及其关联数据，避免 N+1 查询
@@ -557,7 +559,7 @@ class AssistantAgentService(BaseService):
             self.db.session.query(Message)
             .options(selectinload(Message.agent_thoughts))
             .filter(Message.id.in_(id_list))
-            .order_by(desc(Message.created_at))
+            .order_by(desc(Message.created_at), desc(Message.id))
             .all()
         )
 

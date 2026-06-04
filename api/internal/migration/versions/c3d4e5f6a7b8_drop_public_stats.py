@@ -15,26 +15,39 @@ branch_labels = None
 depends_on = None
 
 
+def _drop_table_if_exists(table_name: str) -> None:
+    op.drop_table(table_name, if_exists=True)
+
+
+def _drop_index_if_exists(index_name: str, table_name: str) -> None:
+    op.drop_index(index_name, table_name=table_name, if_exists=True)
+
+
+def _drop_columns_if_exist(table_name: str, *column_names: str) -> None:
+    inspector = sa.inspect(op.get_bind())
+    if not inspector.has_table(table_name):
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+    for column_name in column_names:
+        if column_name in existing_columns:
+            op.drop_column(table_name, column_name)
+
+
 def upgrade():
     # 1. 删除公开统计关联表
-    op.drop_table('workflow_favorite')
-    op.drop_table('workflow_like')
-    op.drop_table('app_favorite')
-    op.drop_table('app_like')
+    _drop_table_if_exists('workflow_favorite')
+    _drop_table_if_exists('workflow_like')
+    _drop_table_if_exists('app_favorite')
+    _drop_table_if_exists('app_like')
 
     # 2. 删除 workflow 表上的统计列和统计索引
-    with op.batch_alter_table('workflow', schema=None) as batch_op:
-        batch_op.drop_index('workflow_like_count_idx')
-        batch_op.drop_column('fork_count')
-        batch_op.drop_column('like_count')
-        batch_op.drop_column('view_count')
+    _drop_index_if_exists('workflow_like_count_idx', 'workflow')
+    _drop_columns_if_exist('workflow', 'fork_count', 'like_count', 'view_count')
 
     # 3. 删除 app 表上的统计列和统计索引
-    with op.batch_alter_table('app', schema=None) as batch_op:
-        batch_op.drop_index('app_like_count_idx')
-        batch_op.drop_column('fork_count')
-        batch_op.drop_column('like_count')
-        batch_op.drop_column('view_count')
+    _drop_index_if_exists('app_like_count_idx', 'app')
+    _drop_columns_if_exist('app', 'fork_count', 'like_count', 'view_count')
 
 
 def downgrade():

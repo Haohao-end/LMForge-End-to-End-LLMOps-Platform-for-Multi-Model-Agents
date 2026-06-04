@@ -23,7 +23,7 @@ from internal.entity.platform_entity import WechatConfigStatus
 from internal.exception import FailException
 from internal.model import App, WechatEndUser, EndUser, Message, WechatMessage, Conversation
 from pkg.sqlalchemy import SQLAlchemy
-from .app_config_service import AppConfigService
+from .app_config_service import AppConfigService, call_config_loader
 from .app_service import AppService
 from .base_service import BaseService
 from .conversation_service import ConversationService
@@ -224,6 +224,7 @@ class WechatService(BaseService):
                     invoke_from=InvokeFrom.DEBUGGER,
                     preset_prompt=app_config["preset_prompt"],
                     enable_long_term_memory=app_config["long_term_memory"]["enable"],
+                    language_model_service=self.language_model_service,
                     tools=tools,
                     review_config=app_config["review_config"],
                 ),

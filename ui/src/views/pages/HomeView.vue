@@ -50,6 +50,7 @@ import {
 import { isCredentialLoggedIn } from '@/utils/auth'
 import {
   applyChatStreamEvent,
+  withChatRenderId,
   type StreamMessage,
   type StreamState,
 } from '@/views/shared/chat-stream'
@@ -1062,20 +1063,26 @@ const handleSubmit = async () => {
   stopAudioStream()
 
   // 5.4 往消息列表中添加基础人类消息
-  messages.value.unshift({
-    id: '',
-    conversation_id: '',
-    query: query.value,
-    image_urls: image_urls.value,
-    answer: '',
-    answer_parts: [],
-    artifacts: [],
-    total_token_count: 0,
-    latency: 0,
-    agent_thoughts: [],
-    suggested_questions: [],
-    created_at: 0,
-  })
+  messages.value.unshift(
+    withChatRenderId(
+      {
+        id: '',
+        conversation_id: '',
+        query: query.value,
+        image_urls: image_urls.value,
+        input_parts: [],
+        answer: '',
+        answer_parts: [],
+        artifacts: [],
+        total_token_count: 0,
+        latency: 0,
+        agent_thoughts: [],
+        suggested_questions: [],
+        created_at: 0,
+      },
+      'home-assistant-message',
+    ),
+  )
   await nextTick(() => {
     startAutoScrollTicker()
     startAutoScrollObserver()
@@ -1345,7 +1352,7 @@ onUnmounted(() => {
         >
           <div
             v-for="item in messages.slice().reverse()"
-            :key="item.id || item.created_at"
+            :key="item.render_id || item.id || item.created_at"
             class="flex flex-col gap-6 py-6"
           >
             <div data-human-message-anchor="true">

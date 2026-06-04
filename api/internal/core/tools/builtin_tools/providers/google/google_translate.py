@@ -22,7 +22,7 @@ def _translate_text(text: str, target_lang: str = "zh-CN", source_lang: str = "a
 
         return f"原文：{text}\n译文：{result.text}\n源语言：{result.src}\n目标语言：{result.dest}"
     except ImportError:
-        return "Google翻译功能需要安装googletrans库：pip install googletrans==3.1.0a0"
+        return "Google翻译功能需要安装googletrans库：pip install googletrans==4.0.2"
     except Exception as e:
         return f"翻译失败：{str(e)}"
 

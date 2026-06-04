@@ -54,23 +54,23 @@ watch(
 </script>
 
 <template>
-  <div class="w-full h-[calc(100vh-77px)] min-h-0 bg-white overflow-hidden">
-    <div class="grid min-h-0 grid-cols-[minmax(0,26fr)_minmax(0,14fr)] h-full w-full overflow-hidden">
-      <div class="bg-gray-50 flex flex-col h-full min-w-0 overflow-hidden">
+  <div class="flex flex-1 min-h-0 w-full flex-col bg-white overflow-hidden">
+    <div class="grid flex-1 min-h-0 grid-cols-[minmax(0,26fr)_minmax(0,14fr)] w-full overflow-hidden">
+      <div class="bg-gray-50 flex min-h-0 flex-col min-w-0 overflow-hidden">
         <div class="flex items-center h-16 border-b p-4 gap-4">
           <div class="text-lg text-gray-700">{{ t('publicApps.preview.appConfig') }}</div>
           <model-config-readonly
             :model_config="draftAppConfigForm.model_config"
           />
         </div>
-        <div class="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden h-[calc(100vh-141px)]">
+        <div class="grid flex-1 min-h-0 grid-cols-[minmax(0,13fr)_minmax(0,12fr)] overflow-hidden">
           <div class="border-r py-4 min-w-0 overflow-hidden">
             <preset-prompt-textarea-readonly :preset_prompt="draftAppConfigForm.preset_prompt" />
           </div>
           <agent-app-ability-readonly class="min-w-0" :draft_app_config="draftAppConfigForm" />
         </div>
       </div>
-      <div class="min-w-[404px] h-full min-h-0 flex flex-col overflow-hidden">
+      <div class="min-w-[404px] flex min-h-0 flex-col overflow-hidden">
         <div class="flex items-center justify-between border-b h-[64px] px-4">
           <div class="text-lg text-gray-700">{{ t('publicApps.preview.previewAndDebug') }}</div>
           <a-button size="mini" type="text" class="rounded-lg px-1 !text-blue-700" disabled>

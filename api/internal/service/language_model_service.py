@@ -1,16 +1,384 @@
+import logging
 import os
 import mimetypes
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Any
 from copy import deepcopy
 from flask import current_app, has_app_context
 from injector import inject, provider
+import httpx
+from pydantic import PrivateAttr
 from internal.core.language_model import LanguageModelManager
 from internal.core.language_model.entities.model_entity import BaseLanguageModel, ModelFeature
 from internal.exception import NotFoundException, ValidateErrorException
 from internal.lib.helper import convert_model_to_dict
 from pkg.sqlalchemy import SQLAlchemy
 from .base_service import BaseService
+
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_RUNTIME_FALLBACK_MODEL_CONFIG = {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+}
+_RUNTIME_FALLBACK_SOFT_TIMEOUT_SECONDS = 30.0
+_RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+_RETRYABLE_EXCEPTION_NAME_PARTS = (
+    "Timeout",
+    "ConnectionError",
+    "ConnectError",
+    "TransportError",
+    "NetworkError",
+    "RemoteProtocolError",
+    "ReadError",
+    "WriteError",
+    "PoolTimeout",
+    "InternalServerError",
+    "RateLimitError",
+    "ServiceUnavailableError",
+    "GatewayTimeout",
+    "ServerDisconnectedError",
+    "APIConnectionError",
+    "APITimeoutError",
+)
+_NON_RETRYABLE_EXCEPTION_NAME_PARTS = (
+    "BadRequestError",
+    "AuthenticationError",
+    "PermissionDeniedError",
+    "NotFoundError",
+    "ValidationError",
+    "OutputParserException",
+    "JSONDecodeError",
+    "ValueError",
+    "TypeError",
+)
+
+
+def _normalize_model_ref(model_config: dict[str, Any] | None) -> dict[str, str]:
+    """提取 provider/model 用于比较模型引用。"""
+    normalized_model_config = deepcopy(model_config or {})
+    return {
+        "provider": str(normalized_model_config.get("provider", "")).strip(),
+        "model": str(normalized_model_config.get("model", "")).strip(),
+    }
+
+
+def _extract_status_code(exc: Exception) -> int | None:
+    """尽量提取运行时错误的状态码。"""
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        response_status_code = getattr(response, "status_code", None)
+        if isinstance(response_status_code, int):
+            return response_status_code
+
+    return None
+
+
+def _is_retryable_runtime_error(exc: Exception) -> bool:
+    """判断 LLM 运行时错误是否允许切换到文本兜底模型。"""
+    retryable = getattr(exc, "retryable", None)
+    if isinstance(retryable, bool):
+        return retryable
+
+    status_code = _extract_status_code(exc)
+    if status_code is not None:
+        if status_code in _RETRYABLE_STATUS_CODES:
+            return True
+        if 400 <= status_code < 500:
+            return False
+
+    exception_name = type(exc).__name__
+    if any(part in exception_name for part in _NON_RETRYABLE_EXCEPTION_NAME_PARTS):
+        return False
+    if any(part in exception_name for part in _RETRYABLE_EXCEPTION_NAME_PARTS):
+        return True
+
+    return isinstance(exc, TimeoutError) or isinstance(exc, httpx.TimeoutException)
+
+
+def _contains_image_input(value: Any, _visited: set[int] | None = None) -> bool:
+    """递归判断输入中是否包含图片输入。"""
+    if value is None:
+        return False
+
+    if _visited is None:
+        _visited = set()
+
+    value_id = id(value)
+    if value_id in _visited:
+        return False
+    _visited.add(value_id)
+
+    if isinstance(value, str):
+        normalized_value = value.lower()
+        return "data:image/" in normalized_value
+
+    if isinstance(value, dict):
+        type_value = str(value.get("type", "")).strip().lower()
+        if type_value in {"image", "image_url"}:
+            return True
+
+        nested_image_url = value.get("image_url")
+        if isinstance(nested_image_url, dict):
+            if _contains_image_input(nested_image_url, _visited):
+                return True
+            if nested_image_url.get("url"):
+                return True
+        elif isinstance(nested_image_url, str) and nested_image_url.strip():
+            return True
+
+        if isinstance(value.get("url"), str) and type_value in {"image", "image_url"}:
+            return True
+
+        return any(_contains_image_input(item, _visited) for item in value.values())
+
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return any(_contains_image_input(item, _visited) for item in value)
+
+    to_messages = getattr(value, "to_messages", None)
+    if callable(to_messages):
+        try:
+            return _contains_image_input(to_messages(), _visited)
+        except Exception:
+            return False
+
+    messages = getattr(value, "messages", None)
+    if messages is not None:
+        return _contains_image_input(messages, _visited)
+
+    content = getattr(value, "content", None)
+    if content is not None:
+        return _contains_image_input(content, _visited)
+
+    additional_kwargs = getattr(value, "additional_kwargs", None)
+    if additional_kwargs is not None:
+        return _contains_image_input(additional_kwargs, _visited)
+
+    return False
+
+
+def _build_soft_timeout_model(model: Any, timeout_seconds: float) -> Any:
+    """为运行时首个请求构建一个更短超时的模型副本。"""
+    model_fields = getattr(model.__class__, "model_fields", {}) or {}
+    update: dict[str, Any] = {}
+    timeout_update_value: float | None = None
+    timeout_payload_key: str | None = None
+
+    timeout_field_name = next(
+        (
+            field_name
+            for field_name in ("request_timeout", "timeout")
+            if field_name in model_fields or hasattr(model, field_name)
+        ),
+        None,
+    )
+    if timeout_field_name is not None:
+        current_timeout = getattr(model, timeout_field_name, None)
+        if isinstance(current_timeout, (int, float)) and not isinstance(current_timeout, bool) and current_timeout > 0:
+            timeout_update_value = min(float(current_timeout), float(timeout_seconds))
+        else:
+            timeout_update_value = float(timeout_seconds)
+        update[timeout_field_name] = timeout_update_value
+        timeout_field_info = model_fields.get(timeout_field_name)
+        timeout_payload_key = str(getattr(timeout_field_info, "alias", None) or timeout_field_name)
+
+    if "max_retries" in model_fields or hasattr(model, "max_retries"):
+        current_max_retries = getattr(model, "max_retries", None)
+        if current_max_retries != 0:
+            update["max_retries"] = 0
+
+    if not update:
+        return model
+
+    dump_method = getattr(model, "model_dump", None)
+    if callable(dump_method):
+        try:
+            payload = dump_method(by_alias=True)
+            if isinstance(payload, dict):
+                if timeout_update_value is not None and timeout_payload_key is not None:
+                    payload[timeout_payload_key] = timeout_update_value
+                if "max_retries" in update:
+                    payload["max_retries"] = 0
+                return model.__class__(**payload)
+        except Exception:
+            pass
+
+    for clone_method_name in ("model_copy", "copy"):
+        clone_method = getattr(model, clone_method_name, None)
+        if callable(clone_method):
+            try:
+                return clone_method(update=update)
+            except Exception:
+                continue
+
+    try:
+        cloned_model = deepcopy(model)
+        for key, value in update.items():
+            setattr(cloned_model, key, value)
+        return cloned_model
+    except Exception:
+        return model
+
+
+class RuntimeFallbackLanguageModelProxy(BaseLanguageModel):
+    """给文本模型调用加一层运行时兜底代理。"""
+
+    _model: Any = PrivateAttr()
+    _primary_model: Any = PrivateAttr()
+    _fallback_loader: Callable[[], BaseLanguageModel] = PrivateAttr()
+    _fallback_model: BaseLanguageModel | None = PrivateAttr(default=None)
+    _requested_model_config: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _requested_model_ref: dict[str, str] = PrivateAttr(default_factory=dict)
+    _runtime_fallback_enabled: bool = PrivateAttr(default=False)
+
+    @classmethod
+    def from_model(
+        cls,
+        model: Any,
+        *,
+        fallback_loader: Callable[[], BaseLanguageModel],
+        requested_model_config: dict[str, Any],
+        runtime_fallback_enabled: bool,
+        features_source: list[Any] | None = None,
+        metadata_source: dict[str, Any] | None = None,
+    ) -> "RuntimeFallbackLanguageModelProxy":
+        instance = cls(
+            features=list(getattr(model, "features", None) or features_source or []),
+            metadata=deepcopy(getattr(model, "metadata", None) or metadata_source or {}),
+        )
+        object.__setattr__(instance, "_model", model)
+        object.__setattr__(
+            instance,
+            "_primary_model",
+            _build_soft_timeout_model(model, _RUNTIME_FALLBACK_SOFT_TIMEOUT_SECONDS),
+        )
+        object.__setattr__(instance, "_fallback_loader", fallback_loader)
+        object.__setattr__(instance, "_fallback_model", None)
+        object.__setattr__(instance, "_requested_model_config", deepcopy(requested_model_config or {}))
+        object.__setattr__(instance, "_requested_model_ref", _normalize_model_ref(requested_model_config))
+        object.__setattr__(instance, "_runtime_fallback_enabled", runtime_fallback_enabled)
+        return instance
+
+    def _get_fallback_model(self) -> BaseLanguageModel:
+        """延迟加载文本兜底模型。"""
+        if self._fallback_model is None:
+            object.__setattr__(self, "_fallback_model", self._fallback_loader())
+        return self._fallback_model
+
+    def _can_fallback(self, input_value: Any, exc: Exception) -> bool:
+        if not self._runtime_fallback_enabled:
+            return False
+        if _contains_image_input(input_value):
+            return False
+        return _is_retryable_runtime_error(exc)
+
+    def _wrap_model(self, model: Any) -> Any:
+        if not self._runtime_fallback_enabled:
+            return model
+        if isinstance(model, RuntimeFallbackLanguageModelProxy):
+            return model
+        if model is None:
+            return model
+        if not hasattr(model, "invoke") and not hasattr(model, "stream"):
+            return model
+        return RuntimeFallbackLanguageModelProxy.from_model(
+            model,
+            fallback_loader=self._fallback_loader,
+            requested_model_config=self._requested_model_config,
+            runtime_fallback_enabled=self._runtime_fallback_enabled,
+            features_source=list(self.features or []),
+            metadata_source=dict(self.metadata or {}),
+        )
+
+    def _call_method_with_fallback(self, method_name: str, *args, **kwargs):
+        input_value = args[0] if args else kwargs.get("input")
+        try:
+            method = getattr(object.__getattribute__(self, "_primary_model"), method_name)
+            return method(*args, **kwargs)
+        except Exception as exc:
+            if not self._can_fallback(input_value, exc):
+                raise
+            logger.warning(
+                "LLM 运行时%s失败，切换到 deepseek-chat 兜底: requested=%s error=%s",
+                method_name,
+                self._requested_model_ref,
+                exc,
+            )
+            fallback_method = getattr(self._get_fallback_model(), method_name)
+            return fallback_method(*args, **kwargs)
+
+    async def _acall_method_with_fallback(self, method_name: str, *args, **kwargs):
+        input_value = args[0] if args else kwargs.get("input")
+        try:
+            method = getattr(object.__getattribute__(self, "_primary_model"), method_name)
+            return await method(*args, **kwargs)
+        except Exception as exc:
+            if not self._can_fallback(input_value, exc):
+                raise
+            logger.warning(
+                "LLM 运行时%s失败，切换到 deepseek-chat 兜底: requested=%s error=%s",
+                method_name,
+                self._requested_model_ref,
+                exc,
+            )
+            fallback_method = getattr(self._get_fallback_model(), method_name)
+            return await fallback_method(*args, **kwargs)
+
+    def invoke(self, *args, **kwargs):
+        return self._call_method_with_fallback("invoke", *args, **kwargs)
+
+    def stream(self, *args, **kwargs):
+        input_value = args[0] if args else kwargs.get("input")
+        yielded_any_chunk = False
+        try:
+            for chunk in object.__getattribute__(self, "_primary_model").stream(*args, **kwargs):
+                yielded_any_chunk = True
+                yield chunk
+        except Exception as exc:
+            if yielded_any_chunk or not self._can_fallback(input_value, exc):
+                raise
+            logger.warning(
+                "LLM 运行时stream失败，切换到 deepseek-chat 兜底: requested=%s error=%s",
+                self._requested_model_ref,
+                exc,
+            )
+            yield from self._get_fallback_model().stream(*args, **kwargs)
+
+    def generate_prompt(self, *args, **kwargs):
+        return self._call_method_with_fallback("generate_prompt", *args, **kwargs)
+
+    async def agenerate_prompt(self, *args, **kwargs):
+        return await self._acall_method_with_fallback("agenerate_prompt", *args, **kwargs)
+
+    def bind(self, *args, **kwargs):
+        bound_model = object.__getattribute__(self, "_primary_model").bind(*args, **kwargs)
+        return self._wrap_model(bound_model)
+
+    def bind_tools(self, *args, **kwargs):
+        bound_model = object.__getattribute__(self, "_primary_model").bind_tools(*args, **kwargs)
+        return self._wrap_model(bound_model)
+
+    def with_structured_output(self, *args, **kwargs):
+        bound_model = object.__getattribute__(self, "_primary_model").with_structured_output(*args, **kwargs)
+        return self._wrap_model(bound_model)
+
+    def get_num_tokens_from_messages(self, messages):
+        token_counter = getattr(object.__getattribute__(self, "_primary_model"), "get_num_tokens_from_messages", None)
+        if callable(token_counter):
+            return token_counter(messages)
+        return super().get_num_tokens_from_messages(messages)
+
+    def __getattr__(self, name: str):
+        try:
+            return getattr(object.__getattribute__(self, "_primary_model"), name)
+        except AttributeError as exc:
+            raise AttributeError(name) from exc
 
 
 @dataclass
@@ -124,6 +492,15 @@ class LanguageModelService(BaseService):
         _, model_entity, model_class = self._load_model_components(model_config)
         normalized_model_config = deepcopy(model_config or {})
         parameters = normalized_model_config.get("parameters", {}) or {}
+        allowed_parameter_names = {
+            parameter.name for parameter in getattr(model_entity, "parameters", []) or []
+            if getattr(parameter, "name", "")
+        }
+        if allowed_parameter_names:
+            parameters = {
+                name: value for name, value in parameters.items()
+                if name in allowed_parameter_names
+            }
         return model_class(
             **model_entity.attributes,
             **parameters,
@@ -342,7 +719,7 @@ class LanguageModelService(BaseService):
                 fallback_model_config=fallback_model_config,
             )
             return RuntimeModelResolution(
-                llm=llm,
+                llm=self._wrap_runtime_fallback_model(llm, effective_model_config),
                 requested_model_config=normalized_model_config,
                 effective_model_config=effective_model_config,
                 capabilities=capabilities,
@@ -375,7 +752,7 @@ class LanguageModelService(BaseService):
                 fallback_model_config=fallback_model_config,
             )
             return RuntimeModelResolution(
-                llm=llm,
+                llm=self._wrap_runtime_fallback_model(llm, effective_model_config),
                 requested_model_config=normalized_model_config,
                 effective_model_config=effective_model_config,
                 capabilities=capabilities,
@@ -393,6 +770,7 @@ class LanguageModelService(BaseService):
                     resolution_action="auto_upgrade",
                     fallback_model_config=fallback_model_config,
                 )
+                fallback_llm = self._wrap_runtime_fallback_model(fallback_llm, fallback_model_config)
                 return RuntimeModelResolution(
                     llm=fallback_llm,
                     requested_model_config=normalized_model_config,
@@ -420,6 +798,25 @@ class LanguageModelService(BaseService):
             "当前模型不支持图片输入，请切换到支持视觉的模型或配置视觉兜底模型后重试",
             data=capabilities,
             reason_code=reason_code,
+        )
+
+    def _wrap_runtime_fallback_model(
+        self,
+        llm: BaseLanguageModel,
+        model_config: dict[str, Any],
+    ) -> BaseLanguageModel:
+        """为非默认文本模型添加运行时兜底代理。"""
+        requested_model_ref = _normalize_model_ref(model_config)
+        if requested_model_ref == _normalize_model_ref(self.get_default_model_config()):
+            return llm
+
+        return RuntimeFallbackLanguageModelProxy.from_model(
+            llm,
+            fallback_loader=self.load_default_language_model,
+            requested_model_config=model_config,
+            runtime_fallback_enabled=True,
+            features_source=list(getattr(llm, "features", []) or []),
+            metadata_source=dict(getattr(llm, "metadata", {}) or {}),
         )
 
     def get_language_model_icon(self, provider_name: str) -> tuple[bytes, str]:
@@ -457,9 +854,10 @@ class LanguageModelService(BaseService):
     def load_language_model(self, model_config: dict[str, Any]) -> BaseLanguageModel:
         """根据传递的模型配置加载大语言模型，并返回其实例"""
         try:
-            return self._instantiate_language_model(model_config)
+            llm = self._instantiate_language_model(model_config)
         except Exception as _:
             return self.load_default_language_model()
+        return self._wrap_runtime_fallback_model(llm, model_config)
 
     def load_default_language_model(self) -> BaseLanguageModel:
         """加载默认的大语言模型，在模型管理器中获取不到模型或者出错时使用默认模型进行兜底"""

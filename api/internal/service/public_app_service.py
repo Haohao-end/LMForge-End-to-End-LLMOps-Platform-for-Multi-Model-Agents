@@ -29,6 +29,7 @@ from internal.schema.public_app_schema import GetPublicAppsWithPageReq
 from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .base_service import BaseService
+from .app_config_service import AppConfigService
 from .language_model_service import LanguageModelService
 from .public_agent_registry_service import PublicAgentRegistryService
 
@@ -39,6 +40,7 @@ class PublicAppService(BaseService):
     """公共应用服务"""
     db: SQLAlchemy
     builtin_provider_manager: BuiltinProviderManager
+    app_config_service: AppConfigService | None = None
     language_model_service: LanguageModelService | None = None
     public_agent_registry_service: PublicAgentRegistryService | None = None
 

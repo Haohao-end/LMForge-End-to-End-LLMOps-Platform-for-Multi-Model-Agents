@@ -66,6 +66,9 @@ set_default_if_unset "COS_ENABLE_INTERNAL_DOMAIN" "False"
 
 # API 基础地址（非敏感）
 set_default_if_unset "LLM_REQUEST_TIMEOUT" "120"
+set_default_if_unset "AGENT_LISTEN_TIMEOUT_SECONDS" "1800"
+set_default_if_unset "SANDBOX_TIMEOUT_SECONDS" "1800"
+set_default_if_unset "SANDBOX_EXECUTE_TIMEOUT_SECONDS" "600"
 set_default_if_unset "OPENAI_API_BASE" "https://api.openai.com/v1"
 set_default_if_unset "DEEPSEEK_API_BASE" "https://api.deepseek.com/v1"
 set_default_if_unset "SILICONFLOW_API_BASE" "https://api.siliconflow.cn"

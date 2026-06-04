@@ -11,9 +11,6 @@ os.environ["LANGSMITH_TRACING"] = "false"
 os.environ.pop("LANGCHAIN_API_KEY", None)
 os.environ.pop("LANGSMITH_API_KEY", None)
 
-from app.http.app import app as _app
-from internal.extension.database_extension import db as _db
-
 
 @pytest.fixture(autouse=True)
 def _disable_external_tracing(monkeypatch):
@@ -25,9 +22,21 @@ def _disable_external_tracing(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _reset_socketio_state():
+    """每个测试都从干净的 Socket.IO 全局状态开始，避免模块级单例串扰。"""
+    from internal.extension import socketio_extension
+
+    socketio_extension.socketio = None
+    yield
+    socketio_extension.socketio = None
+
+
 @pytest.fixture
 def app():
     """返回 Flask 应用，并开启测试模式。"""
+    from app.http.app import app as _app
+
     _app.config["TESTING"] = True
     # 测试阶段关闭鉴权，聚焦参数校验与 handler/service 逻辑。
     _app.config["LOGIN_DISABLED"] = True
@@ -45,6 +54,8 @@ def client(app):
 @pytest.fixture
 def db(app):
     """每个测试使用独立事务，结束后统一回滚，确保不污染真实数据。"""
+    from internal.extension.database_extension import db as _db
+
     with app.app_context():
         # 1) 基于原始连接开启事务；2) 复用该连接构造测试会话。
         connection = _db.engine.connect()
@@ -81,4 +92,3 @@ def login_account(monkeypatch):
     )
     monkeypatch.setattr("internal.handler.app_handler.current_user", account)
     return account
-

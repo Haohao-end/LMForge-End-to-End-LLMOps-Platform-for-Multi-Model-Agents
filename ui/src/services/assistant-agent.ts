@@ -53,11 +53,6 @@ export const getAssistantAgentCapabilities = () => {
   return get<GetAssistantAgentCapabilitiesResponse>(`/assistant-agent/capabilities`)
 }
 
-// 获取辅助 Agent 当前能力
-export const getAssistantAgentCapabilities = () => {
-  return get<GetAssistantAgentCapabilitiesResponse>(`/assistant-agent/capabilities`)
-}
-
 // 停止与辅助Agent进行对话
 export const stopAssistantAgentChat = (task_id: string) => {
   return post<BaseResponse<any>>(`/assistant-agent/chat/${task_id}/stop`)

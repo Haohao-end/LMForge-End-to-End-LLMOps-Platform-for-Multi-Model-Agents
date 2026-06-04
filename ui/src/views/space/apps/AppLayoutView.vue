@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCancelPublish, useGetApp, usePublish, useShareAppToSquare, useUnshareAppFromSquare } from '@/hooks/use-app'
-import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PublishHistoryDrawer from '@/views/space/apps/components/PublishHistoryDrawer.vue'
 import { formatTimestampTime } from '@/utils/time-formatter'
@@ -16,7 +16,19 @@ const { loading: shareLoading, handleShareAppToSquare } = useShareAppToSquare()
 const { handleUnshareAppFromSquare } = useUnshareAppFromSquare()
 const { t } = useI18n()
 
-onMounted(async () => await loadApp(String(route.params?.app_id)))
+const getAppId = () => String(route.params?.app_id ?? '').trim()
+
+onMounted(async () => await loadApp(getAppId()))
+
+watch(
+  () => route.params?.app_id,
+  async (newValue, oldValue) => {
+    const newAppId = String(newValue ?? '').trim()
+    const oldAppId = String(oldValue ?? '').trim()
+    if (!newAppId || newAppId === oldAppId) return
+    await loadApp(newAppId)
+  },
+)
 
 const refreshPublishedView = () => {
   publishedRefreshToken.value += 1
@@ -25,7 +37,7 @@ const refreshPublishedView = () => {
 
 <template>
   <!-- 外层容器 -->
-  <div class="min-h-screen flex flex-col h-full overflow-hidden">
+  <div class="flex flex-1 min-h-0 w-full flex-col overflow-hidden">
     <!-- 顶部导航 -->
     <div
       class="h-[77px] flex-shrink-0 bg-gray-50 p-4 flex items-center justify-between relative border-b"
@@ -204,7 +216,13 @@ const refreshPublishedView = () => {
       </div>
     </div>
     <!-- 底部内容区 -->
-    <router-view :app="app" :published-refresh-token="publishedRefreshToken" />
+    <div class="flex min-h-0 flex-1 overflow-hidden">
+      <router-view
+        :key="String(route.params?.app_id ?? '')"
+        :app="app"
+        :published-refresh-token="publishedRefreshToken"
+      />
+    </div>
     <!-- 发布历史抽屉组件 -->
     <publish-history-drawer
       :app="app"

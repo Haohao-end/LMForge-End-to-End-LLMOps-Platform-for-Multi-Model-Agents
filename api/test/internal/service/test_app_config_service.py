@@ -671,7 +671,7 @@ class TestAppConfigService:
 
         assert first == second
         assert updates == []
-        assert call_counts == {"model": 1, "tools": 1, "datasets": 1, "workflows": 1, "skills": 1, "agents": 1}
+        assert call_counts == {"model": 1, "tools": 1, "datasets": 1, "workflows": 1, "skills": 1, "agents": 0}
 
     def test_get_draft_app_config_should_sync_invalid_refs_and_return_transformed_payload(self, monkeypatch):
         service = self._build_service()

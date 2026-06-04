@@ -13,6 +13,7 @@ from internal.core.agent.agents.agent_queue_manager import AgentQueueManager
 from internal.core.agent.agents.base_agent import BaseAgent
 from internal.core.agent.entities.agent_entity import AgentConfig
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.agent.failure_utils import build_failure_observation, classify_failure_event
 from internal.core.language_model.entities.model_entity import BaseLanguageModel
 from internal.entity.conversation_entity import InvokeFrom
 from internal.exception import FailException
@@ -86,6 +87,24 @@ def test_agent_queue_manager_publish_and_publish_error_should_enqueue_and_stop(m
     assert stop_calls == [task_id]
 
 
+def test_agent_queue_manager_publish_failure_should_classify_timeout(monkeypatch):
+    redis_client = _FakeRedis()
+    monkeypatch.setattr("app.http.module.injector", _FakeInjector(redis_client))
+
+    manager = AgentQueueManager(user_id=uuid4(), invoke_from=InvokeFrom.WEB_APP)
+    task_id = uuid4()
+
+    manager.publish_failure(task_id, TimeoutError("LLM request timed out"), context="LLM节点发生错误")
+
+    queued = manager.queue(task_id).get_nowait()
+    assert queued.event == QueueEvent.TIMEOUT
+    assert queued.observation == build_failure_observation(
+        TimeoutError("LLM request timed out"),
+        "LLM节点发生错误",
+    )
+    assert manager.queue(task_id).get_nowait() is None
+
+
 def test_agent_queue_manager_listen_should_yield_items_and_emit_ping(monkeypatch):
     redis_client = _FakeRedis()
     monkeypatch.setattr("app.http.module.injector", _FakeInjector(redis_client))
@@ -111,6 +130,7 @@ def test_agent_queue_manager_listen_should_yield_items_and_emit_ping(monkeypatch
 def test_agent_queue_manager_listen_should_emit_timeout_and_stop(monkeypatch):
     redis_client = _FakeRedis()
     monkeypatch.setattr("app.http.module.injector", _FakeInjector(redis_client))
+    monkeypatch.setenv("AGENT_LISTEN_TIMEOUT_SECONDS", "600")
     manager = AgentQueueManager(user_id=uuid4(), invoke_from=InvokeFrom.WEB_APP)
     task_id = uuid4()
     manager.queue(task_id).put(None)
@@ -124,6 +144,16 @@ def test_agent_queue_manager_listen_should_emit_timeout_and_stop(monkeypatch):
     assert list(manager.listen(task_id)) == []
     assert QueueEvent.TIMEOUT.value in emitted
     assert QueueEvent.STOP.value in emitted
+
+
+def test_agent_queue_manager_listen_timeout_default_should_allow_long_tasks(monkeypatch):
+    redis_client = _FakeRedis()
+    monkeypatch.setattr("app.http.module.injector", _FakeInjector(redis_client))
+    monkeypatch.delenv("AGENT_LISTEN_TIMEOUT_SECONDS", raising=False)
+
+    manager = AgentQueueManager(user_id=uuid4(), invoke_from=InvokeFrom.WEB_APP)
+
+    assert manager._read_listen_timeout_seconds() == 1800
 
 
 def test_agent_queue_manager_set_stop_flag_should_validate_task_owner(monkeypatch):
@@ -278,6 +308,64 @@ def test_base_agent_stream_should_enter_runtime_flask_app_context_in_worker_thre
     assert agent._invoke_payloads[0]["task_id"] == input_state["task_id"]
     assert agent.agent_queue_manager.listen_calls == [input_state["task_id"]]
     runtime_flask_app.app_context.assert_called_once()
+
+
+def test_base_agent_stream_should_publish_worker_timeout_as_terminal_event(monkeypatch):
+    class _FakeQueueManager:
+        def __init__(self, user_id, invoke_from):
+            self.user_id = user_id
+            self.invoke_from = invoke_from
+            self.listen_calls = []
+            self.events: dict[str, list] = {}
+
+        def publish(self, task_id, thought):
+            self.events.setdefault(str(task_id), []).append(thought)
+
+        def publish_failure(self, task_id, error, context=""):
+            event = classify_failure_event(error)
+            self.publish(
+                task_id,
+                AgentThought(
+                    id=uuid4(),
+                    task_id=task_id,
+                    event=event.value,
+                    observation=build_failure_observation(error, context),
+                ),
+            )
+            self.events.setdefault(str(task_id), []).append(None)
+
+        def listen(self, task_id):
+            self.listen_calls.append(task_id)
+            for item in self.events.get(str(task_id), []):
+                if item is None:
+                    break
+                yield item
+
+    class _FailingAgent:
+        def invoke(self, _payload):
+            raise TimeoutError("LLM request timed out")
+
+    class _FakeThread:
+        def __init__(self, target, args=()):
+            self.target = target
+            self.args = args
+
+        def start(self):
+            self.target(*self.args)
+
+    monkeypatch.setattr("internal.core.agent.agents.base_agent.AgentQueueManager", _FakeQueueManager)
+    monkeypatch.setattr("internal.core.agent.agents.base_agent.Thread", _FakeThread)
+    config = AgentConfig(user_id=uuid4(), invoke_from=InvokeFrom.WEB_APP)
+    agent = _DummyAgent(llm=_DummyLLM(features=[]), agent_config=config)
+    agent._agent = _FailingAgent()
+    input_state = {"messages": [HumanMessage(content="hi")]}
+
+    thoughts = list(agent.stream(input_state))
+
+    assert len(thoughts) == 1
+    assert thoughts[0].event == QueueEvent.TIMEOUT
+    assert "智能体执行异常" in thoughts[0].observation
+    assert agent.agent_queue_manager.listen_calls == [input_state["task_id"]]
 
 
 def test_base_agent_stream_should_raise_when_agent_missing(monkeypatch):

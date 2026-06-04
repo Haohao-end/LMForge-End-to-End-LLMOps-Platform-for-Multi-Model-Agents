@@ -12,6 +12,7 @@ import type {
   GetAssistantAgentConversationsResponse,
   GetAssistantAgentMessagesWithPageResponse,
 } from '@/models/assistant-agent'
+import { mergeChatHistoryMessages } from '@/views/shared/chat-stream'
 import { Message } from '@arco-design/web-vue'
 export const useAssistantAgentChat = () => {
   // 1.定义自定义hooks所需数据
@@ -99,7 +100,10 @@ export const useStopAssistantAgentChat = () => {
 export const useGetAssistantAgentMessagesWithPage = () => {
   // 1.定义hooks所需数据
   const loading = ref(false)
-  const messages = ref<GetAssistantAgentMessagesWithPageResponse['data']['list']>([])
+  type AssistantAgentMessage = GetAssistantAgentMessagesWithPageResponse['data']['list'][number] & {
+    render_id: string
+  }
+  const messages = ref<AssistantAgentMessage[]>([])
   const created_at = ref(0)
   const defaultPaginator = {
     current_page: 1,
@@ -143,10 +147,14 @@ export const useGetAssistantAgentMessagesWithPage = () => {
 
       // 2.5 追加或者覆盖数据
       if (init) {
-        messages.value = data.list
+        messages.value = mergeChatHistoryMessages(data.list, 'assistant-agent-history')
+        // Keep a stable snapshot cursor so later page loads continue the same slice.
+        created_at.value = messages.value[0]?.created_at ?? 0
       } else {
-        messages.value.push(...data.list)
-        created_at.value = data.list[0]?.created_at ?? 0
+        messages.value = mergeChatHistoryMessages(
+          [...messages.value, ...data.list],
+          'assistant-agent-history',
+        )
       }
     } finally {
       loading.value = false

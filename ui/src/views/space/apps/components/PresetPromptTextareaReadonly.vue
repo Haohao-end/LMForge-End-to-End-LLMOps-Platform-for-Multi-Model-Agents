@@ -108,7 +108,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 </script>
 
 <template>
-  <div class="flex flex-col h-[calc(100vh-173px)]">
+  <div class="flex flex-col h-full min-w-0">
     <!-- 提示标题 -->
     <div class="flex items-center justify-between px-4 mb-4">
       <div class="text-gray-700 font-bold">{{ t('appStudio.presetPrompt.title') }}</div>
@@ -150,7 +150,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
     </div>
 
     <!-- 内容区域 -->
-    <div class="flex-1 min-h-0 px-4">
+    <div class="flex-1 min-h-0 min-w-0 px-4">
       <div class="readonly-editor-container" :class="{ 'split-mode': mode === 'split' }">
         <!-- 编辑模式（只读文本） -->
         <div
@@ -199,11 +199,12 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
+  min-width: 0;
 }
 
 .readonly-editor-container.split-mode {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .editor-pane {
@@ -211,6 +212,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   overflow-y: auto;
   background: #f9fafb;
   min-height: 0;
+  min-width: 0;
   scroll-behavior: auto; /* 禁用平滑滚动，避免抖动 */
   will-change: scroll-position; /* 提示浏览器优化滚动性能 */
   transform: translateZ(0); /* 启用硬件加速 */
@@ -233,9 +235,10 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 
 .preview-pane {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   background: #fff;
   min-height: 0;
+  min-width: 0;
   scroll-behavior: auto; /* 禁用平滑滚动，避免抖动 */
   will-change: scroll-position; /* 提示浏览器优化滚动性能 */
   transform: translateZ(0); /* 启用硬件加速 */

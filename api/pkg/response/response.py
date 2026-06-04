@@ -1,9 +1,12 @@
+import json as json_module
+import logging
 from dataclasses import field, dataclass
 from typing import Any, Union, Generator
 
 from flask import jsonify, stream_with_context, Response as FlaskResponse
 
 from .http_code import HttpCode
+from internal.core.agent.failure_utils import build_failure_observation, classify_failure_event
 
 
 @dataclass
@@ -78,11 +81,24 @@ def compact_generate_response(response: Union[Response, Generator]) -> FlaskResp
         # 2.response格式为生成器，代表本次响应需要执行流式事件输出
         def generate() -> Generator:
             """构建generate函数，流式从response中获取数据"""
-            yield from response
+            try:
+                yield from response
+            except Exception as error:
+                logging.exception("流式响应生成失败: %s", error)
+                failure_event = classify_failure_event(error)
+                payload = {
+                    "event": failure_event.value,
+                    "observation": build_failure_observation(error, "流式响应执行失败"),
+                }
+                yield f"event: {failure_event.value}\ndata:{json_module.dumps(payload, ensure_ascii=False)}\n\n"
 
         # 3.返回携带上下文的流式事件输出
-        return FlaskResponse(
+        flask_response = FlaskResponse(
             stream_with_context(generate()),
             status=200,
             mimetype="text/event-stream",
         )
+        flask_response.headers["Cache-Control"] = "no-cache"
+        flask_response.headers["Connection"] = "keep-alive"
+        flask_response.headers["X-Accel-Buffering"] = "no"
+        return flask_response

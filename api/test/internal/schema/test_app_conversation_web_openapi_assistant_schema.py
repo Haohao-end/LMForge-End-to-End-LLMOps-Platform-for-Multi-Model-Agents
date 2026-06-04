@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -37,6 +37,9 @@ from internal.schema.web_app_schema import (
 from test.internal.schema.utils import ns, utc_dt
 
 
+MULTIMODAL_ARTIFACT_THOUGHT_ID = UUID("ff1e16f0-2c22-426b-b3c4-fa11435f4a02")
+
+
 def _validate_form(form_request, form_cls, *, data=None, json=None, content_type=None):
     with form_request(data=data, json=json, content_type=content_type):
         form = form_cls(meta={"csrf": False})
@@ -71,7 +74,7 @@ def _message_payload():
 
 def _multimodal_message_payload():
     artifact_thought = ns(
-        id=uuid4(),
+        id=MULTIMODAL_ARTIFACT_THOUGHT_ID,
         position=1,
         event="deep_artifact_created",
         thought="chart.png",
@@ -363,6 +366,8 @@ def test_conversation_schema_should_promote_artifacts_into_multimodal_output():
             "name": "chart.png",
             "mime_type": "image/png",
             "extension": "png",
+            "group_id": str(MULTIMODAL_ARTIFACT_THOUGHT_ID),
+            "group_name": "生成图片",
         },
     ]
     assert payload["artifacts"] == [
@@ -371,6 +376,8 @@ def test_conversation_schema_should_promote_artifacts_into_multimodal_output():
             "url": "https://cos.example.com/chart.png",
             "mime_type": "image/png",
             "extension": "png",
+            "group_id": str(MULTIMODAL_ARTIFACT_THOUGHT_ID),
+            "group_name": "生成图片",
         }
     ]
 

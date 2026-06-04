@@ -1,9 +1,10 @@
 import json
 import logging
+import os
 import re
 import time
 import uuid
-from typing import Literal, Any
+from typing import Literal, Any, ClassVar
 
 import tiktoken
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, RemoveMessage, AIMessage
@@ -14,25 +15,15 @@ from langgraph.graph.state import CompiledStateGraph
 from internal.core.agent.entities.agent_entity import (
     AgentState,
     AGENT_SYSTEM_PROMPT_TEMPLATE,
-    DATASET_RETRIEVAL_TOOL_NAME,
     MAX_ITERATION_RESPONSE,
 )
+from internal.core.agent.entities.sandbox_policy_entity import SandboxPolicy
+from internal.core.agent.entities.tool_policy_entity import ToolPolicy
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
 from internal.core.agent.usage_utils import normalize_usage_text
 from internal.exception import FailException
 from .base_agent import BaseAgent
 from internal.core.language_model.entities.model_entity import ModelFeature
-
-
-_HARD_FAIL_TOOL_NAMES = {
-    "qwen_image_text_to_image",
-    "qwen_image_edit",
-    "qwen_image_edit_2509",
-}
-
-_TOOL_ALIAS_SYNONYMS = {
-    "recall_dataset": "dataset_retrieval",
-}
 
 
 class FunctionCallAgent(BaseAgent):
@@ -62,6 +53,11 @@ class FunctionCallAgent(BaseAgent):
         agent = graph.compile()
 
         return agent
+
+    @classmethod
+    def _sanitize_sandbox_artifact_text(cls, content: str) -> str:
+        """去除用户可见文本中的沙箱本地路径与伪下载链接。"""
+        return SandboxPolicy.sanitize_sandbox_artifact_text(content)
 
     def _preset_operation_node(self, state: AgentState) -> AgentState:
         """预设操作，涵盖：输入审核、数据预处理、条件边等"""
@@ -199,8 +195,12 @@ class FunctionCallAgent(BaseAgent):
                     buffered_text_chunks.append(self._apply_output_review(content))
         except Exception as e:
             logging.exception(f"LLM节点发生错误, 错误信息: {str(e)}")
-            self.agent_queue_manager.publish_error(state["task_id"], f"LLM节点发生错误, 错误信息: {str(e)}")
-            raise e
+            self.agent_queue_manager.publish_failure(
+                state["task_id"],
+                e,
+                context="LLM节点发生错误",
+            )
+            raise
 
         if gathered is None:
             if pending_skill_prompts:
@@ -253,16 +253,17 @@ class FunctionCallAgent(BaseAgent):
                 "pending_skill_prompts": [],
             }
 
-        for content in buffered_text_chunks:
-            self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                id=id,
-                task_id=state["task_id"],
-                event=QueueEvent.AGENT_MESSAGE.value,
-                thought=content,
-                message=messages_to_dict(state["messages"]),
-                answer=content,
-                latency=(time.perf_counter() - start_at),
-            ))
+        final_content = self._finalize_llm_output(state, "".join(buffered_text_chunks))
+        final_content = self._postprocess_llm_output(state, final_content)
+        self.agent_queue_manager.publish(state["task_id"], AgentThought(
+            id=id,
+            task_id=state["task_id"],
+            event=QueueEvent.AGENT_MESSAGE.value,
+            thought=final_content,
+            message=messages_to_dict(state["messages"]),
+            answer=final_content,
+            latency=(time.perf_counter() - start_at),
+        ))
 
         if buffered_text_chunks:
             if pending_skill_prompts:
@@ -302,14 +303,23 @@ class FunctionCallAgent(BaseAgent):
             ))
 
         return {
-            "messages": [gathered],
+            "messages": [AIMessage(content=final_content)],
             "iteration_count": state["iteration_count"] + 1,
             "pending_skill_prompts": [],
         }
 
+    def _finalize_llm_output(self, state: AgentState, content: str) -> str:
+        """把最终输出收口成用户可见文本。"""
+        return self._sanitize_sandbox_artifact_text(self._apply_output_review(content))
+
+    def _postprocess_llm_output(self, state: AgentState, content: str) -> str:
+        """给最终输出留一个可覆写的后处理钩子。"""
+        return content
+
     def _tools_node(self, state: AgentState) -> AgentState:
         """工具执行节点"""
         # 1.将工具列表转换成字典，便于调用指定的工具
+        tool_policy = getattr(self.agent_config, "tool_policy", None) or ToolPolicy()
         tools_by_name = {tool.name: tool for tool in self.agent_config.tools}
         tools_by_alias = {}
         for tool in self.agent_config.tools:
@@ -342,10 +352,11 @@ class FunctionCallAgent(BaseAgent):
             except LookupError as e:
                 tool_result = str(e)
             except Exception as e:
-                if tool_call["name"] in _HARD_FAIL_TOOL_NAMES:
-                    self.agent_queue_manager.publish_error(
+                if tool_policy.is_hard_fail_tool(tool_call["name"]):
+                    self.agent_queue_manager.publish_failure(
                         state["task_id"],
-                        f"{tool_call['name']}执行失败: {str(e)}",
+                        e,
+                        context=f"{tool_call['name']}执行失败",
                     )
                     raise
                 # 6.添加错误工具信息
@@ -377,7 +388,7 @@ class FunctionCallAgent(BaseAgent):
             # 7.判断执行工具的名字，提交不同事件，涵盖智能体动作以及知识库检索
             event = (
                 QueueEvent.AGENT_ACTION.value
-                if tool_call["name"] != DATASET_RETRIEVAL_TOOL_NAME
+                if tool_call["name"] != tool_policy.dataset_retrieval_tool_name
                 else QueueEvent.DATASET_RETRIEVAL.value
             )
             self.agent_queue_manager.publish(state["task_id"], AgentThought(
@@ -417,7 +428,8 @@ class FunctionCallAgent(BaseAgent):
         tools_by_alias: dict[str, Any],
     ) -> Any | None:
         """按精确名、别名顺序解析工具。"""
-        requested_name = _TOOL_ALIAS_SYNONYMS.get(tool_call_name, tool_call_name)
+        tool_policy = getattr(self.agent_config, "tool_policy", None) or ToolPolicy()
+        requested_name = tool_policy.resolve_tool_name(tool_call_name)
 
         candidates = (
             requested_name,
@@ -598,7 +610,8 @@ class FunctionCallAgent(BaseAgent):
         tools_by_alias: dict[str, Any],
     ) -> Any | None:
         """按精确名、别名顺序解析工具。"""
-        requested_name = _TOOL_ALIAS_SYNONYMS.get(tool_call_name, tool_call_name)
+        tool_policy = getattr(self.agent_config, "tool_policy", None) or ToolPolicy()
+        requested_name = tool_policy.resolve_tool_name(tool_call_name)
 
         candidates = (
             requested_name,

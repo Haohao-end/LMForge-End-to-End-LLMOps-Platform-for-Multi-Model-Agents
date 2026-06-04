@@ -1289,6 +1289,7 @@ class AppService(BaseService):
             target_app_config,
             tools,
             flask_app=flask_app,
+            language_model_service=self.language_model_service,
             invoke_from=InvokeFrom.DEBUGGER.value,
         )
         agent_result = agent.invoke(
@@ -1309,6 +1310,7 @@ class AppService(BaseService):
         tools: list[Any],
         enable_deep_thinking: bool = False,
         flask_app: Flask | None = None,
+        language_model_service: Any | None = None,
         invoke_from: InvokeFrom = InvokeFrom.DEBUGGER.value,
     ) -> FunctionCallAgent | ReACTAgent | DeepThinkingAgent:
         """根据运行时配置创建Agent实例
@@ -1348,6 +1350,7 @@ class AppService(BaseService):
                 enable_long_term_memory=draft_app_config["long_term_memory"]["enable"],
                 enable_deep_thinking=enable_deep_thinking,
                 runtime_flask_app=flask_app,
+                language_model_service=language_model_service,
                 tools=tools,
                 review_config=draft_app_config["review_config"],
             ),
@@ -1464,6 +1467,7 @@ class AppService(BaseService):
             tools,
             enable_deep_thinking,
             flask_app=flask_app,
+            language_model_service=self.language_model_service,
         )
         agent_thoughts = agent_thoughts if agent_thoughts is not None else {}
 
@@ -1681,7 +1685,7 @@ class AppService(BaseService):
         paginated_ids = paginator.paginate(
             self.db.session.query(Message.id)
             .filter(*filters)
-            .order_by(desc(Message.created_at))
+            .order_by(desc(Message.created_at), desc(Message.id))
         )
 
         normalized_ids = self._normalize_paginated_ids(paginated_ids)
@@ -1693,7 +1697,7 @@ class AppService(BaseService):
             self.db.session.query(Message)
             .options(selectinload(Message.agent_thoughts))
             .filter(Message.id.in_(normalized_ids))
-            .order_by(desc(Message.created_at))
+            .order_by(desc(Message.created_at), desc(Message.id))
             .all()
         )
 

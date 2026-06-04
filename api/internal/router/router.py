@@ -29,8 +29,6 @@ from internal.handler import (
     PublicWorkflowHandler,
     McpHandler,
     SkillHandler,
-    LikeHandler,
-    FavoriteHandler,
     HomeHandler,
     NotificationHandler,
     TagHandler
@@ -67,8 +65,6 @@ class Router:
     public_workflow_handler: PublicWorkflowHandler
     mcp_handler: McpHandler
     skill_handler: SkillHandler
-    like_handler: LikeHandler
-    favorite_handler: FavoriteHandler
     home_handler: HomeHandler
     notification_handler: NotificationHandler
     tag_handler: TagHandler

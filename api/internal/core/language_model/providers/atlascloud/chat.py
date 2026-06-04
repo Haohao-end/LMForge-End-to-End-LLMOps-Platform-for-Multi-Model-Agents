@@ -8,6 +8,19 @@ from internal.core.language_model.entities.model_entity import BaseLanguageModel
 from internal.core.language_model.providers._defaults import apply_default_model_timeout
 
 
+def _resolve_atlascloud_timeout(default: float = 1800.0) -> float:
+    """Resolve Atlas Cloud timeout with a generous floor for long-running agent tasks."""
+    for env_name in ("ATLASCLOUD_REQUEST_TIMEOUT", "ATLAS_CLOUD_REQUEST_TIMEOUT", "LLM_REQUEST_TIMEOUT"):
+        raw_value = str(os.getenv(env_name, "")).strip()
+        if not raw_value:
+            continue
+        try:
+            return max(float(raw_value), default)
+        except (TypeError, ValueError):
+            continue
+    return default
+
+
 class Chat(ChatOpenAI, BaseLanguageModel):
     """Atlas Cloud 聊天模型（OpenAI 兼容接口）。"""
 
@@ -33,6 +46,9 @@ class Chat(ChatOpenAI, BaseLanguageModel):
             )
             if base:
                 resolved["base_url"] = base
+
+        if not resolved.get("timeout") and not resolved.get("request_timeout"):
+            resolved["timeout"] = _resolve_atlascloud_timeout()
 
         apply_default_model_timeout(resolved)
         return resolved

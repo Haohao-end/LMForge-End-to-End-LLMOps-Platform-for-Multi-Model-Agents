@@ -46,6 +46,10 @@ export type ChatImageGalleryGroup = {
   images: ChatArtifact[]
 }
 
+type MutableChatImageGalleryGroup = ChatImageGalleryGroup & {
+  seenUrls: Set<string>
+}
+
 const cleanUrl = (value: unknown) => {
   return String(value || '').trim().replace(TRAILING_URL_PUNCTUATION, '')
 }
@@ -189,9 +193,9 @@ const collectInlineImageParts = (answer: string, existingUrls: Set<string>) => {
   return parts
 }
 
-export const buildChatOutputParts = (answer: string, artifacts: ChatArtifact[] = []): ChatOutputPart[] => {
+export const buildChatOutputParts = (answer: string, artifacts: unknown[] = []): ChatOutputPart[] => {
   const normalizedAnswer = String(answer || '')
-  const normalizedArtifacts = dedupeArtifacts(artifacts)
+  const normalizedArtifacts = mergeChatArtifacts([], artifacts)
   const parts: ChatOutputPart[] = []
 
   if (normalizedAnswer.trim())
@@ -273,9 +277,9 @@ export const groupChatImageArtifacts = (artifacts: unknown[] = []): ChatImageGal
     .map(item => normalizeChatArtifact(item))
     .filter(Boolean) as ChatArtifact[]
 
-  const groups: ChatImageGalleryGroup[] = []
-  const groupsById = new Map<string, ChatImageGalleryGroup & { seenUrls: Set<string> }>()
-  let anonymousGroup: (ChatImageGalleryGroup & { seenUrls: Set<string> }) | null = null
+  const groups: MutableChatImageGalleryGroup[] = []
+  const groupsById = new Map<string, MutableChatImageGalleryGroup>()
+  let anonymousGroup: MutableChatImageGalleryGroup | null = null
   let anonymousIndex = 0
 
   for (const artifact of normalized) {

@@ -56,6 +56,22 @@ export type McpToolSnapshot = {
   retryable: boolean
 }
 
+export type AgentBinding = {
+  app_id: string
+  invoke_mode?: 'a2a' | 'tool'
+  name?: string
+  icon?: string
+  description?: string
+  source_scope?: 'public' | 'own'
+  is_public?: boolean
+  status?: string
+  tool_name?: string
+}
+
+export type AgentBindingRequest = {
+  app_id: string
+}
+
 // 获取应用信息响应结构
 export type GetAppResponse = BaseResponse<{
   id: string
@@ -141,6 +157,7 @@ export type GetDraftAppConfigResponse = BaseResponse<{
   }[]
   mcp_bindings: McpBinding[]
   mcp_tool_snapshots: McpToolSnapshot[]
+  agent_bindings: AgentBinding[]
   skills: SkillBinding[]
   workflows: { id: string; name: string; icon: string; description: string }[]
   datasets: { id: string; name: string; icon: string; description: string }[]
@@ -168,6 +185,7 @@ export type UpdateDraftAppConfigRequest = {
   preset_prompt?: string
   tools?: { type: string; provider_id: string; tool_id: string; params: Record<string, any> }[]
   mcp_bindings?: McpBinding[]
+  agent_bindings?: AgentBindingRequest[]
   skills?: SkillBindingRequest[]
   workflows?: string[]
   datasets?: string[]

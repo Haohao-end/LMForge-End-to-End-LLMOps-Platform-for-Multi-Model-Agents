@@ -603,6 +603,9 @@ class PublicAgentA2AService(BaseService):
             or str(request_payload.get("context_id", "")).strip()
             or ""
         )
+        runtime_context = request_payload.get("runtimeContext")
+        if runtime_context is None and "runtime_context" in request_payload:
+            runtime_context = request_payload.get("runtime_context")
         yield from self._stream_public_agent_events(
             app=app,
             query=query,

@@ -43,7 +43,7 @@ const handleEditorBlur = async () => {
 </script>
 
 <template>
-  <div class="flex flex-col h-[calc(100vh-173px)]">
+  <div class="flex flex-col h-full min-w-0">
     <!-- 提示标题 -->
     <div class="flex items-center justify-between px-4 mb-4">
       <div class="text-gray-700 font-bold">{{ t('appStudio.presetPrompt.title') }}</div>
@@ -62,11 +62,12 @@ const handleEditorBlur = async () => {
       </a-space>
     </div>
     <!-- Markdown 编辑器容器 -->
-    <div class="flex-1 px-4 min-h-0">
+    <div class="flex-1 px-4 min-h-0 min-w-0">
       <markdown-editor
         :model-value="props.preset_prompt"
         :placeholder="t('appStudio.presetPrompt.placeholder')"
         :max-length="5000"
+        toolbar-variant="compact"
         default-mode="split"
         @update:model-value="handleEditorUpdate"
         @blur="handleEditorBlur"

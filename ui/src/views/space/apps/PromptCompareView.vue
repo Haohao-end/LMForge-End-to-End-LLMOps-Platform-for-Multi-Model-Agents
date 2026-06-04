@@ -343,6 +343,7 @@ onMounted(async () => {
                 :model-value="lane.preset_prompt"
                 :max-length="5000"
                 min-height="420px"
+                toolbar-variant="compact"
                 default-mode="edit"
                 @update:model-value="
                   (value) => {

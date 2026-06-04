@@ -7,6 +7,7 @@ from langgraph.graph import MessagesState
 
 from internal.entity.app_entity import DEFAULT_APP_CONFIG
 from internal.entity.conversation_entity import InvokeFrom
+from internal.core.agent.entities.tool_policy_entity import DATASET_RETRIEVAL_TOOL_NAME, ToolPolicy
 
 # Agent智能体系统预设提示词模板
 AGENT_SYSTEM_PROMPT_TEMPLATE = """你是一个高度定制的智能体应用，旨在为用户提供准确、专业的内容生成和问题解答，请严格遵守以下规则：
@@ -145,8 +146,14 @@ class AgentConfig(BaseModel):
     # 运行时 Flask application，用于线程内补充 app context（如附件持久化）
     runtime_flask_app: Any = None
 
+    # 运行时语言模型服务，用于模型请求失败时获取默认兜底模型
+    language_model_service: Any = None
+
     # 智能体使用的工具列表
     tools: list[BaseTool] = Field(default_factory=list)
+
+    # 工具运行时策略
+    tool_policy: ToolPolicy = Field(default_factory=ToolPolicy)
 
     # 审核配置
     review_config: dict = Field(default_factory=lambda: DEFAULT_APP_CONFIG["review_config"])
@@ -160,9 +167,6 @@ class AgentState(MessagesState):
     long_term_memory: str  # 长期记忆
     pending_skill_prompts: list[dict[str, Any]]  # 已按需加载、等待在本轮注入的 prompt-only skill 正文
 
-
-# 知识库检索工具名称
-DATASET_RETRIEVAL_TOOL_NAME = "dataset_retrieval"
 
 # Agent超过最大迭代次数时提示内容
 MAX_ITERATION_RESPONSE = "当前Agent迭代次数已超过限制，请重试"

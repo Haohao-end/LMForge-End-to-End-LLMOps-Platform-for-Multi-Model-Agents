@@ -38,6 +38,16 @@ def _should_sync_skill_catalog_on_startup() -> bool:
     return mode != "celery" and enabled
 
 
+def _is_truthy_env(env_name: str, default: str = "0") -> bool:
+    """把常见布尔型环境变量归一化为 Python bool。"""
+    return os.getenv(env_name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_enable_direct_run_debug() -> bool:
+    """直跑模式默认不启用 debug，需显式通过环境变量打开。"""
+    return _is_truthy_env("FLASK_DEBUG")
+
+
 with app.app_context():
     if _should_sync_skill_catalog_on_startup():
         try:
@@ -56,4 +66,18 @@ with app.app_context():
 celery = app.extensions['celery']
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    from internal.extension.socketio_extension import socketio as socketio_server
+
+    debug_mode = _should_enable_direct_run_debug()
+
+    if socketio_server is not None and debug_mode:
+        socketio_server.run(
+            app,
+            host="0.0.0.0",
+            port=5001,
+            debug=True,
+            use_reloader=False,
+            allow_unsafe_werkzeug=True,
+        )
+    else:
+        app.run(debug=debug_mode, port=5001)

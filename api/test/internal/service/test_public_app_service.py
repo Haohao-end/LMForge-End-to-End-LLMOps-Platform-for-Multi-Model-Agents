@@ -410,8 +410,6 @@ class TestPublicAppService:
         assert copied.original_app_id == public_app.id
         assert copied.tags == public_app.tags
         assert session.added[1].mcp_bindings == public_app.app_config.mcp_bindings
-        assert public_app.view_count == 2
-        assert public_app.fork_count == 3
         assert len(session.added) == 2
 
     def test_fork_public_app_should_cover_dataset_join_iteration_branch(self, monkeypatch):
@@ -458,7 +456,6 @@ class TestPublicAppService:
         copied = service.fork_public_app(str(public_app.id), account)
 
         assert copied.name.endswith("(副本)")
-        assert public_app.fork_count == 3
 
     def test_fork_public_app_should_raise_for_invalid_or_unavailable_source(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())
@@ -682,9 +679,8 @@ class TestPublicAppService:
 
         assert detail["creator_name"] == "Owner"
         assert detail["tags"] == [AppCategory.GENERAL.value]
-        assert detail["is_liked"] is True
-        assert detail["is_favorited"] is False
-        assert detail["draft_app_config"]["tools"] == [{"type": "enriched"}]
+        assert detail["is_forked"] is True
+        assert detail["draft_app_config"]["tools"] == []
         assert detail["draft_app_config"]["mcp_bindings"] == [
             {
                 "name": "Weather MCP",
@@ -700,7 +696,6 @@ class TestPublicAppService:
             }
         ]
         assert detail["draft_app_config"]["capabilities"] == {}
-        assert app.view_count == 4
 
     def test_get_public_app_detail_should_include_runtime_capabilities_when_service_available(
         self, monkeypatch

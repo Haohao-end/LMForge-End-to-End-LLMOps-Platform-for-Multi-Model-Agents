@@ -585,7 +585,7 @@ class ConversationService(BaseService):
         paginated_ids = paginator.paginate(
             self.db.session.query(Message.id)
             .filter(*filters)
-            .order_by(desc(Message.created_at))
+            .order_by(desc(Message.created_at), desc(Message.id))
         )
 
         normalized_ids = self._normalize_paginated_ids(paginated_ids)
@@ -597,7 +597,7 @@ class ConversationService(BaseService):
             self.db.session.query(Message)
             .options(selectinload(Message.agent_thoughts))
             .filter(Message.id.in_(normalized_ids))
-            .order_by(desc(Message.created_at))
+            .order_by(desc(Message.created_at), desc(Message.id))
             .all()
         )
 

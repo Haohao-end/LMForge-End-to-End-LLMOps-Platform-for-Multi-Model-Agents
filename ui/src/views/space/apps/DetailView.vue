@@ -52,10 +52,10 @@ watch(
 </script>
 
 <template>
-  <div class="flex-1 w-full min-h-0 bg-white">
-    <div class="flex-1 grid min-h-0 grid-cols-[minmax(0,26fr)_minmax(0,14fr)] h-full w-full overflow-hidden">
+  <div class="flex flex-1 min-h-0 w-full flex-col bg-white">
+    <div class="grid flex-1 min-h-0 grid-cols-[minmax(0,26fr)_minmax(0,14fr)] w-full overflow-hidden">
       <!-- 左侧应用编排 -->
-      <div class="bg-gray-50 flex flex-col h-full min-w-0 overflow-hidden">
+      <div class="bg-gray-50 flex min-h-0 flex-col min-w-0 overflow-hidden">
         <!-- 顶部标题 -->
         <div class="flex items-center h-16 border-b p-4 gap-4">
           <div class="text-lg text-gray-700">{{ t('appStudio.detail.title') }}</div>
@@ -64,7 +64,7 @@ watch(
             v-model:model_config="draftAppConfigForm.model_config" :app_id="String(route.params?.app_id)" />
         </div>
         <!-- 底部编排区域 -->
-        <div class="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] overflow-hidden h-[calc(100vh-141px)]">
+        <div class="grid flex-1 min-h-0 grid-cols-[minmax(0,13fr)_minmax(0,12fr)] overflow-hidden">
           <!-- 左侧人设与回复逻辑 -->
           <div class="border-r py-4 min-w-0 overflow-hidden">
             <preset-prompt-textarea
@@ -81,7 +81,7 @@ watch(
         </div>
       </div>
       <!-- 右侧调试与会话 -->
-      <div class="min-w-[404px] h-full min-h-0 flex flex-col overflow-hidden">
+      <div class="min-w-[404px] flex min-h-0 flex-col overflow-hidden">
         <!-- 头部信息 -->
         <preview-debug-header :app_id="String(route.params?.app_id)"
           :long_term_memory="draftAppConfigForm.long_term_memory" />

@@ -5,7 +5,7 @@ features:
 - tool_call
 - agent_thought
 context_window: 131072
-max_output_tokens: 32768
+max_output_tokens: 16384
 attributes:
   model: deepseek-ai/DeepSeek-V3-0324
 parameters:
@@ -24,7 +24,7 @@ parameters:
 - name: max_tokens
   use_template: max_tokens
   default: 1024
-  max: 32768
+  max: 16384
 metadata:
   pricing:
     input: 0.216

@@ -1,8 +1,53 @@
+# DeepSeek family
 - deepseek-v4-pro
 - deepseek-v4-flash
-- kimi-k2.6
-- qwen3.6-plus
-- qwen3-coder-next
-- glm-5.1
-- minimax-m2.7
+- deepseek-v3.2-speciale
+- deepseek-v3.2-exp
+- deepseek-v3.2
+- deepseek-v3.1-terminus
 - deepseek-v3-0324
+- deepseek-r1-0528
+
+# Kimi family
+- kimi-k2.6
+- kimi-k2.5
+- kimi-k2-thinking
+
+# OpenAI family
+- gpt-5.2
+
+# Qwen general and reasoning
+- qwen3-max-2026-01-23
+- qwen3.6-plus
+- qwen3.6-35b-a3b
+- qwen3-next-80b-a3b-thinking
+- qwen3-next-80b-a3b-instruct
+- qwen3-coder-next
+- qwen3-235b-a22b-thinking-2507
+- qwen3-235b-a22b-instruct-2507
+- qwen3-30b-a3b-thinking-2507
+- qwen3-30b-a3b-instruct-2507
+
+# Qwen vision
+- qwen3-vl-235b-a22b-thinking
+- qwen3-vl-235b-a22b-instruct
+- qwen3-vl-30b-a3b-thinking
+- qwen3-vl-30b-a3b-instruct
+- qwen3-vl-8b-instruct
+
+# Qwen 3.5 family
+- qwen3.5-397b-a17b
+- qwen3.5-122b-a10b
+- qwen3.5-35b-a3b
+- qwen3.5-27b
+
+# GLM family
+- glm-5.1
+- glm-5v-turbo
+- glm-5-turbo
+- glm-5
+
+# MiniMax family
+- minimax-m2.7
+- minimax-m2.5
+- minimax-m2.1

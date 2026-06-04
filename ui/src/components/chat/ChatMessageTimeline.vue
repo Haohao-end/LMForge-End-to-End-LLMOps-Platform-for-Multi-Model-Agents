@@ -4,9 +4,13 @@ import HumanMessage from '@/components/HumanMessage.vue'
 import { nextTick, ref, watch, type PropType } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
-import type { StreamMessage } from '@/views/shared/chat-stream'
+import {
+  CHAT_MESSAGE_MIN_ITEM_SIZE,
+  buildChatMessageSizeDependencies,
+} from '@/views/shared/chat-message-size'
+import type { RenderableStreamMessage } from '@/views/shared/chat-stream'
 
-type TimelineMessage = StreamMessage & {
+type TimelineMessage = RenderableStreamMessage & {
   query: string
   image_urls: string[]
   suggested_questions?: string[]
@@ -79,11 +83,20 @@ defineExpose({ scrollToBottom })
   <dynamic-scroller
     ref="scroller"
     :items="props.messages.slice().reverse()"
-    :min-item-size="1"
+    :min-item-size="CHAT_MESSAGE_MIN_ITEM_SIZE"
+    key-field="render_id"
     class="h-full min-h-0 overflow-y-auto scrollbar-w-none"
   >
     <template #default="{ item, active }">
-      <dynamic-scroller-item :key="item.id" :item="item" :active="active" :data-index="item.id">
+      <dynamic-scroller-item
+        :key="item.render_id"
+        :item="item"
+        :active="active"
+        :data-index="item.id"
+        :size-dependencies="
+          buildChatMessageSizeDependencies(item, props.loading && item.id === props.messages[0]?.id)
+        "
+      >
         <div class="flex flex-col gap-6 py-6">
           <human-message :account="props.account" :query="item.query || ''" :image_urls="item.image_urls || []" />
           <ai-message

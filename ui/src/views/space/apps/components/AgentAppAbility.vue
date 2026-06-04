@@ -35,7 +35,7 @@ const defaultActivateKeys = [
 </script>
 
 <template>
-  <div class="flex flex-col h-[calc(100vh-141px)] min-w-0 w-full overflow-hidden">
+  <div class="flex flex-col h-full min-w-0 w-full overflow-hidden">
     <!-- 应用能力标题 -->
     <div class="p-4 text-gray-700 font-bold">{{ t('appStudio.abilities.title') }}</div>
     <!-- 应用能力列表 -->

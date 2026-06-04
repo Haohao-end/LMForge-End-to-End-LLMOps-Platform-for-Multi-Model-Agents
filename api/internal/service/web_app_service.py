@@ -18,7 +18,7 @@ from internal.core.language_model.entities.model_entity import ModelFeature
 from internal.core.memory import TokenBufferMemory
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
-from .app_config_service import AppConfigService
+from .app_config_service import AppConfigService, call_config_loader
 from .app_service import AppService
 from .conversation_service import ConversationService
 from .language_model_service import LanguageModelService
@@ -56,7 +56,11 @@ class WebAppService(BaseService):
         app = self.get_web_app(token)
 
         # 2.根据App基础信息构建LLM
-        app_config = self.app_config_service.get_app_config(app)
+        app_config = call_config_loader(
+            self.app_config_service.get_app_config,
+            app,
+            persist_changes=False,
+        )
         if hasattr(self.language_model_service, "describe_runtime_capabilities"):
             capabilities = self.language_model_service.describe_runtime_capabilities(
                 app_config.get("model_config", {}),

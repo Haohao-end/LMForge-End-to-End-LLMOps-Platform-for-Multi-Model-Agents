@@ -140,6 +140,7 @@ class OpenAPIService(BaseService):
                 invoke_from=InvokeFrom.DEBUGGER.value,
                 preset_prompt=app_config["preset_prompt"],
                 enable_long_term_memory=app_config["long_term_memory"]["enable"],
+                language_model_service=self.language_model_service,
                 tools=tools,
                 review_config=app_config["review_config"],
             ),

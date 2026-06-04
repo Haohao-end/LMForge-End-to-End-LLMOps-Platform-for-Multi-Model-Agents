@@ -3,8 +3,6 @@ import {
   buildChatOutputParts,
   extractInlineImageUrls,
   mergeChatArtifacts,
-  type ChatArtifact,
-  type ChatOutputPart,
 } from './chat-output'
 
 type StreamEventData = {
@@ -44,11 +42,15 @@ export type StreamMessage = {
   id: string
   conversation_id: string
   answer: string
-  answer_parts: ChatOutputPart[]
-  artifacts: ChatArtifact[]
+  answer_parts: unknown[]
+  artifacts: unknown[]
   latency: number
   total_token_count: number
   agent_thoughts: ChatThought[]
+}
+
+export type RenderableStreamMessage = StreamMessage & {
+  render_id: string
 }
 
 export type StreamState = {
@@ -61,6 +63,59 @@ export type StreamState = {
 export type StreamApplyResult = {
   state: StreamState
   didUpdate: boolean
+}
+
+let streamRenderIdSequence = 0
+
+export const createChatRenderId = (scope: string = 'chat') => {
+  streamRenderIdSequence += 1
+  return `${scope}-${streamRenderIdSequence}`
+}
+
+export const withChatRenderId = <T extends { id?: string; render_id?: string }>(
+  message: T,
+  scope: string = 'chat',
+): T & { render_id: string } => {
+  const renderId = String(message.render_id ?? '').trim() || String(message.id ?? '').trim() || createChatRenderId(scope)
+  return {
+    ...message,
+    render_id: renderId,
+  }
+}
+
+export const withChatRenderIds = <T extends { id?: string; render_id?: string }>(
+  messages: T[],
+  scope: string = 'chat',
+): Array<T & { render_id: string }> => {
+  return messages.map((message) => withChatRenderId(message, scope))
+}
+
+export const mergeChatHistoryMessages = <T extends { id?: string; render_id?: string }>(
+  messages: T[],
+  scope: string = 'chat',
+): Array<T & { render_id: string }> => {
+  const merged: Array<T & { render_id: string }> = []
+  const seenKeys = new Set<string>()
+
+  for (const message of messages) {
+    const normalizedId = String(message.id ?? '').trim()
+    const normalizedRenderId = String(message.render_id ?? '').trim()
+    const identityKey = normalizedId || normalizedRenderId
+    if (identityKey && seenKeys.has(identityKey)) {
+      continue
+    }
+
+    if (identityKey) {
+      seenKeys.add(identityKey)
+    }
+
+    merged.push({
+      ...message,
+      render_id: normalizedRenderId || normalizedId || createChatRenderId(scope),
+    })
+  }
+
+  return merged
 }
 
 const toPositiveNumber = (value: unknown) => {
@@ -120,7 +175,7 @@ const upsertThought = (
       : String(data.thought ?? previous.thought ?? ''),
     observation: String(data.observation ?? previous.observation ?? ''),
     tool: String(data.tool ?? previous.tool ?? ''),
-    tool_input: data.tool_input ?? previous.tool_input ?? {},
+    tool_input: normalizeToolInput(data.tool_input ?? previous.tool_input),
     latency: toPositiveNumber(data.latency) || previous.latency,
   }
 }
@@ -156,7 +211,8 @@ export const applyChatStreamEvent = (
   } else if (event === QueueEvent.agentAction) {
     upsertThought(thoughts, data, nextState, { appendThought: false })
     const observation = String(data.observation ?? '')
-    const existingUrls = message.artifacts.map(artifact => String(artifact.url || '').trim())
+    const existingUrls = mergeChatArtifacts([], message.artifacts)
+      .map(artifact => String(artifact.url || '').trim())
     const inlineImageUrls = extractInlineImageUrls(observation, existingUrls)
     if (inlineImageUrls.length > 0) {
       const extractedArtifacts = inlineImageUrls.map((url, index) => ({

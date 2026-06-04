@@ -484,10 +484,10 @@ def test_mcp_provider_manager_should_load_repo_catalog_urls(monkeypatch):
     manager = McpProviderManager()
 
     assert manager.get_provider("mind-map-mcp").provider_entity.url == "https://mcp.api-inference.modelscope.net/a478ea710ab240/mcp"
-    assert manager.get_provider("mcp-server-chart").provider_entity.url == "https://mcp.api-inference.modelscope.net/736c38ad140e45/mcp"
-    assert manager.get_provider("bing-cn-mcp-server").provider_entity.url == "https://mcp.api-inference.modelscope.net/198086eeedf448/mcp"
-    assert manager.get_provider("12306-mcp").provider_entity.url == "https://mcp.api-inference.modelscope.net/fbc1920197624e/mcp"
-    assert manager.get_provider("fetch").provider_entity.url == "https://mcp.api-inference.modelscope.net/bcb784e2572846/mcp"
+    assert manager.get_provider("mcp-server-chart").provider_entity.url == "https://mcp.api-inference.modelscope.net/0f8d8bde112847/mcp"
+    assert manager.get_provider("bing-cn-mcp-server").provider_entity.url == "https://mcp.api-inference.modelscope.net/77c109fcdabb45/mcp"
+    assert manager.get_provider("12306-mcp").provider_entity.url == "https://mcp.api-inference.modelscope.net/540c010e843a4e/mcp"
+    assert manager.get_provider("fetch").provider_entity.url == "https://mcp.api-inference.modelscope.net/5db48a8cef5240/mcp"
 
 
 def test_builtin_provider_manager_should_skip_init_when_provider_map_not_empty(

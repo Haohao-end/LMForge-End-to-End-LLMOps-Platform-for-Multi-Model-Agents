@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
   applyChatStreamEvent,
+  withChatRenderId,
   type StreamEventResponse,
   type StreamMessage,
   type StreamState,
@@ -49,6 +50,7 @@ const { query, queryTextareaRef, adjustQueryTextareaHeight } = useChatQueryInput
 })
 
 type PublicStreamMessage = StreamMessage & {
+  render_id: string
   query: string
   image_urls: string[]
   suggested_questions: string[]
@@ -108,19 +110,23 @@ const { triggerFileInput, handleFileChange } = useChatImageUpload({
   onSuccess: (message) => Message.success(message),
 })
 
-const createStreamMessage = (queryText: string): PublicStreamMessage => ({
-  id: `tmp-${Date.now()}`,
-  conversation_id: chatContextId.value,
-  answer: '',
-  answer_parts: [],
-  artifacts: [],
-  latency: 0,
-  total_token_count: 0,
-  agent_thoughts: [],
-  query: queryText,
-  image_urls: [...image_urls.value],
-  suggested_questions: [],
-})
+const createStreamMessage = (queryText: string): PublicStreamMessage =>
+  withChatRenderId(
+    {
+      id: '',
+      conversation_id: chatContextId.value,
+      answer: '',
+      answer_parts: [],
+      artifacts: [],
+      latency: 0,
+      total_token_count: 0,
+      agent_thoughts: [],
+      query: queryText,
+      image_urls: [...image_urls.value],
+      suggested_questions: [],
+    },
+    'public-app',
+  )
 
 const clearConversation = () => {
   messages.value = []
@@ -135,19 +141,24 @@ const loadPublicConversationMessages = async (conversationId: string) => {
   if (!conversationId) return
   const res = await getPublicAppA2aConversationMessages(String(route.params?.app_id), conversationId)
   const history = [...(res.data || [])].reverse()
-  messages.value = history.map((item) => ({
-    id: item.id,
-    conversation_id: item.conversation_id,
-    answer: item.answer || '',
-    answer_parts: item.answer_parts || [],
-    artifacts: item.artifacts || [],
-    latency: Number(item.latency || 0),
-    total_token_count: Number(item.total_token_count || 0),
-    agent_thoughts: [],
-    query: item.query || '',
-    image_urls: item.image_urls || [],
-    suggested_questions: item.suggested_questions || [],
-  }))
+  messages.value = history.map((item) =>
+    withChatRenderId(
+      {
+        id: item.id,
+        conversation_id: item.conversation_id,
+        answer: item.answer || '',
+        answer_parts: item.answer_parts || [],
+        artifacts: item.artifacts || [],
+        latency: Number(item.latency || 0),
+        total_token_count: Number(item.total_token_count || 0),
+        agent_thoughts: [],
+        query: item.query || '',
+        image_urls: item.image_urls || [],
+        suggested_questions: item.suggested_questions || [],
+      },
+      'public-app',
+    ),
+  )
 }
 
 const loadConversationFromRoute = async () => {

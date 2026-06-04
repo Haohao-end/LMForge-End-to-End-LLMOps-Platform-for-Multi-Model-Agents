@@ -14,22 +14,52 @@
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from contextlib import nullcontext
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch, PropertyMock
 from uuid import uuid4
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import tool
 
-from internal.core.agent.agents.deep_thinking_agent import DeepRouteDecision, DeepThinkingAgent
+from internal.core.agent.agents.deep_thinking_agent import (
+    DeepRouteDecision,
+    DeepThinkingAgent,
+    StructuredDocumentOutlinePlan,
+    StructuredDocumentSectionPlan,
+)
 from internal.core.agent.backends.baidu_cfc_sandbox_backend import BaiduCfcSandboxBackend
+from internal.core.agent.entities.artifact_policy_entity import ArtifactPolicy
 from internal.core.agent.entities.agent_entity import AgentConfig, DEEP_THINKING_SYSTEM_PROMPT
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
 from internal.core.agent.middleware import DeepTimelineMiddleware
 from internal.core.language_model.entities.model_entity import BaseLanguageModel, ModelFeature
+from internal.core.language_model.providers.openai.chat import Chat as OpenAIChat
 from internal.entity.conversation_entity import InvokeFrom
+from internal.service.language_model_service import RuntimeFallbackLanguageModelProxy
+
+
+@pytest.fixture(autouse=True)
+def _stub_deepagents_when_dependency_is_missing(monkeypatch):
+    """本地单测不要求安装 deepagents；生产依赖由 requirements.txt 保证。"""
+    try:
+        __import__("deepagents")
+        return
+    except ModuleNotFoundError:
+        pass
+
+    class StateBackend:
+        pass
+
+    fake_deepagents = ModuleType("deepagents")
+    fake_deepagents.create_deep_agent = MagicMock()
+    fake_backends = ModuleType("deepagents.backends")
+    fake_backends.StateBackend = StateBackend
+    monkeypatch.setitem(sys.modules, "deepagents", fake_deepagents)
+    monkeypatch.setitem(sys.modules, "deepagents.backends", fake_backends)
 
 
 # ============================================================
@@ -143,7 +173,7 @@ class TestBaiduCfcSandboxBackend:
         assert result.exit_code == 0
         assert "hello world" in result.output
         assert result.truncated is False
-        mock_sbx.commands.run.assert_called_once_with("echo hello world", timeout=60)
+        mock_sbx.commands.run.assert_called_once_with("echo hello world", timeout=600)
 
     def test_execute_with_stderr(self):
         """execute() 有 stderr 输出时应加 [stderr] 前缀。"""
@@ -228,8 +258,12 @@ class TestBaiduCfcSandboxBackend:
         mock_result.exit_code = 0
 
         mock_sbx = MagicMock()
+        create_mock = MagicMock(side_effect=[RuntimeError("template missing"), mock_sbx])
+        fake_e2b_module = SimpleNamespace(
+            Sandbox=SimpleNamespace(create=create_mock),
+        )
         mock_sbx.commands.run.return_value = mock_result
-        with patch("e2b_code_interpreter.Sandbox.create", side_effect=[RuntimeError("template missing"), mock_sbx]) as create_mock:
+        with patch.dict("sys.modules", {"e2b_code_interpreter": fake_e2b_module}):
             result = backend.execute("echo ok")
 
         assert result.exit_code == 0
@@ -246,7 +280,11 @@ class TestBaiduCfcSandboxBackend:
         backend = BaiduCfcSandboxBackend(api_key="k", domain="d", sandbox_timeout=42)
 
         mock_sbx = MagicMock()
-        with patch("e2b_code_interpreter.Sandbox.create", return_value=mock_sbx) as create_mock:
+        create_mock = MagicMock(return_value=mock_sbx)
+        fake_e2b_module = SimpleNamespace(
+            Sandbox=SimpleNamespace(create=create_mock),
+        )
+        with patch.dict("sys.modules", {"e2b_code_interpreter": fake_e2b_module}):
             sandbox = backend._get_sandbox()
 
         assert sandbox is mock_sbx
@@ -432,6 +470,1733 @@ class TestDeepThinkingAgentGraph:
         agent = self._build_agent()
         assert agent._agent is not None
 
+    def test_decide_deep_route_for_explicit_artifact_request_skips_model_vote(self):
+        """显式文件请求应规则优先，不能先让模型投票决定是否走文件链路。"""
+        llm = _make_llm()
+        structured_llm = MagicMock()
+        structured_llm.invoke.return_value = self._route()
+        llm.with_structured_output.return_value = structured_llm
+
+        agent = DeepThinkingAgent(llm=llm, agent_config=_make_agent_config(enable_deep_thinking=True))
+
+        decision = agent._decide_deep_route(
+            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+            "请保存为 SpaceX_IPO_Prospectus_Draft.txt。"
+        )
+
+        assert decision.need_sandbox is True
+        assert decision.need_file_io is True
+        assert decision.need_artifact_output is True
+        assert decision.need_execute is False
+        llm.with_structured_output.assert_not_called()
+
+    def test_final_llm_node_should_not_bind_tools_after_deep_execution(self):
+        """深度执行后的最终回答阶段不应再绑定业务工具，避免误调 sandbox_exec。"""
+        @tool
+        def google_serper(query: str) -> str:
+            """Fake search tool."""
+            return query
+
+        llm = _make_llm(stream_chunks=[_make_chunk("最终回答")])
+        object.__setattr__(llm, "bind_tools", MagicMock(return_value=llm))
+        config = _make_agent_config(
+            enable_deep_thinking=True,
+            tools=[google_serper],
+        )
+        agent = DeepThinkingAgent(llm=llm, agent_config=config)
+        agent.agent_queue_manager.publish = MagicMock()
+
+        result = agent._llm_node({
+            "messages": [
+                AIMessage(
+                    content=(
+                        "<deep_execution_summary>\n"
+                        "- used_sandbox: true\n"
+                        "</deep_execution_summary>\n"
+                        "<deep_thinking_result>\n"
+                        "规划完成\n"
+                        "</deep_thinking_result>\n"
+                        "<generated_artifacts>\n"
+                        "- plan.md (https://cos.example.com/plan.md)\n"
+                        "</generated_artifacts>"
+                    )
+                )
+            ],
+            "task_id": uuid4(),
+            "iteration_count": 0,
+        })
+
+        assert result["messages"][0].content == "最终回答"
+        llm.bind_tools.assert_not_called()
+        assert agent.agent_config.tools == config.tools
+
+    def test_final_llm_node_should_strip_sandbox_links_without_artifacts(self):
+        """深度执行最终回答不应泄漏 sandbox:/mnt/data 下载链接，且无产物时要明确说明。"""
+        llm = _make_llm(
+            stream_chunks=[
+                _make_chunk(
+                    "您可以下载查看完整文件："
+                    "[SpaceX_IPO_Prospectus_Draft.md](sandbox:/mnt/data/SpaceX_IPO_Prospectus_Draft.md)"
+                )
+            ]
+        )
+        agent = DeepThinkingAgent(llm=llm, agent_config=_make_agent_config(enable_deep_thinking=True))
+        published = []
+        agent.agent_queue_manager.publish = lambda tid, thought: published.append(thought)
+
+        result = agent._llm_node({
+            "messages": [
+                AIMessage(
+                    content=(
+                        "<deep_execution_summary>\n"
+                        "- used_sandbox: true\n"
+                        "</deep_execution_summary>\n"
+                        "<deep_thinking_result>\n"
+                        "草案已完成\n"
+                        "</deep_thinking_result>"
+                    )
+                )
+            ],
+            "task_id": uuid4(),
+            "iteration_count": 0,
+        })
+
+        final_message = result["messages"][0].content
+        assert "sandbox:/mnt/data/" not in final_message
+        assert "当前没有可下载附件" in final_message
+        assert any(
+            event.event == QueueEvent.AGENT_MESSAGE and "sandbox:/mnt/data/" not in event.answer
+            for event in published
+        )
+
+    def test_final_llm_node_materializes_plain_text_artifact_before_agent_end(self):
+        """深度执行最终回答若是完整文本文档，应在 AGENT_END 前自动 materialize 为可下载附件。"""
+        llm = _make_llm(
+            stream_chunks=[
+                _make_chunk(
+                    "================================================================================\n"
+                    "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+                    "PROSPECTUS DRAFT\n"
+                    "================================================================================\n\n"
+                    "PROSPECTUS SUMMARY\n"
+                    "The Company ...\n\n"
+                    "RISK FACTORS\n"
+                    "..."
+                )
+            ]
+        )
+        agent = DeepThinkingAgent(llm=llm, agent_config=_make_agent_config(enable_deep_thinking=True))
+        agent.agent_queue_manager.publish = MagicMock()
+        runtime_flask_app = MagicMock()
+        runtime_flask_app.app_context.return_value = nullcontext()
+        agent.agent_config.runtime_flask_app = runtime_flask_app
+
+        mock_upload_file = SimpleNamespace(
+            id=uuid4(),
+            name="SpaceX_IPO_Prospectus_Draft.txt",
+            size=1024,
+            extension="txt",
+            mime_type="text/plain",
+            key="artifacts/SpaceX_IPO_Prospectus_Draft.txt",
+        )
+        mock_cos_service = MagicMock()
+        mock_cos_service.upload_bytes.return_value = mock_upload_file
+        mock_cos_service.get_file_url.return_value = "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.txt"
+        mock_injector = MagicMock()
+        mock_injector.get.return_value = mock_cos_service
+
+        published = []
+        agent.agent_queue_manager.publish = lambda tid, thought: published.append(thought)
+
+        with patch("app.http.module.injector", mock_injector), \
+             patch("internal.core.agent.agents.deep_thinking_agent.has_app_context", return_value=False):
+            result = agent._llm_node({
+                "messages": [
+                    HumanMessage(
+                        content=(
+                            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+                            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                            "请保存为 SpaceX_IPO_Prospectus_Draft.txt。"
+                        )
+                    ),
+                    AIMessage(
+                        content=(
+                            "<deep_execution_summary>\n"
+                            "- used_sandbox: true\n"
+                            "</deep_execution_summary>\n"
+                            "<deep_thinking_result>\n"
+                            "================================================================================\n"
+                            "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+                            "PROSPECTUS DRAFT\n"
+                            "================================================================================\n\n"
+                            "PROSPECTUS SUMMARY\n"
+                            "The Company designs, manufactures, and operates advanced rockets and spacecraft.\n\n"
+                            "BUSINESS OVERVIEW\n"
+                            "Starlink provides satellite broadband services.\n\n"
+                            "RISK FACTORS\n"
+                            "Launch and regulatory risk remain material.\n\n"
+                            "MD&A\n"
+                            "Management expects continued capital intensity.\n\n"
+                            "USE OF PROCEEDS\n"
+                            "Proceeds will support Starship and Starlink.\n\n"
+                            "LEGAL MATTERS\n"
+                            "Forward-looking statements apply.\n"
+                            "</deep_thinking_result>"
+                        )
+                    ),
+                ],
+                "task_id": uuid4(),
+                "iteration_count": 0,
+            })
+
+        final_message = result["messages"][0].content
+        assert "已生成可下载附件：SpaceX_IPO_Prospectus_Draft.txt" in final_message
+        assert "当前没有可下载附件" not in final_message
+        assert mock_cos_service.upload_bytes.call_count == 1
+        assert any(event.event == QueueEvent.DEEP_ARTIFACT_CREATED for event in published)
+        artifact_idx = next(i for i, event in enumerate(published) if event.event == QueueEvent.DEEP_ARTIFACT_CREATED)
+        end_idx = next(i for i, event in enumerate(published) if event.event == QueueEvent.AGENT_END)
+        assert artifact_idx < end_idx
+        assert any(
+            event.event == QueueEvent.AGENT_MESSAGE and "已生成可下载附件：SpaceX_IPO_Prospectus_Draft.txt" in event.answer
+            for event in published
+        )
+
+    def test_final_llm_node_prefers_deep_thinking_result_over_short_summary_for_plain_text_artifact(self):
+        """当最终回答只是总结句时，应优先使用 deep_thinking_result 中的完整正文生成附件。"""
+        llm = _make_llm(
+            stream_chunks=[
+                _make_chunk("我将合并所有章节内容并保存为完整的招股说明书文件。")
+            ]
+        )
+        agent = DeepThinkingAgent(llm=llm, agent_config=_make_agent_config(enable_deep_thinking=True))
+        runtime_flask_app = MagicMock()
+        runtime_flask_app.app_context.return_value = nullcontext()
+        agent.agent_config.runtime_flask_app = runtime_flask_app
+
+        mock_upload_file = SimpleNamespace(
+            id=uuid4(),
+            name="SpaceX_IPO_Prospectus_Draft.txt",
+            size=8192,
+            extension="txt",
+            mime_type="text/plain",
+            key="artifacts/SpaceX_IPO_Prospectus_Draft.txt",
+        )
+        mock_cos_service = MagicMock()
+        mock_cos_service.upload_bytes.return_value = mock_upload_file
+        mock_cos_service.get_file_url.return_value = "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.txt"
+        mock_injector = MagicMock()
+        mock_injector.get.return_value = mock_cos_service
+
+        published = []
+        agent.agent_queue_manager.publish = lambda tid, thought: published.append(thought)
+
+        deep_thinking_result = (
+            "================================================================================\n"
+            "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+            "PROSPECTUS DRAFT\n"
+            "================================================================================\n\n"
+            "PROSPECTUS SUMMARY\n"
+            "The Company designs, manufactures, and operates advanced rockets and spacecraft.\n\n"
+            "BUSINESS OVERVIEW\n"
+            "Starlink provides satellite broadband services.\n\n"
+            "RISK FACTORS\n"
+            "Launch and regulatory risk remain material.\n\n"
+            "MD&A\n"
+            "Management expects continued capital intensity.\n\n"
+            "USE OF PROCEEDS\n"
+            "Proceeds will support Starship and Starlink.\n\n"
+            "LEGAL MATTERS\n"
+            "Forward-looking statements apply.\n"
+        )
+
+        with patch("app.http.module.injector", mock_injector), \
+             patch("internal.core.agent.agents.deep_thinking_agent.has_app_context", return_value=False):
+            result = agent._llm_node({
+                "messages": [
+                    HumanMessage(
+                        content=(
+                            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+                            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                            "请保存为 SpaceX_IPO_Prospectus_Draft.txt。"
+                        )
+                    ),
+                    AIMessage(
+                        content=(
+                            "<deep_execution_summary>\n"
+                            "- used_sandbox: true\n"
+                            "</deep_execution_summary>\n"
+                            f"<deep_thinking_result>\n{deep_thinking_result}\n</deep_thinking_result>"
+                        )
+                    ),
+                ],
+                "task_id": uuid4(),
+                "iteration_count": 0,
+            })
+
+        final_message = result["messages"][0].content
+        assert "已生成可下载附件：SpaceX_IPO_Prospectus_Draft.txt" in final_message
+        assert mock_cos_service.upload_bytes.call_count == 1
+        uploaded_content = mock_cos_service.upload_bytes.call_args.kwargs["content"].decode("utf-8")
+        assert "PROSPECTUS SUMMARY" in uploaded_content
+        assert "BUSINESS OVERVIEW" in uploaded_content
+        assert "RISK FACTORS" in uploaded_content
+        assert "MD&A" in uploaded_content
+        assert "USE OF PROCEEDS" in uploaded_content
+        assert "LEGAL MATTERS" in uploaded_content
+        assert len(uploaded_content) > 500
+        assert any(event.event == QueueEvent.DEEP_ARTIFACT_CREATED for event in published)
+        assert any(
+            event.event == QueueEvent.AGENT_MESSAGE and "已生成可下载附件：SpaceX_IPO_Prospectus_Draft.txt" in event.answer
+            for event in published
+        )
+
+    def test_final_llm_node_should_not_materialize_from_summary_only(self):
+        """最终回答即使看起来像文档，也不应在缺少 deep_thinking_result 时被误当成附件正文。"""
+        llm = _make_llm(
+            stream_chunks=[
+                _make_chunk(
+                    "================================================================================\n"
+                    "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+                    "PROSPECTUS DRAFT\n"
+                    "================================================================================\n\n"
+                    "PROSPECTUS SUMMARY\n"
+                    "The Company designs, manufactures, and operates advanced rockets and spacecraft.\n\n"
+                    "BUSINESS OVERVIEW\n"
+                    "Starlink provides satellite broadband services.\n\n"
+                    "RISK FACTORS\n"
+                    "Launch and regulatory risk remain material.\n"
+                )
+            ]
+        )
+        agent = DeepThinkingAgent(llm=llm, agent_config=_make_agent_config(enable_deep_thinking=True))
+        agent.agent_queue_manager.publish = MagicMock()
+        runtime_flask_app = MagicMock()
+        runtime_flask_app.app_context.return_value = nullcontext()
+        agent.agent_config.runtime_flask_app = runtime_flask_app
+
+        mock_cos_service = MagicMock()
+        mock_injector = MagicMock()
+        mock_injector.get.return_value = mock_cos_service
+
+        with patch("app.http.module.injector", mock_injector), \
+             patch("internal.core.agent.agents.deep_thinking_agent.has_app_context", return_value=False):
+            result = agent._llm_node({
+                "messages": [
+                    HumanMessage(
+                        content=(
+                            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+                            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                            "请保存为 SpaceX_IPO_Prospectus_Draft.txt。"
+                        )
+                    ),
+                    AIMessage(
+                        content=(
+                            "<deep_execution_summary>\n"
+                            "- used_sandbox: true\n"
+                            "</deep_execution_summary>\n"
+                            "<deep_thinking_result>\n\n"
+                            "</deep_thinking_result>"
+                        )
+                    ),
+                ],
+                "task_id": uuid4(),
+                "iteration_count": 0,
+            })
+
+        assert mock_cos_service.upload_bytes.call_count == 0
+        assert "PROSPECTUS SUMMARY" in result["messages"][0].content
+        assert "已生成可下载附件" not in result["messages"][0].content
+
+    def test_extract_write_file_payload_from_tool_call_block(self):
+        """应能从 write_file 工具调用文本中恢复路径和文件内容。"""
+        answer = """<tool_call>write_file<arg_key>path</arg_key><arg_value>SpaceX_IPO_Prospectus_Draft.txt<arg_key>content</arg_key><arg_value>hello world"""
+
+        payload = ArtifactPolicy.extract_write_file_payload(answer)
+
+        assert payload is not None
+        path, content = payload
+        assert path == "SpaceX_IPO_Prospectus_Draft.txt"
+        assert content == "hello world"
+
+    def test_extract_write_file_payload_from_namespaced_xml_tool_call(self):
+        """应能从带命名空间前缀的结构化工具调用中恢复路径和文件内容。"""
+        answer = """<vendorx:tool_call>
+<invoke name="write_file">
+    <parameter name="file_name">SpaceX_IPO_Prospectus_Draft.txt</parameter>
+    <parameter name="content">hello world
+line two</parameter>
+</invoke>
+</vendorx:tool_call>"""
+
+        payload = ArtifactPolicy.extract_write_file_payload(answer)
+
+        assert payload is not None
+        path, content = payload
+        assert path == "SpaceX_IPO_Prospectus_Draft.txt"
+        assert content == "hello world\nline two"
+
+    def test_extract_write_file_payload_from_python_code_block(self):
+        """应能从 Python 代码块中的 filepath/content 恢复路径和文件内容。"""
+        answer = """```python
+filepath = "SpaceX_IPO_Prospectus_Draft.txt"
+content = \"\"\"hello world
+line two
+\"\"\"
+
+with open(filepath, "w", encoding="utf-8") as f:
+    f.write(content)
+```"""
+
+        payload = ArtifactPolicy.extract_write_file_payload(answer)
+
+        assert payload is not None
+        path, content = payload
+        assert path == "SpaceX_IPO_Prospectus_Draft.txt"
+        assert content == "hello world\nline two"
+
+    def test_extract_write_file_payload_from_generated_artifacts_block(self):
+        """应能从 generated_artifacts 区块中恢复文件路径和文件内容。"""
+        answer = """<generated_artifacts>
+<artifact id="spacex_prospectus" title="SpaceX IPO Prospectus Draft" commit_message="Generate SpaceX IPO Prospectus Draft in txt format">
+
+SPACE EXPLORATION TECHNOLOGIES CORP.
+IPO招股说明书草案
+</artifact>
+</generated_artifacts>"""
+
+        payload = ArtifactPolicy.extract_write_file_payload(answer)
+
+        assert payload is not None
+        path, content = payload
+        assert path == "SpaceX_IPO_Prospectus_Draft.txt"
+        assert "SPACE EXPLORATION TECHNOLOGIES CORP." in content
+        assert "IPO招股说明书草案" in content
+
+    def test_infer_requested_artifact_filename_from_query(self):
+        """应能从用户请求中提取明确的目标文件名。"""
+        query = "生成 SpaceX IPO 招股说明书 txt 文件，请保存为 SpaceX_IPO_Prospectus_Draft.txt。"
+
+        filename = ArtifactPolicy.infer_requested_artifact_filename(query)
+
+        assert filename == "SpaceX_IPO_Prospectus_Draft.txt"
+
+    def test_resolve_artifact_filename_without_explicit_name_for_prospectus(self):
+        """用户未显式命名时，应能稳定推断出招股书默认文件名。"""
+        query = (
+            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+        )
+
+        filename = ArtifactPolicy.resolve_artifact_filename(query, allow_default_filename=True)
+
+        assert filename == "SpaceX_IPO_Prospectus_Draft.txt"
+
+    def test_resolve_artifact_filename_without_explicit_name_for_travel(self):
+        """用户未显式命名时，应能退化为通用旅行文件名，而不是依赖城市白名单。"""
+        query = (
+            "请输出可下载的 Markdown 附件。内容包含：行程总览、每日安排、住宿建议、交通建议、预算。"
+            "我第一次去北京，只有 2 天时间，同行有长辈。"
+        )
+
+        filename = ArtifactPolicy.resolve_artifact_filename(query, allow_default_filename=True)
+
+        assert filename == "Travel_Plan.md"
+
+    def test_build_document_outline_fallback_is_generic(self):
+        """结构化文档 fallback 不应依赖招股书/旅行/报告等领域关键词分支。"""
+        prospectus_outline = DeepThinkingAgent._build_document_outline_fallback(
+            "生成 SpaceX IPO 招股说明书 txt 文件",
+            "SpaceX_IPO_Prospectus_Draft.txt",
+        )
+        travel_outline = DeepThinkingAgent._build_document_outline_fallback(
+            "生成北京旅行规划 markdown 文件",
+            "北京旅行规划.md",
+        )
+
+        assert [section.title for section in prospectus_outline.sections] == [
+            "摘要",
+            "主体内容",
+            "补充说明",
+            "结论与下一步",
+        ]
+        assert [section.title for section in travel_outline.sections] == [
+            "摘要",
+            "主体内容",
+            "补充说明",
+            "结论与下一步",
+        ]
+        assert prospectus_outline.sections == travel_outline.sections
+
+    def test_build_local_document_section_body_is_generic(self):
+        """本地章节兜底不应再根据具体领域词切换不同模板。"""
+        outline = StructuredDocumentOutlinePlan(
+            document_title="任意文档",
+            sections=[
+                StructuredDocumentSectionPlan(
+                    title="摘要",
+                    purpose="概述文档目标。",
+                    key_points=["主题", "范围", "关键结论"],
+                    target_length_hint="约 200-300 字",
+                )
+            ],
+        )
+
+        body = DeepThinkingAgent._build_local_document_section_body(
+            query="生成 SpaceX IPO 招股说明书 txt 文件",
+            outline=outline,
+            section=outline.sections[0],
+            section_index=1,
+            section_total=4,
+            markdown=True,
+        )
+
+        assert "招股说明书" not in body
+        assert "旅行" not in body
+        assert "报告" not in body
+        assert "文档整体目标" in body
+
+    def test_extract_requested_outline_section_titles_from_query(self):
+        """应从用户 query 中提取显式章节候选，而不是依赖领域写死。"""
+        query = (
+            "请输出可下载的 Markdown 附件。内容包含：行程总览、每日安排、住宿建议、交通建议、预算。"
+            "我第一次去北京，只有 2 天时间，同行有长辈。"
+        )
+
+        titles = DeepThinkingAgent._extract_requested_outline_section_titles(query)
+
+        assert titles == [
+            "行程总览",
+            "每日安排",
+            "住宿建议",
+            "交通建议",
+            "预算",
+        ]
+
+    def test_extract_requested_outline_section_titles_ignores_evaluation_blocks(self):
+        """章节提取器应忽略“正常结果/通过标准”一类验收说明，避免把它们误当成文档章节。"""
+        query = (
+            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+            "正常结果："
+            "- 出现可下载附件 SpaceX_IPO_Prospectus_Draft.txt"
+            "- 文件内容包含 6 个章节"
+            "- 文件大小应是 KB 级，不是几十字节的短总结"
+            "- 不能出现本地沙箱路径链接"
+        )
+
+        titles = DeepThinkingAgent._extract_requested_outline_section_titles(query)
+
+        assert titles == [
+            "封面摘要",
+            "业务概览",
+            "风险因素",
+            "MD&A",
+            "募集资金用途",
+            "法律声明",
+        ]
+
+    def test_build_document_outline_fallback_ignores_evaluation_blocks(self):
+        """当 query 同时包含需求与验收说明时，fallback 仍应只保留需求章节，而不是误吞验收文本。"""
+        query = (
+            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+            "内容包含：封面摘 要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+            "正常结果："
+            "- 出现可下载附件 SpaceX_IPO_Prospectus_Draft.txt"
+            "- 文件内容包含 6 个章节"
+            "- 文件大小应是 KB 级，不是几十字节的短总结"
+            "- 不能出现本地沙箱路径链接"
+        )
+
+        outline = DeepThinkingAgent._build_document_outline_fallback(
+            query=query,
+            filename="SpaceX_IPO_Prospectus_Draft.txt",
+        )
+
+        assert [section.title for section in outline.sections] == [
+            "封面摘要",
+            "业务概览",
+            "风险因素",
+            "MD&A",
+            "募集资金用途",
+            "法律声明",
+        ]
+
+    def test_generate_structured_document_outline_repairs_and_preserves_requested_sections(self):
+        """structured output 丢失显式章节时，应进入修复层并尽量保留用户已明确列出的章节。"""
+        agent = self._build_agent()
+        timeline = MagicMock()
+
+        outline_llm = MagicMock()
+        outline_llm.invoke.return_value = StructuredDocumentOutlinePlan(
+            document_title="SpaceX IPO Prospectus Draft",
+            sections=[
+                StructuredDocumentSectionPlan(
+                    title="摘要",
+                    purpose="概述文档目标。",
+                    key_points=["主题", "目标", "范围"],
+                    target_length_hint="约 200-300 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="主体内容",
+                    purpose="展开主要信息。",
+                    key_points=["主要内容", "细节", "逻辑"],
+                    target_length_hint="约 400-700 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="补充说明",
+                    purpose="补充约束与注意事项。",
+                    key_points=["约束", "注意事项", "风险"],
+                    target_length_hint="约 200-400 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="结论与下一步",
+                    purpose="总结并给出后续建议。",
+                    key_points=["结论", "建议", "下一步"],
+                    target_length_hint="约 200-300 字",
+                ),
+            ],
+        )
+        repair_llm = MagicMock()
+        repair_llm.invoke.return_value = StructuredDocumentOutlinePlan(
+            document_title="通用文档",
+            sections=[
+                StructuredDocumentSectionPlan(
+                    title="背景",
+                    purpose="概述文档背景和目标。",
+                    key_points=["背景", "目标", "范围"],
+                    target_length_hint="约 200-300 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="分析",
+                    purpose="展开主要分析内容。",
+                    key_points=["主要分析", "细节", "结论依据"],
+                    target_length_hint="约 400-700 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="结论",
+                    purpose="总结并给出下一步。",
+                    key_points=["结论", "建议", "下一步"],
+                    target_length_hint="约 200-300 字",
+                ),
+            ],
+        )
+        agent.llm.with_structured_output.side_effect = [outline_llm, repair_llm]
+
+        query = (
+            "请输出可下载的 Markdown 附件。内容包含：背景、分析、结论。"
+            "请严格按这三部分组织内容，不要额外扩展章节。"
+        )
+
+        outline = agent._generate_structured_document_outline(
+            query=query,
+            filename="SpaceX_IPO_Prospectus_Draft.txt",
+            route_decision=self._route(
+                need_sandbox=True,
+                need_execute=True,
+                need_file_io=True,
+                need_artifact_output=True,
+                summary="需要沙箱执行",
+            ),
+            timeline=timeline,
+        )
+
+        assert agent.llm.with_structured_output.call_count == 2
+        assert [section.title for section in outline.sections] == [
+            "背景",
+            "分析",
+            "结论",
+        ]
+        assert timeline.publish_step.call_count >= 3
+
+    def test_generate_structured_document_outline_accepts_three_sections_without_repair(self):
+        """模型若基于 query 自行决定只产出 3 章，也应被接受，不应被硬性数量门槛拦截。"""
+        agent = self._build_agent()
+        timeline = MagicMock()
+
+        outline_llm = MagicMock()
+        outline_llm.invoke.return_value = StructuredDocumentOutlinePlan(
+            document_title="通用文档",
+            sections=[
+                StructuredDocumentSectionPlan(
+                    title="摘要",
+                    purpose="概述整体目标。",
+                    key_points=["目标", "范围", "结论"],
+                    target_length_hint="约 200-300 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="主体内容",
+                    purpose="展开主要内容。",
+                    key_points=["主要内容", "细节", "建议"],
+                    target_length_hint="约 400-700 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="结论",
+                    purpose="总结并给出下一步。",
+                    key_points=["结论", "建议", "下一步"],
+                    target_length_hint="约 200-300 字",
+                ),
+            ],
+        )
+        agent.llm.with_structured_output.return_value = outline_llm
+
+        outline = agent._generate_structured_document_outline(
+            query="请帮我写一份简短文档，分为摘要、主体内容和结论即可。",
+            filename="generic_document.txt",
+            route_decision=self._route(
+                need_sandbox=True,
+                need_execute=True,
+                need_file_io=True,
+                need_artifact_output=True,
+                summary="需要沙箱执行",
+            ),
+            timeline=timeline,
+        )
+
+        assert agent.llm.with_structured_output.call_count == 1
+        assert [section.title for section in outline.sections] == [
+            "摘要",
+            "主体内容",
+            "结论",
+        ]
+        assert timeline.publish_step.call_count >= 2
+
+    def test_generate_structured_document_outline_falls_back_to_generic_when_repair_fails(self):
+        """structured output 与修复都失败时，才回到通用 4 章 fallback。"""
+        agent = self._build_agent()
+        timeline = MagicMock()
+
+        outline_llm = MagicMock()
+        outline_llm.invoke.side_effect = ValueError("Invalid JSON: expected value")
+        repair_llm = MagicMock()
+        repair_llm.invoke.side_effect = ValueError("repair failed")
+        agent.llm.with_structured_output.side_effect = [outline_llm, repair_llm]
+
+        outline = agent._generate_structured_document_outline(
+            query="请帮我写一份通用文档，内容尽量完整。",
+            filename="generic_document.txt",
+            route_decision=self._route(
+                need_sandbox=True,
+                need_execute=True,
+                need_file_io=True,
+                need_artifact_output=True,
+                summary="需要沙箱执行",
+            ),
+            timeline=timeline,
+        )
+
+        assert agent.llm.with_structured_output.call_count == 2
+        assert [section.title for section in outline.sections] == [
+            "摘要",
+            "主体内容",
+            "补充说明",
+            "结论与下一步",
+        ]
+        assert timeline.publish_step.call_count >= 3
+
+    def test_generate_structured_document_outline_preserves_query_sections_when_fallback_is_needed(self):
+        """当 structured output 与 repair 都失败时，若 query 已明确列出章节，应保留这些章节，而不是退成通用 4 章。"""
+        agent = self._build_agent()
+        timeline = MagicMock()
+
+        outline_llm = MagicMock()
+        outline_llm.invoke.side_effect = ValueError("Invalid JSON: expected value")
+        repair_llm = MagicMock()
+        repair_llm.invoke.side_effect = ValueError("repair failed")
+        agent.llm.with_structured_output.side_effect = [outline_llm, repair_llm]
+
+        query = (
+            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+        )
+
+        outline = agent._generate_structured_document_outline(
+            query=query,
+            filename="SpaceX_IPO_Prospectus_Draft.txt",
+            route_decision=self._route(
+                need_sandbox=True,
+                need_execute=True,
+                need_file_io=True,
+                need_artifact_output=True,
+                summary="需要沙箱执行",
+            ),
+            timeline=timeline,
+        )
+
+        assert agent.llm.with_structured_output.call_count == 2
+        assert [section.title for section in outline.sections] == [
+            "封面摘要",
+            "业务概览",
+            "风险因素",
+            "MD&A",
+            "募集资金用途",
+            "法律声明",
+        ]
+        assert timeline.publish_step.call_count >= 3
+
+    def test_strip_plain_text_artifact_preamble_filters_generic_boilerplate(self):
+        """附件前导清洗应按通用 boilerplate 规则工作，而不是依赖长名单。"""
+        text = (
+            "说明：当前对话环境暂不直接支持自动生成可下载附件，但以下为您提供完整、可直接复制保存的 .txt 文件内容。\n\n"
+            "================================================================================\n"
+            "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+            "PROSPECTUS DRAFT\n"
+            "================================================================================\n\n"
+            "PROSPECTUS SUMMARY\n"
+            "The Company ...\n"
+        )
+
+        cleaned = ArtifactPolicy.strip_plain_text_artifact_preamble(text)
+
+        assert "暂不直接支持自动生成可下载附件" not in cleaned
+        assert "请复制以下全部内容" not in cleaned
+        assert cleaned.startswith("================================================================================")
+        assert "SPACE EXPLORATION TECHNOLOGIES CORP." in cleaned
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_recovers_missing_write_file_artifact(self, mock_route, mock_build_deep):
+        """首次未扫描到附件时，应尝试把 write_file 文本恢复为真实产物并重新扫描。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.invoke.return_value = {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "<tool_call>write_file<arg_key>path</arg_key>"
+                        "<arg_value>SpaceX_IPO_Prospectus_Draft.json<arg_key>content</arg_key>"
+                        "<arg_value>final prospectus text"
+                    )
+                )
+            ],
+        }
+
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.json", error=None)
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        agent.agent_queue_manager.publish = MagicMock()
+        recover_mock = MagicMock(return_value=True)
+        collect_mock = MagicMock(side_effect=[
+            [],
+            [{"name": "SpaceX_IPO_Prospectus_Draft.json", "url": "https://cos.example.com/SpaceX_IPO_Prospectus_Draft.json"}],
+        ])
+        agent._recover_missing_artifact_from_deep_answer = recover_mock
+        agent._collect_artifacts = collect_mock
+
+        result = agent._deep_agent_node(
+            self._build_state(
+                "请生成 SpaceX IPO 数据摘要 json 文件，要求输出可下载 .json 附件。"
+                "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                "请保存为 SpaceX_IPO_Prospectus_Draft.json。"
+            )
+        )
+
+        recover_mock.assert_called_once()
+        assert collect_mock.call_count == 2
+        assert "<generated_artifacts>" in result["messages"][0].content
+        assert "SpaceX_IPO_Prospectus_Draft.json" in result["messages"][0].content
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_recovers_python_code_block_artifact(self, mock_route, mock_build_deep):
+        """首次未扫描到附件时，应尝试把 Python 代码块恢复为真实产物并重新扫描。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.invoke.return_value = {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "```python\n"
+                        "filepath = \"SpaceX_IPO_Prospectus_Draft.json\"\n"
+                        "content = \"\"\"final prospectus text\"\"\"\n"
+                        "with open(filepath, \"w\", encoding=\"utf-8\") as f:\n"
+                        "    f.write(content)\n"
+                        "```"
+                    )
+                )
+            ],
+        }
+
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.json", error=None)
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        agent.agent_queue_manager.publish = MagicMock()
+        collect_mock = MagicMock(side_effect=[
+            [],
+            [{"name": "SpaceX_IPO_Prospectus_Draft.json", "url": "https://cos.example.com/SpaceX_IPO_Prospectus_Draft.json"}],
+        ])
+        agent._collect_artifacts = collect_mock
+
+        result = agent._deep_agent_node(
+            self._build_state(
+                "生成 SpaceX IPO 数据摘要 json 文件，要求输出可下载 .json 附件。"
+                "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                "请保存为 SpaceX_IPO_Prospectus_Draft.json。"
+            )
+        )
+
+        backend.upload_files.assert_called_once()
+        uploaded_path, uploaded_content = backend.upload_files.call_args.args[0][0]
+        assert uploaded_path.endswith("SpaceX_IPO_Prospectus_Draft.json")
+        assert b"final prospectus text" in uploaded_content
+        assert collect_mock.call_count == 2
+        assert "<generated_artifacts>" in result["messages"][0].content
+        assert "SpaceX_IPO_Prospectus_Draft.json" in result["messages"][0].content
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_recovers_namespaced_xml_artifact(self, mock_route, mock_build_deep):
+        """首次未扫描到附件时，应尝试把带命名空间前缀的 XML 工具调用恢复为真实产物。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.invoke.return_value = {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "<vendorx:tool_call>\n"
+                        "<invoke name=\"write_file\">\n"
+                        "    <parameter name=\"file_name\">SpaceX_IPO_Prospectus_Draft.json</parameter>\n"
+                        "    <parameter name=\"content\">final prospectus text</parameter>\n"
+                        "</invoke>\n"
+                        "</vendorx:tool_call>"
+                    )
+                )
+            ],
+        }
+
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.json", error=None)
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        agent.agent_queue_manager.publish = MagicMock()
+        recover_mock = MagicMock(return_value=True)
+        collect_mock = MagicMock(side_effect=[
+            [],
+            [{"name": "SpaceX_IPO_Prospectus_Draft.json", "url": "https://cos.example.com/SpaceX_IPO_Prospectus_Draft.json"}],
+        ])
+        agent._recover_missing_artifact_from_deep_answer = recover_mock
+        agent._collect_artifacts = collect_mock
+
+        result = agent._deep_agent_node(
+            self._build_state(
+                "生成 SpaceX IPO 数据摘要 json 文件，要求输出可下载 .json 附件。"
+                "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                "请保存为 SpaceX_IPO_Prospectus_Draft.json。"
+            )
+        )
+
+        recover_mock.assert_called_once()
+        assert collect_mock.call_count == 2
+        assert "<generated_artifacts>" in result["messages"][0].content
+        assert "SpaceX_IPO_Prospectus_Draft.json" in result["messages"][0].content
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_recovers_generated_artifacts_block(self, mock_route, mock_build_deep):
+        """首次未扫描到附件时，应尝试把 generated_artifacts 区块恢复为真实产物。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.invoke.return_value = {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "<generated_artifacts>\n"
+                        "<artifact id=\"spacex_prospectus\" title=\"SpaceX IPO Prospectus Draft.json\" "
+                        "commit_message=\"Generate SpaceX IPO Prospectus Draft in txt format\">\n\n"
+                        "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+                        "IPO招股说明书草案\n"
+                        "</artifact>\n"
+                        "</generated_artifacts>"
+                    )
+                )
+            ],
+        }
+
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.json", error=None)
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        agent.agent_queue_manager.publish = MagicMock()
+        collect_mock = MagicMock(side_effect=[
+            [],
+            [{"name": "SpaceX_IPO_Prospectus_Draft.json", "url": "https://cos.example.com/SpaceX_IPO_Prospectus_Draft.json"}],
+        ])
+        agent._collect_artifacts = collect_mock
+
+        result = agent._deep_agent_node(
+            self._build_state(
+                "生成 SpaceX IPO 数据摘要 json 文件，要求输出可下载 .json 附件。"
+                "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                "请保存为 SpaceX_IPO_Prospectus_Draft.json。"
+            )
+        )
+
+        backend.upload_files.assert_called_once()
+        uploaded_path, uploaded_content = backend.upload_files.call_args.args[0][0]
+        assert uploaded_path.endswith("SpaceX_IPO_Prospectus_Draft.json")
+        assert b"SPACE EXPLORATION TECHNOLOGIES CORP." in uploaded_content
+        assert collect_mock.call_count == 2
+        assert "SpaceX_IPO_Prospectus_Draft.json" in result["messages"][0].content
+
+    def test_recover_missing_artifact_should_publish_warning_then_recovered_success(self):
+        """附件恢复成功时，应先给出可恢复 warning，再给出自动修复成功状态。"""
+        agent = self._build_agent()
+        published = []
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda tid, thought: published.append(thought))
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.json", error=None)
+        ]
+
+        recovered = agent._recover_missing_artifact_from_deep_answer(
+            backend=backend,
+            artifact_root="/workspace/artifacts/task-1",
+            query="请生成 SpaceX IPO 招股说明书 txt 文件，并保存为 SpaceX_IPO_Prospectus_Draft.txt",
+            deep_answer=(
+                "```python\n"
+                "filepath = \"SpaceX_IPO_Prospectus_Draft.txt\"\n"
+                "content = \"final prospectus text\"\n"
+                "```"
+            ),
+            timeline=timeline,
+        )
+
+        assert recovered is True
+        step_events = [
+            event
+            for event in published
+            if event.event == QueueEvent.DEEP_STEP and event.tool == "write_file"
+        ]
+        assert [event.tool_input["timeline"]["phase"] for event in step_events] == [
+            "recovery_attempt",
+            "recovery_success",
+        ]
+        assert step_events[0].tool_input["timeline"]["status"] == "warning"
+        assert step_events[0].tool_input["timeline"]["recoverable"] is True
+        assert step_events[0].tool_input["timeline"]["error_kind"] == "protocol_error"
+        assert step_events[1].tool_input["timeline"]["status"] == "success"
+        assert step_events[1].tool_input["timeline"]["recovered"] is True
+        assert step_events[1].tool_input["timeline"]["result_preview"] == "已写入 SpaceX_IPO_Prospectus_Draft.txt"
+
+    def test_recover_missing_artifact_should_publish_final_failure_when_upload_fails(self):
+        """附件恢复失败时，应明确发布最终失败，而不是伪装成恢复成功。"""
+        agent = self._build_agent()
+        published = []
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda tid, thought: published.append(thought))
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(
+                path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.txt",
+                error="permission denied",
+            )
+        ]
+
+        recovered = agent._recover_missing_artifact_from_deep_answer(
+            backend=backend,
+            artifact_root="/workspace/artifacts/task-1",
+            query="请生成 SpaceX IPO 招股说明书 txt 文件，并保存为 SpaceX_IPO_Prospectus_Draft.txt",
+            deep_answer=(
+                "```python\n"
+                "filepath = \"SpaceX_IPO_Prospectus_Draft.txt\"\n"
+                "content = \"final prospectus text\"\n"
+                "```"
+            ),
+            timeline=timeline,
+        )
+
+        assert recovered is False
+        step_events = [
+            event
+            for event in published
+            if event.event == QueueEvent.DEEP_STEP and event.tool == "write_file"
+        ]
+        assert [event.tool_input["timeline"]["phase"] for event in step_events] == [
+            "recovery_attempt",
+            "final_failure",
+        ]
+        assert step_events[0].tool_input["timeline"]["status"] == "warning"
+        assert step_events[-1].tool_input["timeline"]["status"] == "error"
+        assert step_events[-1].tool_input["timeline"]["error_kind"] == "artifact_materialization"
+        assert step_events[-1].tool_input["timeline"]["recovered"] is False
+
+    def test_recover_missing_artifact_should_fallback_plain_text_when_tool_call_absent(self):
+        """当模型只输出正文时，应基于用户请求推断文件名并保存为可下载 txt。"""
+        agent = self._build_agent()
+        published = []
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda tid, thought: published.append(thought))
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.txt", error=None)
+        ]
+
+        recovered = agent._recover_missing_artifact_from_deep_answer(
+            backend=backend,
+            artifact_root="/workspace/artifacts/task-1",
+            query="生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。",
+            deep_answer=(
+                "说明：当前对话环境暂不直接支持自动生成可下载附件，但以下为您提供完整、可直接复制保存的 .txt 文件内容。\n\n"
+                "================================================================================\n"
+                "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+                "PROSPECTUS DRAFT\n"
+                "================================================================================\n\n"
+                "PROSPECTUS SUMMARY\n"
+                "The Company ...\n\n"
+                "RISK FACTORS\n"
+                "..."
+            ),
+            timeline=timeline,
+            allow_default_filename=True,
+        )
+
+        assert recovered is True
+        backend.upload_files.assert_called_once()
+        uploaded_path, uploaded_content = backend.upload_files.call_args.args[0][0]
+        assert uploaded_path.endswith("SpaceX_IPO_Prospectus_Draft.txt")
+        assert "暂不直接支持自动生成可下载附件".encode("utf-8") not in uploaded_content
+        assert b"SPACE EXPLORATION TECHNOLOGIES CORP." in uploaded_content
+        step_events = [
+            event
+            for event in published
+            if event.event == QueueEvent.DEEP_STEP and event.tool == "write_file"
+        ]
+        assert [event.tool_input["timeline"]["phase"] for event in step_events] == [
+            "plain_text_fallback_attempt",
+            "plain_text_fallback_success",
+        ]
+        assert step_events[0].tool_input["timeline"]["preview_kind"] == "summary"
+        assert step_events[0].tool_input["timeline"]["error_kind"] == "plain_text_artifact_fallback"
+        assert step_events[1].tool_input["timeline"]["recovered"] is True
+        assert step_events[1].tool_input["timeline"]["result_preview"] == "已写入 SpaceX_IPO_Prospectus_Draft.txt"
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_should_use_structured_document_pipeline_without_explicit_filename(
+        self,
+        mock_route,
+        mock_build_deep,
+    ):
+        """用户未写文件名时，结构化文档流水线也应能自动推断默认文件名并生成附件。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+
+        mock_deep_agent = MagicMock()
+
+        backend = MagicMock()
+        final_path = "/workspace/artifacts/task-1/北京旅行规划.md"
+        assembled_content = (
+            "# 北京旅行规划\n\n"
+            "## 行程总览\n"
+            "以地铁和步行为主，控制每日节奏。\n\n"
+            "## 每日安排\n"
+            "Day 1: 故宫与天安门周边。\n\n"
+            "## 住宿建议\n"
+            "建议住在 2/4/5/8 号线附近。\n\n"
+            "## 交通建议\n"
+            "优先地铁，必要时短途打车补最后一公里。\n\n"
+            "## 预算\n"
+            "单人预算控制在 3000 元以内。\n"
+        )
+
+        def execute_side_effect(command, timeout=None):
+            if command.startswith("mkdir -p "):
+                return SimpleNamespace(exit_code=0, output="")
+            if command.startswith("cat "):
+                assert final_path in command
+                return SimpleNamespace(exit_code=0, output="")
+            if "find " in command:
+                return SimpleNamespace(exit_code=0, output=f"{final_path}\n")
+            raise AssertionError(f"unexpected command: {command}")
+
+        backend.execute.side_effect = execute_side_effect
+        backend.upload_files.return_value = [
+            SimpleNamespace(path=final_path, error=None),
+        ]
+        backend.download_files.return_value = [
+            SimpleNamespace(path=final_path, content=assembled_content.encode("utf-8"), error=None),
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        published = []
+        agent.agent_queue_manager.publish = lambda tid, thought: published.append(thought)
+
+        outline_llm = MagicMock()
+        outline_llm.invoke.return_value = StructuredDocumentOutlinePlan(
+            document_title="北京旅行规划",
+            sections=[
+                StructuredDocumentSectionPlan(
+                    title="行程总览",
+                    purpose="概述行程结构与节奏。",
+                    key_points=["景点数量", "步行强度", "交通方式"],
+                    target_length_hint="约 200-300 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="每日安排",
+                    purpose="按天给出可执行安排。",
+                    key_points=["Day 1", "Day 2", "地铁", "步行"],
+                    target_length_hint="约 500-800 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="住宿建议",
+                    purpose="给出稳妥的住宿区域建议。",
+                    key_points=["地铁站附近", "少换乘", "长辈友好"],
+                    target_length_hint="约 200-300 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="交通建议",
+                    purpose="说明地铁优先和补充交通方式。",
+                    key_points=["地铁", "换乘", "短途打车"],
+                    target_length_hint="约 200-300 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="预算",
+                    purpose="给出总预算和分项预算。",
+                    key_points=["住宿", "餐饮", "门票", "交通"],
+                    target_length_hint="约 200-300 字",
+                ),
+            ],
+        )
+        agent.llm.with_structured_output.return_value = outline_llm
+        agent.llm.invoke.side_effect = [
+            AIMessage(content="北京旅行规划的总览应体现少折腾与地铁优先。"),
+            AIMessage(content="每日安排应保持低强度并给出明确站点。"),
+            AIMessage(content="住宿建议应优先地铁枢纽附近。"),
+            AIMessage(content="交通建议应优先地铁并说明必要时短途打车。"),
+            AIMessage(content="预算应控制在 3000 元以内。"),
+        ]
+
+        query = (
+            "请输出可下载的 Markdown 附件。内容包含：行程总览、每日安排、住宿建议、交通建议、预算。"
+            "我第一次去北京，只有 2 天时间，同行有长辈。请先说明你会怎么权衡景点数量、步行强度和交通方式，"
+            "再给出一个保守、少折腾、以地铁和步行为主的 2 天游玩方案。"
+        )
+
+        mock_cos_service = MagicMock()
+        mock_cos_service.upload_bytes.return_value = SimpleNamespace(
+            id=uuid4(),
+            name="北京旅行规划.md",
+            size=len(assembled_content.encode("utf-8")),
+            extension="md",
+            mime_type="text/markdown",
+            key="artifacts/北京旅行规划.md",
+        )
+        mock_cos_service.get_file_url.return_value = "https://cos.example.com/artifacts/北京旅行规划.md"
+        mock_injector = MagicMock()
+        mock_injector.get.return_value = mock_cos_service
+
+        with patch("app.http.module.injector", mock_injector), \
+             patch("internal.core.agent.agents.deep_thinking_agent.has_app_context", return_value=False):
+            result = agent._deep_agent_node(self._build_state(query))
+
+        mock_deep_agent.invoke.assert_not_called()
+        agent.llm.with_structured_output.assert_called_once_with(StructuredDocumentOutlinePlan)
+        assert agent.llm.invoke.call_count == 5
+        backend.upload_files.assert_called_once()
+        uploaded_fragments = backend.upload_files.call_args.args[0]
+        assert len(uploaded_fragments) == 6
+        assert uploaded_fragments[0][0].endswith("00_front_matter.txt")
+        assert all(path.startswith("/tmp/openagent_doc_build/") for path, _ in uploaded_fragments)
+        assert all(path.endswith(".txt") for path, _ in uploaded_fragments)
+        assert any("行程总览" in path for path, _ in uploaded_fragments)
+        assert any("每日安排" in path for path, _ in uploaded_fragments)
+        assert any("住宿建议" in path for path, _ in uploaded_fragments)
+        assert any("交通建议" in path for path, _ in uploaded_fragments)
+        assert any("预算" in path for path, _ in uploaded_fragments)
+        uploaded_fragment_content = b"\n".join(content for _, content in uploaded_fragments)
+        assert "# 北京旅行规划".encode("utf-8") in uploaded_fragment_content
+        assert mock_build_deep.called
+        assert any(event.event == QueueEvent.DEEP_ARTIFACT_CREATED for event in published)
+        assert mock_cos_service.upload_bytes.call_count == 1
+        assert mock_cos_service.upload_bytes.call_args.kwargs["filename"] == "北京旅行规划.md"
+        assert mock_cos_service.get_file_url.call_count == 1
+        assert "北京旅行规划.md" in result["messages"][0].content
+
+    def test_recover_missing_artifact_should_fallback_plain_text_for_markdown(self):
+        """plain-text 兜底也应支持 markdown 等文本类文件。"""
+        agent = self._build_agent()
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.md", error=None)
+        ]
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda *_: None)
+
+        recovered = agent._recover_missing_artifact_from_deep_answer(
+            backend=backend,
+            artifact_root="/workspace/artifacts/task-1",
+            query="生成 SpaceX IPO 招股说明书 markdown 文件，请保存为 SpaceX_IPO_Prospectus_Draft.md。",
+            deep_answer=(
+                "说明：当前对话环境暂不直接支持自动生成可下载附件，但以下为您提供完整内容。\n\n"
+                "# SpaceX IPO 招股说明书\n"
+                "## 封面摘要\n"
+                "SpaceX 是一家私营航天运输与卫星通信公司。\n"
+                "## 业务概览\n"
+                "Starlink 提供低轨卫星互联网服务。\n"
+                "## 风险因素\n"
+                "航天发射、监管审批和竞争压力均构成风险。\n"
+                "## MD&A\n"
+                "管理层持续投入研发和基础设施建设。\n"
+                "## 募集资金用途\n"
+                "资金将用于星舰、星链及一般公司用途。\n"
+                "## 法律声明\n"
+                "前瞻性陈述适用法律免责声明。"
+            ),
+            timeline=timeline,
+        )
+
+        assert recovered is True
+        uploaded_path, uploaded_content = backend.upload_files.call_args.args[0][0]
+        assert uploaded_path.endswith("SpaceX_IPO_Prospectus_Draft.md")
+        assert "# SpaceX IPO 招股说明书".encode("utf-8") in uploaded_content
+
+    def test_build_plain_text_artifact_payload_rejects_binary_extensions(self):
+        """plain-text 兜底不应把二进制文档后缀误当成可直接 materialize 的文本。"""
+        payload = ArtifactPolicy.build_plain_text_artifact_payload(
+            "请保存为 report.docx",
+            "# title\ncontent",
+        )
+
+        assert payload is None
+
+    def test_build_plain_text_artifact_payload_rejects_short_summary(self):
+        """短总结不应被误判为可下载正文。"""
+        payload = ArtifactPolicy.build_plain_text_artifact_payload(
+            "请保存为 SpaceX_IPO_Prospectus_Draft.txt",
+            "我将合并所有章节内容并保存为完整的招股说明书文件。",
+        )
+
+        assert payload is None
+
+    def test_recover_missing_artifact_should_not_fallback_without_filename(self):
+        """没有可推断的文件名时，不应把纯文本误恢复成附件。"""
+        agent = self._build_agent()
+        backend = MagicMock()
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda *_: None)
+
+        recovered = agent._recover_missing_artifact_from_deep_answer(
+            backend=backend,
+            artifact_root="/workspace/artifacts/task-1",
+            query="请帮我分析一下 SpaceX IPO 的风险。",
+            deep_answer="这是一段很长的分析正文，但没有指定文件名。",
+            timeline=timeline,
+        )
+
+        assert recovered is False
+        backend.upload_files.assert_not_called()
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_should_fallback_to_plain_text_on_bad_request(
+        self,
+        mock_route,
+        mock_build_deep,
+    ):
+        """deep agent 遇到 provider 400 时，应降级为纯文本兜底并继续产物恢复。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.invoke.side_effect = Exception(
+            "Error code: 400 - {'code': 400, 'msg': 'bad request'}"
+        )
+
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.txt", error=None)
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        agent.agent_queue_manager.publish = MagicMock()
+        fallback_llm = MagicMock(spec=BaseLanguageModel)
+        fallback_llm.invoke.return_value = AIMessage(
+            content=(
+                "================================================================================\n"
+                "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+                "PROSPECTUS DRAFT\n"
+                "================================================================================\n\n"
+                "PROSPECTUS SUMMARY\n"
+                "The Company ...\n\n"
+                "RISK FACTORS\n"
+                "..."
+            )
+        )
+        fallback_service = MagicMock()
+        fallback_service.load_default_language_model.return_value = fallback_llm
+        agent.agent_config.language_model_service = fallback_service
+
+        collect_mock = MagicMock(
+            return_value=[
+                {
+                    "name": "SpaceX_IPO_Prospectus_Draft.json",
+                    "url": "https://cos.example.com/SpaceX_IPO_Prospectus_Draft.json",
+                }
+            ]
+        )
+        agent._collect_artifacts = collect_mock
+
+        result = agent._deep_agent_node(
+            self._build_state(
+                "生成 SpaceX IPO 数据摘要 json 文件，要求输出可下载 .json 附件。"
+                "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+                "请保存为 SpaceX_IPO_Prospectus_Draft.json。"
+            )
+        )
+
+        mock_deep_agent.invoke.assert_called_once()
+        fallback_service.load_default_language_model.assert_called_once()
+        fallback_llm.invoke.assert_called_once()
+        backend.upload_files.assert_called_once()
+        assert collect_mock.call_count == 1
+        assert "SpaceX_IPO_Prospectus_Draft.json" in result["messages"][0].content
+        assert "https://cos.example.com/SpaceX_IPO_Prospectus_Draft.json" in result["messages"][0].content
+        step_events = [
+            event
+            for event in agent.agent_queue_manager.publish.call_args_list
+            if event.args and getattr(event.args[1], "tool", "") == "model_fallback"
+        ]
+        assert step_events, "应发布模型请求兜底的时间线事件"
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_should_fallback_to_plain_text_on_structured_document_bad_request(
+        self,
+        mock_route,
+        mock_build_deep,
+    ):
+        """结构化文档模式下若 provider 400，应切换到 deepseek-chat 兜底并继续恢复附件。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+        mock_deep_agent = MagicMock()
+
+        backend = MagicMock()
+        backend.upload_files.return_value = [
+            SimpleNamespace(path="/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.txt", error=None)
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        agent.agent_queue_manager.publish = MagicMock()
+
+        outline_llm = MagicMock()
+        outline_llm.invoke.side_effect = Exception(
+            "Error code: 400 - {'code': 400, 'msg': 'bad request'}"
+        )
+        agent.llm.with_structured_output.return_value = outline_llm
+
+        fallback_llm = MagicMock(spec=BaseLanguageModel)
+        fallback_llm.invoke.return_value = AIMessage(content=(
+            "================================================================================\n"
+            "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+            "PROSPECTUS DRAFT\n"
+            "================================================================================\n\n"
+            "PROSPECTUS SUMMARY\n"
+            "The Company ...\n\n"
+            "BUSINESS OVERVIEW\n"
+            "...\n\n"
+            "RISK FACTORS\n"
+            "...\n\n"
+            "MD&A\n"
+            "...\n\n"
+            "USE OF PROCEEDS\n"
+            "...\n\n"
+            "LEGAL MATTERS\n"
+            "...\n"
+        ))
+        fallback_service = MagicMock()
+        fallback_service.load_default_language_model.return_value = fallback_llm
+        agent.agent_config.language_model_service = fallback_service
+
+        collect_mock = MagicMock(
+            return_value=[
+                {
+                    "name": "SpaceX_IPO_Prospectus_Draft.txt",
+                    "url": "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.txt",
+                }
+            ]
+        )
+        agent._collect_artifacts = collect_mock
+
+        mock_upload_file = SimpleNamespace(
+            id=uuid4(),
+            name="SpaceX_IPO_Prospectus_Draft.txt",
+            size=2048,
+            extension="txt",
+            mime_type="text/plain",
+            key="artifacts/SpaceX_IPO_Prospectus_Draft.txt",
+        )
+        mock_cos_service = MagicMock()
+        mock_cos_service.upload_bytes.return_value = mock_upload_file
+        mock_cos_service.get_file_url.return_value = "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.txt"
+        mock_injector = MagicMock()
+        mock_injector.get.return_value = mock_cos_service
+
+        query = (
+            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+        )
+
+        with patch("app.http.module.injector", mock_injector), \
+             patch("internal.core.agent.agents.deep_thinking_agent.has_app_context", return_value=False):
+            result = agent._deep_agent_node(self._build_state(query))
+
+        mock_deep_agent.invoke.assert_not_called()
+        agent.llm.with_structured_output.assert_called_once_with(StructuredDocumentOutlinePlan)
+        fallback_service.load_default_language_model.assert_called_once()
+        fallback_llm.invoke.assert_called_once()
+        backend.upload_files.assert_called_once()
+        assert collect_mock.call_count == 1
+        assert "SpaceX_IPO_Prospectus_Draft.txt" in result["messages"][0].content
+        assert "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.txt" in result["messages"][0].content
+        step_events = [
+            event
+            for event in agent.agent_queue_manager.publish.call_args_list
+            if event.args and getattr(event.args[1], "tool", "") == "model_fallback"
+        ]
+        assert step_events, "应发布结构化文档模型请求兜底的时间线事件"
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_should_use_structured_document_pipeline_for_text_artifact(
+        self,
+        mock_route,
+        mock_build_deep,
+    ):
+        """显式 .txt 文档请求应优先走结构化章节流水线，再由沙箱拼接成最终附件。"""
+        mock_route.return_value = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            need_file_io=True,
+            need_artifact_output=True,
+            summary="需要沙箱执行",
+        )
+
+        mock_deep_agent = MagicMock()
+
+        backend = MagicMock()
+        final_path = "/workspace/artifacts/task-1/SpaceX_IPO_Prospectus_Draft.txt"
+        assembled_content = (
+            "SPACE EXPLORATION TECHNOLOGIES CORP.\n"
+            "PROSPECTUS DRAFT\n\n"
+            "PROSPECTUS SUMMARY\n"
+            "SpaceX 当前围绕封面摘要展开，重点覆盖公司概况、发行概览、核心业务与投资亮点。\n\n"
+            "BUSINESS OVERVIEW\n"
+            "SpaceX 当前围绕业务概览展开，重点覆盖星链、猎鹰火箭、星舰与龙飞船。\n\n"
+            "RISK FACTORS\n"
+            "SpaceX 当前围绕风险因素展开，重点覆盖技术、监管、竞争与财务风险。\n\n"
+            "MD&A\n"
+            "SpaceX 当前围绕 MD&A 展开，重点覆盖经营成果、流动性和资本资源。\n\n"
+            "USE OF PROCEEDS\n"
+            "SpaceX 当前围绕募集资金用途展开，重点覆盖星舰、星链和一般公司用途。\n\n"
+            "LEGAL MATTERS\n"
+            "SpaceX 当前围绕法律声明展开，重点覆盖前瞻性陈述和免责声明。\n"
+        )
+
+        def execute_side_effect(command, timeout=None):
+            if command.startswith("mkdir -p "):
+                return SimpleNamespace(exit_code=0, output="")
+            if command.startswith("cat "):
+                assert final_path in command
+                return SimpleNamespace(exit_code=0, output="")
+            if "find " in command:
+                return SimpleNamespace(exit_code=0, output=f"{final_path}\n")
+            raise AssertionError(f"unexpected command: {command}")
+
+        backend.execute.side_effect = execute_side_effect
+        backend.upload_files.return_value = [
+            SimpleNamespace(path=final_path, error=None),
+        ]
+        backend.download_files.return_value = [
+            SimpleNamespace(path=final_path, content=assembled_content.encode("utf-8"), error=None),
+        ]
+        mock_build_deep.return_value = (mock_deep_agent, backend, "/workspace/artifacts/task-1", True)
+
+        agent = self._build_agent()
+        published = []
+        agent.agent_queue_manager.publish = lambda tid, thought: published.append(thought)
+
+        outline_llm = MagicMock()
+        outline_llm.invoke.return_value = StructuredDocumentOutlinePlan(
+            document_title="SpaceX IPO Prospectus Draft",
+            sections=[
+                StructuredDocumentSectionPlan(
+                    title="封面摘要 (Prospectus Summary)",
+                    purpose="概述公司定位、发行信息和核心投资亮点。",
+                    key_points=["公司概况", "发行概览", "核心业务", "投资亮点"],
+                    target_length_hint="约 300-500 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="业务概览 (Business Overview)",
+                    purpose="分业务板块介绍公司商业模式和经营范围。",
+                    key_points=["星链", "猎鹰火箭", "星舰", "龙飞船"],
+                    target_length_hint="约 600-900 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="风险因素 (Risk Factors)",
+                    purpose="说明主要经营、监管和市场风险。",
+                    key_points=["技术风险", "监管风险", "竞争风险", "财务风险"],
+                    target_length_hint="约 600-900 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="MD&A",
+                    purpose="讨论经营成果、流动性和资本资源。",
+                    key_points=["收入来源", "成本结构", "现金流", "资本支出"],
+                    target_length_hint="约 500-800 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="募集资金用途 (Use of Proceeds)",
+                    purpose="说明募集资金的使用方向和优先级。",
+                    key_points=["星舰开发", "星链扩展", "研发投入", "一般公司用途"],
+                    target_length_hint="约 300-500 字",
+                ),
+                StructuredDocumentSectionPlan(
+                    title="法律声明 (Legal Matters)",
+                    purpose="说明法律、前瞻性陈述和免责声明。",
+                    key_points=["前瞻性陈述", "合规声明", "法律适用", "免责声明"],
+                    target_length_hint="约 300-500 字",
+                ),
+            ],
+        )
+        agent.llm.with_structured_output.return_value = outline_llm
+        agent.llm.invoke.side_effect = [
+            AIMessage(content=(
+                (
+                    "SpaceX 的封面摘要应突出公司定位、发行信息、核心业务与投资亮点。"
+                    "确认不会回退到本地模板。"
+                ) * 3
+            )),
+            AIMessage(content=(
+                (
+                    "SpaceX 的业务概览应围绕星链、猎鹰火箭、星舰与龙飞船展开。"
+                    "确认不会回退到本地模板。"
+                ) * 3
+            )),
+            AIMessage(content=(
+                (
+                    "SpaceX 的风险因素应覆盖技术、监管、竞争和财务层面的主要风险。"
+                    "确认不会回退到本地模板。"
+                ) * 3
+            )),
+            AIMessage(content=(
+                (
+                    "MD&A 章节应讨论经营成果、流动性、资本资源与未来展望。"
+                    "确认不会回退到本地模板。"
+                ) * 3
+            )),
+            AIMessage(content=(
+                (
+                    "募集资金用途章节应说明星舰开发、星链扩展、研发投入与一般公司用途。"
+                    "确认不会回退到本地模板。"
+                ) * 3
+            )),
+            AIMessage(content=(
+                (
+                    "法律声明章节应覆盖前瞻性陈述、合规说明与免责声明。"
+                    "确认不会回退到本地模板。"
+                ) * 3
+            )),
+        ]
+
+        mock_upload_file = SimpleNamespace(
+            id=uuid4(),
+            name="SpaceX_IPO_Prospectus_Draft.txt",
+            size=len(assembled_content.encode("utf-8")),
+            extension="txt",
+            mime_type="text/plain",
+            key="artifacts/SpaceX_IPO_Prospectus_Draft.txt",
+        )
+        mock_cos_service = MagicMock()
+        mock_cos_service.upload_bytes.return_value = mock_upload_file
+        mock_cos_service.get_file_url.return_value = "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.txt"
+        mock_injector = MagicMock()
+        mock_injector.get.return_value = mock_cos_service
+
+        query = (
+            "生成 SpaceX IPO 招股说明书 txt 文件，要求输出可下载 .txt 附件。"
+            "内容包含：封面摘要、业务概览、风险因素、MD&A、募集资金用途、法律声明。"
+            "请保存为 SpaceX_IPO_Prospectus_Draft.txt。"
+        )
+
+        with patch("app.http.module.injector", mock_injector), \
+             patch("internal.core.agent.agents.deep_thinking_agent.has_app_context", return_value=False):
+            result = agent._deep_agent_node(self._build_state(query))
+
+        mock_deep_agent.invoke.assert_not_called()
+        agent.llm.with_structured_output.assert_called_once_with(StructuredDocumentOutlinePlan)
+        assert agent.llm.invoke.call_count == 6
+        assert backend.upload_files.call_count == 1
+        uploaded_fragment_paths = [path for path, _ in backend.upload_files.call_args.args[0]]
+        uploaded_fragment_content = b"\n".join(content for _, content in backend.upload_files.call_args.args[0])
+        assert uploaded_fragment_paths[0].endswith("00_front_matter.txt")
+        assert any(path.endswith("01_") or "封面摘要" in path for path in uploaded_fragment_paths)
+        assert any(path.endswith("02_") or "业务概览" in path for path in uploaded_fragment_paths)
+        assert backend.execute.call_count == 3
+        assert uploaded_fragment_content.decode("utf-8").count("确认不会回退到本地模板") >= 6
+        assert mock_cos_service.upload_bytes.call_count == 1
+        uploaded_content = mock_cos_service.upload_bytes.call_args.kwargs["content"].decode("utf-8")
+        assert "PROSPECTUS SUMMARY" in uploaded_content
+        assert "BUSINESS OVERVIEW" in uploaded_content
+        assert "RISK FACTORS" in uploaded_content
+        assert "MD&A" in uploaded_content
+        assert "USE OF PROCEEDS" in uploaded_content
+        assert "LEGAL MATTERS" in uploaded_content
+        assert any(event.event == QueueEvent.DEEP_ARTIFACT_CREATED for event in published)
+
+        final_message = result["messages"][0].content
+        assert "SpaceX_IPO_Prospectus_Draft.txt" in final_message
+        assert "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.txt" in final_message
+
     @patch.object(DeepThinkingAgent, "_build_deep_agent")
     @patch.object(DeepThinkingAgent, "_decide_deep_route")
     def test_deep_agent_node_publishes_timeline_events(self, mock_route, mock_build_deep):
@@ -451,6 +2216,27 @@ class TestDeepThinkingAgentGraph:
 
         assert any(event.event == QueueEvent.DEEP_STEP for event in published)
         assert any(event.event == QueueEvent.DEEP_COMPLETE for event in published)
+
+    @patch.object(DeepThinkingAgent, "_build_deep_agent")
+    @patch.object(DeepThinkingAgent, "_decide_deep_route")
+    def test_deep_agent_node_should_publish_timeout_failure(self, mock_route, mock_build_deep):
+        """深度执行异常时应发布 timeout/error 终态，而不是静默继续。"""
+        mock_route.return_value = self._route()
+
+        class _FailingDeepAgent:
+            def invoke(self, _payload):
+                raise TimeoutError("deep timeout")
+
+        mock_build_deep.return_value = (_FailingDeepAgent(), SimpleNamespace(close=lambda: None), "/workspace/artifacts/test", False)
+
+        agent = self._build_agent()
+        published = []
+        agent.agent_queue_manager.publish = lambda tid, thought: published.append(thought)
+
+        with pytest.raises(TimeoutError, match="deep timeout"):
+            agent._deep_agent_node(self._build_state())
+
+        assert any(event.event == QueueEvent.TIMEOUT for event in published)
 
     @patch.object(DeepThinkingAgent, "_build_deep_agent")
     @patch.object(DeepThinkingAgent, "_decide_deep_route")
@@ -570,6 +2356,47 @@ class TestDeepThinkingAgentGraph:
         assert artifact_root == f"/home/user/artifacts/{task_id}"
         assert isinstance(captured["middleware"][0], DeepTimelineMiddleware)
 
+    def test_build_deep_agent_unwraps_runtime_fallback_proxy_before_deepagents(self):
+        """deepagents 只接受真正的 chat model；运行时 fallback 代理需先解包。"""
+        base_model = OpenAIChat(model="gpt-4o-mini", api_key="test-key")
+        proxy = RuntimeFallbackLanguageModelProxy.from_model(
+            base_model,
+            fallback_loader=lambda: base_model,
+            requested_model_config={"provider": "openai", "model": "gpt-4o-mini"},
+            runtime_fallback_enabled=True,
+        )
+
+        captured = {}
+        agent = DeepThinkingAgent(llm=proxy, agent_config=_make_agent_config(enable_deep_thinking=True))
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda *_: None)
+        route = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            summary="需要沙箱执行",
+        )
+
+        def capture_create_deep_agent(*args, **kwargs):
+            captured["model"] = kwargs.get("model")
+            return MagicMock()
+
+        with patch("deepagents.create_deep_agent", side_effect=capture_create_deep_agent), \
+             patch.object(BaiduCfcSandboxBackend, "execute", return_value=SimpleNamespace(exit_code=0, output="/home/user/artifacts/test-task")), \
+             patch.dict(os.environ, {
+                "E2B_API_KEY": "test-key",
+                "E2B_DOMAIN": "sandbox.example.com",
+                "SANDBOX_TEMPLATE_ALIAS": "",
+                "SANDBOX_FALLBACK_TEMPLATE_ALIAS": "",
+             }, clear=False):
+            agent._build_deep_agent(
+                task_id=uuid4(),
+                route_decision=route,
+                timeline=timeline,
+            )
+
+        assert captured["model"] is getattr(proxy, "_primary_model")
+        assert isinstance(captured["model"], type(base_model))
+        assert captured["model"] is not proxy
+
     def test_build_deep_agent_fallback_to_state_backend(self):
         """未请求沙箱时，应使用 StateBackend。"""
         captured = {}
@@ -621,8 +2448,8 @@ class TestDeepThinkingAgentGraph:
                 "E2B_DOMAIN": "sandbox.example.com",
                 "SANDBOX_TEMPLATE_ALIAS": "lite-template",
                 "SANDBOX_FALLBACK_TEMPLATE_ALIAS": "fallback-template",
-                "SANDBOX_TIMEOUT_SECONDS": "123",
-                "SANDBOX_EXECUTE_TIMEOUT_SECONDS": "45",
+                "SANDBOX_TIMEOUT_SECONDS": "1801",
+                "SANDBOX_EXECUTE_TIMEOUT_SECONDS": "601",
              }, clear=False):
             _, backend, artifact_root, used_sandbox = agent._build_deep_agent(
                 task_id=task_id,
@@ -633,11 +2460,53 @@ class TestDeepThinkingAgentGraph:
         assert isinstance(backend, BaiduCfcSandboxBackend)
         assert backend._template_alias == "lite-template"
         assert backend._fallback_template_alias == "fallback-template"
-        assert backend._sandbox_timeout == 123
-        assert backend._timeout == 45
+        assert backend._sandbox_timeout == 1801
+        assert backend._timeout == 601
         assert used_sandbox is True
         assert artifact_root == f"/home/user/artifacts/{task_id}"
         ensure_ready_mock.assert_called_once()
+        assert captured_backend["backend"] is backend
+
+    def test_build_deep_agent_clamps_timeout_env_values_to_minimums(self):
+        """较低的 SANDBOX_* 环境变量应被抬升到安全下限。"""
+        captured_backend = {}
+        agent = self._build_agent()
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda *_: None)
+        task_id = uuid4()
+        route = self._route(
+            need_sandbox=True,
+            need_execute=True,
+            summary="需要沙箱执行",
+        )
+
+        def capture_create_deep_agent(*args, **kwargs):
+            captured_backend["backend"] = kwargs.get("backend")
+            return MagicMock()
+
+        with patch("deepagents.create_deep_agent", side_effect=capture_create_deep_agent), \
+             patch.object(BaiduCfcSandboxBackend, "ensure_ready", return_value=None), \
+             patch.object(
+                 BaiduCfcSandboxBackend,
+                 "execute",
+                 return_value=SimpleNamespace(exit_code=0, output=f"/home/user/artifacts/{task_id}"),
+             ), \
+             patch.dict(os.environ, {
+                "E2B_API_KEY": "test-key",
+                "E2B_DOMAIN": "sandbox.example.com",
+                "SANDBOX_TIMEOUT_SECONDS": "123",
+                "SANDBOX_EXECUTE_TIMEOUT_SECONDS": "45",
+             }, clear=False):
+            _, backend, artifact_root, used_sandbox = agent._build_deep_agent(
+                task_id=task_id,
+                route_decision=route,
+                timeline=timeline,
+            )
+
+        assert isinstance(backend, BaiduCfcSandboxBackend)
+        assert backend._sandbox_timeout == 1800
+        assert backend._timeout == 600
+        assert used_sandbox is True
+        assert artifact_root == f"/home/user/artifacts/{task_id}"
         assert captured_backend["backend"] is backend
 
     def test_build_deep_agent_falls_back_to_state_backend_when_sandbox_validation_fails(self):
@@ -845,6 +2714,57 @@ class TestDeepThinkingAgentGraph:
         assert ".openagent_artifact_marker_task-1" in fallback_scan_command
         assert any(event.event == QueueEvent.DEEP_ARTIFACT_CREATED for event in published)
 
+    def test_collect_artifacts_scans_mnt_data_top_level_when_model_uses_code_interpreter_path(self):
+        """当模型把文件写到 /mnt/data 顶层时，应通过 marker 兜底扫描发现文件。"""
+        agent = self._build_agent()
+        published = []
+        timeline = DeepTimelineMiddleware(task_id=uuid4(), publisher=lambda tid, thought: published.append(thought))
+
+        backend = MagicMock()
+        backend._openagent_artifact_markers = [
+            "/mnt/data/.openagent_artifact_marker_task-1",
+        ]
+        backend.execute.side_effect = [
+            SimpleNamespace(exit_code=0, output=""),
+            SimpleNamespace(exit_code=0, output="/mnt/data/SpaceX_IPO_Prospectus_Draft.md\n"),
+        ]
+        backend.download_files.return_value = [
+            SimpleNamespace(
+                path="/mnt/data/SpaceX_IPO_Prospectus_Draft.md",
+                content=b"# SpaceX IPO\n",
+                error=None,
+            )
+        ]
+
+        mock_upload_file = SimpleNamespace(
+            id=uuid4(),
+            name="SpaceX_IPO_Prospectus_Draft.md",
+            size=13,
+            extension="md",
+            mime_type="text/markdown",
+            key="artifacts/SpaceX_IPO_Prospectus_Draft.md",
+        )
+        mock_cos_service = MagicMock()
+        mock_cos_service.upload_bytes.return_value = mock_upload_file
+        mock_cos_service.get_file_url.return_value = "https://cos.example.com/artifacts/SpaceX_IPO_Prospectus_Draft.md"
+        mock_injector = MagicMock()
+        mock_injector.get.return_value = mock_cos_service
+
+        with patch("app.http.module.injector", mock_injector):
+            artifacts = agent._collect_artifacts(
+                backend=backend,
+                artifact_root="/workspace/artifacts/task-1",
+                timeline=timeline,
+            )
+
+        assert len(artifacts) == 1
+        assert artifacts[0]["path"] == "/mnt/data/SpaceX_IPO_Prospectus_Draft.md"
+        fallback_scan_command = backend.execute.call_args_list[1].args[0]
+        assert "/mnt/data" in fallback_scan_command
+        assert "-maxdepth 1" in fallback_scan_command
+        assert ".openagent_artifact_marker_task-1" in fallback_scan_command
+        assert any(event.event == QueueEvent.DEEP_ARTIFACT_CREATED for event in published)
+
     def test_sanitize_deep_answer_removes_fake_download_link_and_local_path(self):
         """应清理 deepagents 回答中的伪下载链接和沙箱本地路径。"""
         answer = """📄 可下载文件
@@ -871,6 +2791,44 @@ class TestDeepThinkingAgentGraph:
 
         assert "sandbox:/mnt/data/" not in sanitized
 
+    def test_sanitize_deep_answer_removes_raw_mnt_data_links(self):
+        """应清理 /mnt/data 本地路径，避免前端出现不可用链接。"""
+        answer = "文件已保存到 /mnt/data/SpaceX_IPO_Prospectus_Draft.md"
+
+        sanitized = DeepThinkingAgent._sanitize_deep_answer(answer, artifacts=[])
+
+        assert "/mnt/data/" not in sanitized
+
+    def test_sanitize_deep_answer_removes_namespaced_tool_call_tags(self):
+        """应清理带命名空间前缀的原始工具调用标签，避免暴露模型原文。"""
+        answer = """<vendorx:tool_call>
+<invoke name="write_file">
+    <parameter name="file_name">SpaceX_IPO_Prospectus_Draft.txt</parameter>
+    <parameter name="content">hello world</parameter>
+</invoke>
+</vendorx:tool_call>"""
+
+        sanitized = DeepThinkingAgent._sanitize_deep_answer(answer, artifacts=[])
+
+        assert "<vendorx:tool_call>" not in sanitized
+        assert "<invoke name=\"write_file\">" not in sanitized
+        assert "<parameter name=\"file_name\">" not in sanitized
+
+    def test_sanitize_deep_answer_removes_generated_artifacts_block(self):
+        """应清理 generated_artifacts 区块，避免把内部 artifact 协议暴露给用户。"""
+        answer = """<generated_artifacts>
+<artifact id="spacex_prospectus" title="SpaceX IPO Prospectus Draft">
+SPACE EXPLORATION TECHNOLOGIES CORP.
+</artifact>
+</generated_artifacts>
+正文摘要。"""
+
+        sanitized = DeepThinkingAgent._sanitize_deep_answer(answer, artifacts=[])
+
+        assert "<generated_artifacts>" not in sanitized
+        assert "<artifact id=" not in sanitized
+        assert "正文摘要。" in sanitized
+
 
 # ============================================================
 #  Integration Tests（需要真实百度 CFC 沙箱）
@@ -888,6 +2846,7 @@ class TestBaiduCfcSandboxIntegration:
     @pytest.fixture(scope="class")
     def sandbox(self):
         """创建真实沙箱实例，测试完成后关闭。"""
+        pytest.importorskip("e2b_code_interpreter", reason="e2b-code-interpreter 未安装，跳过真实沙箱集成测试")
         api_key = os.environ.get("E2B_API_KEY", "")
         domain  = os.environ.get("E2B_DOMAIN",  "")
         if not api_key or not domain:

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { QueueEvent } from '@/config'
 import {
   applyChatStreamEvent,
+  mergeChatHistoryMessages,
+  withChatRenderId,
   type StreamEventResponse,
   type StreamMessage,
   type StreamState,
@@ -376,5 +378,60 @@ describe('chat-stream', () => {
     )
 
     expect(message.answer).toBe('当前Agent执行已超时，无法得到答案，请重试')
+  })
+
+  it('keeps render ids stable while preserving backend ids when available', () => {
+    const tempMessage = withChatRenderId(createMessage(), 'debug-chat')
+    const historyMessage = withChatRenderId(
+      {
+        ...createMessage(),
+        id: 'message-1',
+      },
+      'debug-chat',
+    )
+
+    expect(tempMessage.render_id).toMatch(/^debug-chat-/)
+    expect(historyMessage.render_id).toBe('message-1')
+    expect(tempMessage.render_id).not.toBe(historyMessage.render_id)
+  })
+
+  it('merges overlapping history pages by message id without duplicating rows', () => {
+    const firstPage = [
+      withChatRenderId(
+        {
+          ...createMessage(),
+          id: 'message-2',
+        },
+        'debug-chat',
+      ),
+      withChatRenderId(
+        {
+          ...createMessage(),
+          id: 'message-1',
+        },
+        'debug-chat',
+      ),
+    ]
+    const overlappingPage = [
+      {
+        ...createMessage(),
+        id: 'message-1',
+        render_id: 'stale-render-id',
+      } as StreamMessage & { render_id: string },
+      {
+        ...createMessage(),
+        id: 'message-0',
+        render_id: 'older-render-id',
+      } as StreamMessage & { render_id: string },
+    ]
+
+    const merged = mergeChatHistoryMessages([...firstPage, ...overlappingPage], 'debug-chat')
+
+    expect(merged.map((item) => item.id)).toEqual(['message-2', 'message-1', 'message-0'])
+    expect(merged.map((item) => item.render_id)).toEqual([
+      'message-2',
+      'message-1',
+      'older-render-id',
+    ])
   })
 })

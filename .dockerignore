@@ -2,3 +2,6 @@
 **/*.md
 !README.md
 !**/README.md
+
+# Exclude runtime volume data from Docker build contexts.
+docker/volumes/

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -99,7 +102,7 @@ describe('DetailView', () => {
     await flushPromises()
     expect(mocks.loadDraftAppConfig).toHaveBeenCalledTimes(1)
 
-    mocks.draftAppConfigForm.value.model_config = {
+    mocks.draftAppConfigForm!.value.model_config = {
       provider: 'openai',
       model: 'gpt-4o-mini',
       parameters: {},
@@ -108,5 +111,13 @@ describe('DetailView', () => {
     await flushPromises()
 
     expect(mocks.loadDraftAppConfig).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses flex-based layout instead of viewport height constants', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/views/space/apps/DetailView.vue'), 'utf8')
+
+    expect(source).not.toContain('100vh-141px')
+    expect(source).not.toContain('100vh-173px')
+    expect(source).toContain('grid-cols-[minmax(0,13fr)_minmax(0,12fr)]')
   })
 })

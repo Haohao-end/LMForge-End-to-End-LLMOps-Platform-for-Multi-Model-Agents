@@ -1,0 +1,27 @@
+model: qwen3-max-2026-01-23
+label: qwen/qwen3-max-2026-01-23
+model_type: chat
+features:
+- tool_call
+- agent_thought
+context_window: 252000
+max_output_tokens: 32000
+attributes:
+  model: qwen/qwen3-max-2026-01-23
+parameters:
+- name: temperature
+  use_template: temperature
+  default: 0.7
+- name: top_p
+  use_template: top_p
+  default: 1
+- name: max_tokens
+  use_template: max_tokens
+  default: 4096
+  max: 32000
+metadata:
+  pricing:
+    input: 1.2
+    output: 6.0
+    unit: 0.001
+    currency: RMB

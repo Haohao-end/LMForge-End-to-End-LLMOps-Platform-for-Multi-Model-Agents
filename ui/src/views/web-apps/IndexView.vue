@@ -26,9 +26,14 @@ import type { GetConversationMessagesWithPageResponse } from '@/models/conversat
 import type { GetWebAppConversationsResponse } from '@/models/web-app'
 import {
   applyChatStreamEvent,
+  withChatRenderId,
   type StreamMessage,
   type StreamState,
 } from '@/views/shared/chat-stream'
+import {
+  CHAT_MESSAGE_MIN_ITEM_SIZE,
+  buildChatMessageSizeDependencies,
+} from '@/views/shared/chat-message-size'
 import { normalizeMessageMetrics, type MessageMetrics } from '@/views/shared/chat-metrics'
 import { calculateScrollDuration, smoothScroll } from '@/utils/scrollAnimation'
 import { cloneDeep } from 'lodash'
@@ -356,6 +361,7 @@ const handleScroll = async (event: UIEvent) => {
     if (!currentConversation?.id) return
     saveScrollHeight()
     await loadConversationMessagesWithPage(currentConversation.id, false)
+    await nextTick()
     restoreScrollPosition()
   }
 }
@@ -386,11 +392,12 @@ const handleSubmit = async () => {
   const selectedConversationTmp = cloneDeep(selectedConversation.value)
 
   // 11.4 往消息列表中添加基础人类消息
-  messages.value.unshift({
+  messages.value.unshift(withChatRenderId({
     id: '',
     conversation_id: '',
     query: query.value,
     image_urls: image_urls.value,
+    input_parts: [],
     answer: '',
     answer_parts: [],
     artifacts: [],
@@ -399,7 +406,7 @@ const handleSubmit = async () => {
     agent_thoughts: [],
     suggested_questions: [],
     created_at: 0,
-  } as WebAppMessage)
+  }, 'web-app'))
 
   // 11.5 初始化推理过程数据，并清空输入数据
   let streamState: StreamState = {
@@ -777,12 +784,21 @@ onUnmounted(() => {
         <dynamic-scroller
           ref="scroller"
           :items="messages.slice().reverse()"
-          :min-item-size="1"
+          :min-item-size="CHAT_MESSAGE_MIN_ITEM_SIZE"
+          key-field="render_id"
           @scroll="handleScroll"
           class="flex-1 min-h-0 scrollbar-w-none"
         >
           <template v-slot="{ item, active }">
-            <dynamic-scroller-item :item="item" :active="active" :data-index="item.id">
+            <dynamic-scroller-item
+              :key="item.render_id"
+              :item="item"
+              :active="active"
+              :data-index="item.id"
+              :size-dependencies="
+                buildChatMessageSizeDependencies(item, item.id === message_id && webAppChatLoading)
+              "
+            >
               <div class="flex flex-col gap-6 py-6">
                 <div data-human-message-anchor="true">
                   <human-message

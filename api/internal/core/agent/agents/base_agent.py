@@ -1,6 +1,7 @@
 import uuid
 from abc import abstractmethod
 from contextlib import nullcontext
+import logging
 from threading import Thread
 from typing import Optional, Any, Iterator
 from flask import has_app_context
@@ -132,13 +133,28 @@ class BaseAgent(Serializable, Runnable):
             if runtime_flask_app is not None and not has_app_context():
                 app_context = runtime_flask_app.app_context()
             with app_context:
-                self._agent.invoke(input)
+                try:
+                    self._agent.invoke(input)
+                except Exception as error:
+                    logging.exception("智能体执行线程发生异常: %s", error)
+                    self._agent_queue_manager.publish_failure(
+                        input["task_id"],
+                        error,
+                        context="智能体执行异常",
+                    )
 
         thread = Thread(target=_invoke_agent)
         thread.start()
 
         # 4.调用队列管理器监听数据并返回迭代器
-        yield from self._agent_queue_manager.listen(input["task_id"])
+        try:
+            yield from self._agent_queue_manager.listen(input["task_id"])
+        finally:
+            is_alive = getattr(thread, "is_alive", None)
+            if callable(is_alive) and is_alive():
+                join = getattr(thread, "join", None)
+                if callable(join):
+                    join(timeout=1)
 
     @property
     def agent_queue_manager(self) -> AgentQueueManager:

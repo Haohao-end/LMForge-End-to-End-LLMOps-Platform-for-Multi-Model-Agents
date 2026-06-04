@@ -242,7 +242,7 @@ def test_provider_pricing_should_match_documented_currency_per_provider():
     assert atlascloud_v3["metadata"]["pricing"]["output"] == pytest.approx(0.88)
     assert atlascloud_v3["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
     assert atlascloud_v3["context_window"] == 131_072
-    assert atlascloud_v3["max_output_tokens"] == 32_768
+    assert atlascloud_v3["max_output_tokens"] == 16_384
     assert atlascloud_v3["features"] == ["tool_call", "agent_thought"]
 
     atlascloud_v4 = yaml.safe_load(
@@ -276,14 +276,18 @@ def test_provider_pricing_should_match_documented_currency_per_provider():
     assert atlascloud_kimi["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
     assert atlascloud_kimi["context_window"] == 262_144
     assert atlascloud_kimi["max_output_tokens"] == 262_144
-    assert atlascloud_kimi["features"] == ["tool_call", "agent_thought"]
+    assert atlascloud_kimi["features"] == [
+        "tool_call",
+        "agent_thought",
+        "image_input",
+    ]
 
     atlascloud_qwen_plus = yaml.safe_load(
         (providers_root / "atlascloud/qwen3.6-plus.yaml").read_text(encoding="utf-8")
     )
     assert atlascloud_qwen_plus["metadata"]["pricing"]["currency"] == "RMB"
-    assert atlascloud_qwen_plus["metadata"]["pricing"]["input"] == pytest.approx(0.5)
-    assert atlascloud_qwen_plus["metadata"]["pricing"]["output"] == pytest.approx(3.0)
+    assert atlascloud_qwen_plus["metadata"]["pricing"]["input"] == pytest.approx(0.325)
+    assert atlascloud_qwen_plus["metadata"]["pricing"]["output"] == pytest.approx(1.95)
     assert atlascloud_qwen_plus["metadata"]["pricing"]["unit"] == pytest.approx(0.001)
     assert atlascloud_qwen_plus["metadata"]["pricing_cache_hit"]["currency"] == "RMB"
     assert atlascloud_qwen_plus["metadata"]["pricing_cache_hit"]["input"] == pytest.approx(
@@ -375,7 +379,7 @@ def test_provider_pricing_should_match_documented_currency_per_provider():
     assert glm_5["metadata"]["pricing"]["output"] == pytest.approx(0.015045)
 
 
-def test_atlascloud_provider_should_expose_documented_deepseek_models(monkeypatch):
+def test_atlascloud_provider_should_expose_documented_models(monkeypatch):
     repo_root = Path(__file__).resolve().parents[5]
     provider_entity_path = repo_root / "api/internal/core/language_model/entities/provider_entity.py"
 
@@ -402,25 +406,80 @@ def test_atlascloud_provider_should_expose_documented_deepseek_models(monkeypatc
     )
 
     model_names = [model.model_name for model in provider.get_model_entities()]
-    assert model_names[:8] == [
+    assert model_names == [
         "deepseek-v4-pro",
         "deepseek-v4-flash",
-        "kimi-k2.6",
-        "qwen3.6-plus",
-        "qwen3-coder-next",
-        "glm-5.1",
-        "minimax-m2.7",
+        "deepseek-v3.2-speciale",
+        "deepseek-v3.2-exp",
+        "deepseek-v3.2",
+        "deepseek-v3.1-terminus",
         "deepseek-v3-0324",
+        "deepseek-r1-0528",
+        "kimi-k2.6",
+        "kimi-k2.5",
+        "kimi-k2-thinking",
+        "gpt-5.2",
+        "qwen3-max-2026-01-23",
+        "qwen3.6-plus",
+        "qwen3.6-35b-a3b",
+        "qwen3-next-80b-a3b-thinking",
+        "qwen3-next-80b-a3b-instruct",
+        "qwen3-coder-next",
+        "qwen3-235b-a22b-thinking-2507",
+        "qwen3-235b-a22b-instruct-2507",
+        "qwen3-30b-a3b-thinking-2507",
+        "qwen3-30b-a3b-instruct-2507",
+        "qwen3-vl-235b-a22b-thinking",
+        "qwen3-vl-235b-a22b-instruct",
+        "qwen3-vl-30b-a3b-thinking",
+        "qwen3-vl-30b-a3b-instruct",
+        "qwen3-vl-8b-instruct",
+        "qwen3.5-397b-a17b",
+        "qwen3.5-122b-a10b",
+        "qwen3.5-35b-a3b",
+        "qwen3.5-27b",
+        "glm-5.1",
+        "glm-5v-turbo",
+        "glm-5-turbo",
+        "glm-5",
+        "minimax-m2.7",
+        "minimax-m2.5",
+        "minimax-m2.1",
     ]
 
     v4 = provider.get_model_entity("deepseek-v4-pro")
     v4_flash = provider.get_model_entity("deepseek-v4-flash")
     kimi = provider.get_model_entity("kimi-k2.6")
+    kimi_25 = provider.get_model_entity("kimi-k2.5")
+    kimi_thinking = provider.get_model_entity("kimi-k2-thinking")
+    gpt_52 = provider.get_model_entity("gpt-5.2")
     qwen_plus = provider.get_model_entity("qwen3.6-plus")
+    qwen_35b = provider.get_model_entity("qwen3.6-35b-a3b")
+    qwen_122b = provider.get_model_entity("qwen3.5-122b-a10b")
+    qwen_max = provider.get_model_entity("qwen3-max-2026-01-23")
+    qwen_next_thinking = provider.get_model_entity("qwen3-next-80b-a3b-thinking")
+    qwen_next_instruct = provider.get_model_entity("qwen3-next-80b-a3b-instruct")
     qwen_coder = provider.get_model_entity("qwen3-coder-next")
+    qwen_235b_thinking = provider.get_model_entity("qwen3-235b-a22b-thinking-2507")
+    qwen_235b_instruct = provider.get_model_entity("qwen3-235b-a22b-instruct-2507")
+    qwen_30b_thinking = provider.get_model_entity("qwen3-30b-a3b-thinking-2507")
+    qwen_30b_instruct = provider.get_model_entity("qwen3-30b-a3b-instruct-2507")
+    qwen_vl_235b_thinking = provider.get_model_entity("qwen3-vl-235b-a22b-thinking")
+    qwen_vl_30b_thinking = provider.get_model_entity("qwen3-vl-30b-a3b-thinking")
+    qwen_vl_30b = provider.get_model_entity("qwen3-vl-30b-a3b-instruct")
+    qwen_vl_235b = provider.get_model_entity("qwen3-vl-235b-a22b-instruct")
     glm_51 = provider.get_model_entity("glm-5.1")
+    glm_5v = provider.get_model_entity("glm-5v-turbo")
+    glm_5 = provider.get_model_entity("glm-5")
     minimax = provider.get_model_entity("minimax-m2.7")
     v3 = provider.get_model_entity("deepseek-v3-0324")
+    v32 = provider.get_model_entity("deepseek-v3.2")
+    v32_exp = provider.get_model_entity("deepseek-v3.2-exp")
+    v32_speciale = provider.get_model_entity("deepseek-v3.2-speciale")
+    v31_terminus = provider.get_model_entity("deepseek-v3.1-terminus")
+    deepseek_r1 = provider.get_model_entity("deepseek-r1-0528")
+    qwen_minimax_21 = provider.get_model_entity("minimax-m2.1")
+    qwen_minimax_25 = provider.get_model_entity("minimax-m2.5")
     assert v4.context_window == 1_048_576
     assert v4.max_output_tokens == 393_216
     assert v4.attributes["model"] == "deepseek-ai/deepseek-v4-pro"
@@ -432,27 +491,236 @@ def test_atlascloud_provider_should_expose_documented_deepseek_models(monkeypatc
     assert kimi.context_window == 262_144
     assert kimi.max_output_tokens == 262_144
     assert kimi.attributes["model"] == "moonshotai/kimi-k2.6"
-    assert kimi.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert kimi.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert kimi_25.context_window == 262_144
+    assert kimi_25.max_output_tokens == 262_144
+    assert kimi_25.attributes["model"] == "moonshotai/kimi-k2.5"
+    assert kimi_25.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert kimi_25.metadata["pricing"]["input"] == pytest.approx(0.49)
+    assert kimi_25.metadata["pricing"]["output"] == pytest.approx(2.5)
+    assert kimi_thinking.context_window == 262_144
+    assert kimi_thinking.max_output_tokens == 262_144
+    assert kimi_thinking.attributes["model"] == "moonshotai/Kimi-K2-Thinking"
+    assert kimi_thinking.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+    ]
+    assert kimi_thinking.metadata["pricing"]["input"] == pytest.approx(0.6)
+    assert kimi_thinking.metadata["pricing"]["output"] == pytest.approx(2.5)
+    assert gpt_52.context_window == 400_000
+    assert gpt_52.max_output_tokens == 128_000
+    assert gpt_52.attributes["model"] == "openai/gpt-5.2"
+    assert gpt_52.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert gpt_52.metadata["pricing"]["input"] == pytest.approx(1.4)
+    assert gpt_52.metadata["pricing"]["output"] == pytest.approx(11.2)
     assert qwen_plus.context_window == 1_000_000
     assert qwen_plus.max_output_tokens == 65_536
     assert qwen_plus.attributes["model"] == "qwen/qwen3.6-plus"
     assert qwen_plus.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_plus.metadata["pricing"]["input"] == pytest.approx(0.325)
+    assert qwen_plus.metadata["pricing"]["output"] == pytest.approx(1.95)
+    assert qwen_35b.context_window == 262_144
+    assert qwen_35b.max_output_tokens == 65_536
+    assert qwen_35b.attributes["model"] == "qwen/qwen3.6-35b-a3b"
+    assert qwen_35b.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_35b.metadata["pricing"]["input"] == pytest.approx(0.161)
+    assert qwen_35b.metadata["pricing"]["output"] == pytest.approx(0.965)
+    assert qwen_122b.context_window == 262_144
+    assert qwen_122b.max_output_tokens == 65_536
+    assert qwen_122b.attributes["model"] == "qwen/qwen3.5-122b-a10b"
+    assert qwen_122b.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert qwen_122b.metadata["pricing"]["input"] == pytest.approx(0.3)
+    assert qwen_122b.metadata["pricing"]["output"] == pytest.approx(2.4)
+    assert qwen_max.context_window == 252_000
+    assert qwen_max.max_output_tokens == 32_000
+    assert qwen_max.attributes["model"] == "qwen/qwen3-max-2026-01-23"
+    assert qwen_max.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_max.metadata["pricing"]["input"] == pytest.approx(1.2)
+    assert qwen_max.metadata["pricing"]["output"] == pytest.approx(6.0)
+    assert qwen_next_thinking.context_window == 262_144
+    assert qwen_next_thinking.max_output_tokens == 32_768
+    assert qwen_next_thinking.attributes["model"] == "Qwen/Qwen3-Next-80B-A3B-Thinking"
+    assert qwen_next_thinking.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+    ]
+    assert qwen_next_thinking.metadata["pricing"]["input"] == pytest.approx(0.15)
+    assert qwen_next_thinking.metadata["pricing"]["output"] == pytest.approx(1.5)
+    assert qwen_next_instruct.context_window == 262_144
+    assert qwen_next_instruct.max_output_tokens == 131_072
+    assert qwen_next_instruct.attributes["model"] == "Qwen/Qwen3-Next-80B-A3B-Instruct"
+    assert qwen_next_instruct.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+    ]
+    assert qwen_next_instruct.metadata["pricing"]["input"] == pytest.approx(0.15)
+    assert qwen_next_instruct.metadata["pricing"]["output"] == pytest.approx(1.5)
     assert qwen_coder.context_window == 262_144
     assert qwen_coder.max_output_tokens == 262_144
     assert qwen_coder.attributes["model"] == "qwen/qwen3-coder-next"
     assert qwen_coder.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_235b_thinking.context_window == 128_000
+    assert qwen_235b_thinking.max_output_tokens == 32_768
+    assert qwen_235b_thinking.attributes["model"] == "qwen/qwen3-235b-a22b-thinking-2507"
+    assert qwen_235b_thinking.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+    ]
+    assert qwen_235b_thinking.metadata["pricing"]["input"] == pytest.approx(0.28)
+    assert qwen_235b_thinking.metadata["pricing"]["output"] == pytest.approx(2.3)
+    assert qwen_235b_instruct.context_window == 131_072
+    assert qwen_235b_instruct.max_output_tokens == 131_072
+    assert qwen_235b_instruct.attributes["model"] == "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    assert qwen_235b_instruct.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+    ]
+    assert qwen_235b_instruct.metadata["pricing"]["input"] == pytest.approx(0.21)
+    assert qwen_235b_instruct.metadata["pricing"]["output"] == pytest.approx(0.63)
+    assert qwen_30b_thinking.context_window == 131_072
+    assert qwen_30b_thinking.max_output_tokens == 131_072
+    assert qwen_30b_thinking.attributes["model"] == "qwen/qwen3-30b-a3b-thinking-2507"
+    assert qwen_30b_thinking.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+    ]
+    assert qwen_30b_thinking.metadata["pricing"]["input"] == pytest.approx(0.08)
+    assert qwen_30b_thinking.metadata["pricing"]["output"] == pytest.approx(0.4)
+    assert qwen_30b_instruct.context_window == 131_072
+    assert qwen_30b_instruct.max_output_tokens == 131_072
+    assert qwen_30b_instruct.attributes["model"] == "Qwen/Qwen3-30B-A3B-Instruct-2507"
+    assert qwen_30b_instruct.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+    ]
+    assert qwen_30b_instruct.metadata["pricing"]["input"] == pytest.approx(0.1)
+    assert qwen_30b_instruct.metadata["pricing"]["output"] == pytest.approx(0.3)
+    assert qwen_vl_235b_thinking.context_window == 131_072
+    assert qwen_vl_235b_thinking.max_output_tokens == 65_536
+    assert qwen_vl_235b_thinking.attributes["model"] == "qwen/qwen3-vl-235b-a22b-thinking"
+    assert qwen_vl_235b_thinking.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert qwen_vl_235b_thinking.metadata["pricing"]["input"] == pytest.approx(0.5)
+    assert qwen_vl_235b_thinking.metadata["pricing"]["output"] == pytest.approx(2.5)
+    assert qwen_vl_30b_thinking.context_window == 128_000
+    assert qwen_vl_30b_thinking.max_output_tokens == 32_000
+    assert qwen_vl_30b_thinking.attributes["model"] == "qwen/qwen3-vl-30b-a3b-thinking"
+    assert qwen_vl_30b_thinking.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert qwen_vl_30b_thinking.metadata["pricing"]["input"] == pytest.approx(0.15)
+    assert qwen_vl_30b_thinking.metadata["pricing"]["output"] == pytest.approx(1.5)
+    assert qwen_vl_30b.context_window == 128_000
+    assert qwen_vl_30b.max_output_tokens == 32_000
+    assert qwen_vl_30b.attributes["model"] == "qwen/qwen3-vl-30b-a3b-instruct"
+    assert qwen_vl_30b.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert qwen_vl_30b.metadata["pricing"]["input"] == pytest.approx(0.15)
+    assert qwen_vl_30b.metadata["pricing"]["output"] == pytest.approx(0.6)
+    assert qwen_vl_235b.context_window == 131_072
+    assert qwen_vl_235b.max_output_tokens == 32_768
+    assert qwen_vl_235b.attributes["model"] == "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    assert qwen_vl_235b.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert qwen_vl_235b.metadata["pricing"]["input"] == pytest.approx(0.3)
+    assert qwen_vl_235b.metadata["pricing"]["output"] == pytest.approx(1.5)
     assert glm_51.context_window == 202_752
     assert glm_51.max_output_tokens == 202_752
     assert glm_51.attributes["model"] == "zai-org/glm-5.1"
     assert glm_51.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert glm_5.context_window == 202_752
+    assert glm_5.max_output_tokens == 202_752
+    assert glm_5.attributes["model"] == "zai-org/glm-5"
+    assert glm_5.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert glm_5.metadata["pricing"]["input"] == pytest.approx(0.95)
+    assert glm_5.metadata["pricing"]["output"] == pytest.approx(3.15)
+    assert glm_5v.context_window == 202_752
+    assert glm_5v.max_output_tokens == 131_072
+    assert glm_5v.attributes["model"] == "zai-org/glm-5v-turbo"
+    assert glm_5v.features == [
+        ModelFeature.TOOL_CALL.value,
+        ModelFeature.AGENT_THOUGHT.value,
+        ModelFeature.IMAGE_INPUT.value,
+    ]
+    assert glm_5v.metadata["pricing"]["input"] == pytest.approx(1.2)
+    assert glm_5v.metadata["pricing"]["output"] == pytest.approx(4.0)
     assert minimax.context_window == 196_608
     assert minimax.max_output_tokens == 196_608
     assert minimax.attributes["model"] == "minimaxai/minimax-m2.7"
     assert minimax.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
     assert v3.context_window == 131_072
-    assert v3.max_output_tokens == 32_768
+    assert v3.max_output_tokens == 16_384
     assert v3.attributes["model"] == "deepseek-ai/DeepSeek-V3-0324"
     assert v3.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert v32.context_window == 163_840
+    assert v32.max_output_tokens == 163_840
+    assert v32.attributes["model"] == "deepseek-ai/deepseek-v3.2"
+    assert v32.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert v32.metadata["pricing"]["input"] == pytest.approx(0.26)
+    assert v32.metadata["pricing"]["output"] == pytest.approx(0.38)
+    assert v32_exp.context_window == 163_840
+    assert v32_exp.max_output_tokens == 163_840
+    assert v32_exp.attributes["model"] == "deepseek-ai/DeepSeek-V3.2-Exp"
+    assert v32_exp.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert v32_exp.metadata["pricing"]["input"] == pytest.approx(0.27)
+    assert v32_exp.metadata["pricing"]["output"] == pytest.approx(0.41)
+    assert v32_speciale.context_window == 163_840
+    assert v32_speciale.max_output_tokens == 163_840
+    assert v32_speciale.attributes["model"] == "deepseek-ai/deepseek-v3.2-speciale"
+    assert v32_speciale.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert v32_speciale.metadata["pricing"]["input"] == pytest.approx(0.287)
+    assert v32_speciale.metadata["pricing"]["output"] == pytest.approx(0.431)
+    assert v31_terminus.context_window == 131_072
+    assert v31_terminus.max_output_tokens == 65_536
+    assert v31_terminus.attributes["model"] == "deepseek-ai/DeepSeek-V3.1-Terminus"
+    assert v31_terminus.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert v31_terminus.metadata["pricing"]["input"] == pytest.approx(0.3)
+    assert v31_terminus.metadata["pricing"]["output"] == pytest.approx(0.95)
+    assert deepseek_r1.context_window == 131_072
+    assert deepseek_r1.max_output_tokens == 131_072
+    assert deepseek_r1.attributes["model"] == "deepseek-ai/DeepSeek-R1-0528"
+    assert deepseek_r1.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert deepseek_r1.metadata["pricing"]["input"] == pytest.approx(0.55)
+    assert deepseek_r1.metadata["pricing"]["output"] == pytest.approx(2.15)
+    assert qwen_minimax_21.context_window == 196_608
+    assert qwen_minimax_21.max_output_tokens == 65_536
+    assert qwen_minimax_21.attributes["model"] == "minimaxai/minimax-m2.1"
+    assert qwen_minimax_21.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_minimax_21.metadata["pricing"]["input"] == pytest.approx(0.29)
+    assert qwen_minimax_21.metadata["pricing"]["output"] == pytest.approx(0.95)
+    assert qwen_minimax_25.context_window == 196_608
+    assert qwen_minimax_25.max_output_tokens == 196_608
+    assert qwen_minimax_25.attributes["model"] == "minimaxai/minimax-m2.5"
+    assert qwen_minimax_25.features == [ModelFeature.TOOL_CALL.value, ModelFeature.AGENT_THOUGHT.value]
+    assert qwen_minimax_25.metadata["pricing"]["input"] == pytest.approx(0.295)
+    assert qwen_minimax_25.metadata["pricing"]["output"] == pytest.approx(1.2)
 
 
 def test_language_model_manager_should_load_and_delegate(monkeypatch, tmp_path):
@@ -599,16 +867,37 @@ def test_atlascloud_env_resolver_should_apply_priority(monkeypatch):
     monkeypatch.delenv("ATLAS_CLOUD_API_KEY", raising=False)
     monkeypatch.delenv("ATLASCLOUD_API_BASE", raising=False)
     monkeypatch.delenv("ATLAS_CLOUD_API_BASE", raising=False)
+    monkeypatch.delenv("ATLASCLOUD_REQUEST_TIMEOUT", raising=False)
+    monkeypatch.delenv("ATLAS_CLOUD_REQUEST_TIMEOUT", raising=False)
+    monkeypatch.delenv("LLM_REQUEST_TIMEOUT", raising=False)
 
     resolved = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
     assert resolved["api_key"] == "atlas-key"
     assert resolved["base_url"] == "https://api.atlascloud.ai/v1"
+    assert resolved["timeout"] == 1800.0
 
     explicit = AtlasCloudChat.resolve_atlascloud_env(
-        {"api_key": "explicit", "base_url": "https://custom.example/v1"}
+        {
+            "api_key": "explicit",
+            "base_url": "https://custom.example/v1",
+            "timeout": 123,
+        }
     )
     assert explicit["api_key"] == "explicit"
     assert explicit["base_url"] == "https://custom.example/v1"
+    assert explicit["timeout"] == 123
+
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT", "120")
+    fallback = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
+    assert fallback["timeout"] == 1800.0
+
+    monkeypatch.setenv("ATLASCLOUD_REQUEST_TIMEOUT", "2400")
+    override = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
+    assert override["timeout"] == 2400.0
+
+    monkeypatch.setenv("ATLASCLOUD_REQUEST_TIMEOUT", "420")
+    clamped = AtlasCloudChat.resolve_atlascloud_env({"model": "deepseek-v3"})
+    assert clamped["timeout"] == 1800.0
 
     monkeypatch.delenv("ATLASCLOUD_API_KEY", raising=False)
     monkeypatch.setenv("ATLAS_CLOUD_API_KEY", "fallback-key")

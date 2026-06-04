@@ -2129,6 +2129,7 @@ class TestAppService:
         class _Query:
             def __init__(self, all_result=None):
                 self.filter_calls = []
+                self.order_by_calls = []
                 self._all_result = all_result if all_result is not None else []
 
             def filter(self, *args, **_kwargs):
@@ -2136,6 +2137,7 @@ class TestAppService:
                 return self
 
             def order_by(self, *_args, **_kwargs):
+                self.order_by_calls.append(_args)
                 return self
 
             def options(self, *_args, **_kwargs):
@@ -2178,6 +2180,14 @@ class TestAppService:
         assert isinstance(paginator, _Paginator)
         # 4 个固定过滤项 + created_at 过滤项
         assert len(id_query.filter_calls[0]) == 5
+        assert tuple(str(arg) for arg in id_query.order_by_calls[0]) == (
+            "message.created_at DESC",
+            "message.id DESC",
+        )
+        assert tuple(str(arg) for arg in msg_query.order_by_calls[0]) == (
+            "message.created_at DESC",
+            "message.id DESC",
+        )
 
     def test_get_debug_conversation_messages_with_page_should_normalize_row_like_paginated_ids(
         self, monkeypatch

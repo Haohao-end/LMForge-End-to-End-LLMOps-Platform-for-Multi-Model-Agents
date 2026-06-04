@@ -99,6 +99,34 @@ const normalizeTodoItems = (todos: unknown): Array<Record<string, any>> => {
     .filter((todo) => String(todo.content || todo.title || '').trim())
 }
 
+const getPreviewLabel = (previewKind: string) => {
+  if (previewKind === 'protocol')
+    return t('chat.deepTimeline.protocolPreview')
+  if (previewKind === 'command')
+    return t('chat.deepTimeline.commandPreview')
+  return t('chat.deepTimeline.preview')
+}
+
+const getResultPreviewLabel = (resultKind: string) => {
+  if (resultKind === 'stdout')
+    return t('chat.deepTimeline.resultPreview')
+  if (resultKind === 'artifact')
+    return t('chat.deepTimeline.resultPreview')
+  return t('chat.deepTimeline.resultPreview')
+}
+
+const getStateLabel = (status: string, errorKind: string, recovered: boolean, recoverable: boolean) => {
+  if (recovered)
+    return t('chat.deepTimeline.autoRecoveredAttachment')
+  if (status === 'warning' && errorKind === 'protocol_error' && recoverable)
+    return t('chat.deepTimeline.recoverableProtocolIssue')
+  if (status === 'error')
+    return t('chat.deepTimeline.finalFailure')
+  if (status === 'warning')
+    return t('chat.deepTimeline.recoverableProtocolIssue')
+  return ''
+}
+
 const timelineItems = computed(() => {
   return props.thoughts.map((thought, index) => {
     const toolInput = (thought.tool_input || {}) as Record<string, any>
@@ -107,6 +135,14 @@ const timelineItems = computed(() => {
     const todos = normalizeTodoItems(timeline.todos || toolInput.todos || [])
     const renderKey = String(thought.id || `step-${index}`)
     const tool = String(thought.tool || '')
+    const preview = String(timeline.preview || '')
+    const previewKind = String(timeline.preview_kind || '')
+    const resultPreview = String(timeline.result_preview || '')
+    const resultKind = String(timeline.result_kind || '')
+    const errorKind = String(timeline.error_kind || '')
+    const recovered = Boolean(timeline.recovered)
+    const recoverable = Boolean(timeline.recoverable)
+    const outputEmpty = Boolean(timeline.output_empty)
 
     if (thought.event === QueueEvent.deepArtifactCreated && artifact) {
       return {
@@ -123,6 +159,15 @@ const timelineItems = computed(() => {
         tool: 'artifact',
         latency: Number(thought.latency ?? 0),
         artifact,
+        preview: '',
+        previewKind: '',
+        resultPreview: '',
+        resultKind: '',
+        errorKind: '',
+        recovered: false,
+        recoverable: false,
+        outputEmpty: false,
+        stateLabel: '',
       }
     }
 
@@ -146,6 +191,15 @@ const timelineItems = computed(() => {
       tool,
       latency: Number(thought.latency ?? 0),
       artifact: null,
+      preview,
+      previewKind,
+      resultPreview,
+      resultKind,
+      errorKind,
+      recovered,
+      recoverable,
+      outputEmpty,
+      stateLabel: getStateLabel(status, errorKind, recovered, recoverable),
       todos,
       showTodos: tool === 'write_todos' && todos.length > 0,
       todoCount: todos.length,
@@ -269,11 +323,33 @@ const getTodoDotClass = (status: string) => {
           <div class="deep-agent-step__meta">
             <span class="deep-agent-step__name">{{ item.title }}</span>
             <span class="deep-agent-badge">{{ item.stepTypeLabel }}</span>
+            <span
+              v-if="item.stateLabel"
+              :class="[
+                'deep-agent-badge',
+                item.status === 'error'
+                  ? 'deep-agent-badge--danger'
+                  : item.recovered
+                    ? 'deep-agent-badge--success'
+                    : 'deep-agent-badge--state',
+              ]"
+            >{{ item.stateLabel }}</span>
             <span v-if="item.latency > 0" class="deep-agent-step__latency">{{ item.latency.toFixed(2) }}s</span>
           </div>
 
           <div v-if="item.detail" class="deep-agent-step__detail">
             {{ item.detail }}
+          </div>
+
+          <div v-if="item.preview || item.resultPreview || item.errorKind || item.recovered" class="deep-agent-step__preview-block">
+            <div v-if="item.preview" class="deep-agent-step__preview-section">
+              <div class="deep-agent-step__preview-label">{{ getPreviewLabel(item.previewKind) }}</div>
+              <pre>{{ item.preview }}</pre>
+            </div>
+            <div v-if="item.resultPreview || item.outputEmpty || item.recovered" class="deep-agent-step__preview-section">
+              <div class="deep-agent-step__preview-label">{{ getResultPreviewLabel(item.resultKind) }}</div>
+              <pre>{{ item.resultPreview || (item.outputEmpty ? t('chat.deepTimeline.noOutput') : '') }}</pre>
+            </div>
           </div>
 
           <div v-if="item.showTodos && item.todos.length > 0" class="deep-agent-todo-list">
@@ -437,6 +513,21 @@ const getTodoDotClass = (status: string) => {
   background: rgba(148, 163, 184, 0.14);
 }
 
+.deep-agent-badge--state {
+  background: rgba(251, 191, 36, 0.14);
+  color: #92400e;
+}
+
+.deep-agent-badge--success {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
+.deep-agent-badge--danger {
+  background: rgba(244, 63, 94, 0.14);
+  color: #be123c;
+}
+
 .deep-agent-step__latency {
   font-size: 11px;
   color: #94a3b8;
@@ -446,6 +537,35 @@ const getTodoDotClass = (status: string) => {
   margin-top: 6px;
   font-size: 12px;
   color: #4b5563;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.deep-agent-step__preview-block {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deep-agent-step__preview-section {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.deep-agent-step__preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.deep-agent-step__preview-section pre {
+  margin: 0;
+  font-size: 12px;
+  color: #334155;
   white-space: pre-wrap;
   word-break: break-word;
 }
