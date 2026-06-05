@@ -1371,10 +1371,9 @@ onUnmounted(() => {
         class="home-chat-thread flex-1 min-h-0 flex flex-col w-full max-w-[760px] mx-auto px-4 sm:px-6"
       >
         <div
-          class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/35 px-4 py-3 backdrop-blur-md shadow-sm shadow-blue-500/5"
+          class="mb-4 flex min-h-[64px] items-center justify-center rounded-2xl border border-white/60 bg-white/35 px-4 py-3 backdrop-blur-md shadow-sm shadow-blue-500/5"
         >
-          <div class="min-w-0">
-            <div class="text-xs text-gray-500">{{ t('home.conversation.title') }}</div>
+          <div class="min-w-0 text-center">
             <div class="truncate text-base font-semibold text-gray-700">
               {{
                 getConversationNameLoading
@@ -1382,12 +1381,6 @@ onUnmounted(() => {
                   : currentConversationName.trim() || t('home.conversation.empty')
               }}
             </div>
-          </div>
-          <div
-            v-if="selectedConversationId"
-            class="flex-shrink-0 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
-          >
-            {{ t('home.conversation.idLabel') }}：{{ selectedConversationId.slice(0, 8) }}
           </div>
         </div>
         <div

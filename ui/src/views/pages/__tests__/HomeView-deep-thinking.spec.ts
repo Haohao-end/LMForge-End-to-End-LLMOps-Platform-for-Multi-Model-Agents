@@ -347,9 +347,8 @@ describe('HomeView deep thinking submit', () => {
 
     expect(mocks.loadAssistantAgentMessages).toHaveBeenCalled()
     expect(mocks.conversationNameRef.value).toBe('历史会话 A')
-    expect(wrapper.text()).toContain('当前会话')
     expect(wrapper.text()).toContain('历史会话 A')
-    expect(wrapper.text()).toContain('会话 ID')
-    expect(wrapper.text()).toContain('conversa')
+    expect(wrapper.text()).not.toContain('当前会话')
+    expect(wrapper.text()).not.toContain('会话 ID')
   })
 })

@@ -691,8 +691,10 @@ class TestAppService:
 
         assert result["capabilities"] == capabilities
 
-    def test_build_runtime_tools_for_config_should_merge_mcp_bindings(self):
+    def test_build_runtime_tools_for_config_should_merge_mcp_and_agent_bindings(self):
         service = _build_service()
+        app_id = uuid4()
+        agent_binding_calls = []
         service.app_config_service = SimpleNamespace(
             get_langchain_tools_by_tools_config=lambda tools: ["tool-a"] if tools == [{"type": "builtin_tool"}] else [],
             get_langchain_tools_by_mcp_bindings=lambda mcp_bindings, mcp_tool_snapshots=None: (
@@ -701,20 +703,28 @@ class TestAppService:
             get_langchain_tools_by_workflow_ids=lambda workflow_ids: ["wf-a"] if workflow_ids == ["wf-1"] else [],
         )
         service.retrieval_service = SimpleNamespace()
+        service.get_langchain_tools_by_agent_bindings = lambda agent_bindings, **kwargs: agent_binding_calls.append(
+            {"agent_bindings": agent_bindings, "kwargs": kwargs}
+        ) or (["agent-a"] if agent_bindings == [{"app_id": "agent-1"}] else [])
 
         tools = AppService._build_runtime_tools_for_config(
             app_config_service=service.app_config_service,
             retrieval_service=service.retrieval_service,
+            app_service=service,
             account=SimpleNamespace(id=uuid4()),
+            app_id=app_id,
             draft_app_config={
                 "tools": [{"type": "builtin_tool"}],
                 "mcp_bindings": [{"name": "mcp"}],
                 "workflows": [{"id": "wf-1"}],
+                "agent_bindings": [{"app_id": "agent-1"}],
                 "datasets": [],
             },
         )
 
-        assert tools == ["tool-a", "mcp-a", "wf-a"]
+        assert tools == ["tool-a", "mcp-a", "wf-a", "agent-a"]
+        assert agent_binding_calls[0]["agent_bindings"] == [{"app_id": "agent-1"}]
+        assert agent_binding_calls[0]["kwargs"]["app_id"] == app_id
 
     def test_create_runtime_agent_should_select_deep_thinking_agent_and_forward_runtime_context(
         self, monkeypatch
@@ -816,6 +826,57 @@ class TestAppService:
         assert "已绑定 MCP" in capture["agent_config"].preset_prompt
         assert "12306 车票查询 MCP" in capture["agent_config"].preset_prompt
         assert "请优先调用对应 MCP" in capture["agent_config"].preset_prompt
+
+    def test_create_runtime_agent_should_append_agent_binding_prompt(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        llm = SimpleNamespace(features=[])
+        draft_app_config = {
+            "preset_prompt": "prompt",
+            "long_term_memory": {"enable": True},
+            "review_config": {"enable": False},
+            "agent_bindings": [
+                {
+                    "app_id": str(uuid4()),
+                    "name": "singleton-smoke-20260404",
+                    "description": "A2A 应用广场 · 公开应用",
+                    "source_scope": "public",
+                    "invoke_mode": "a2a",
+                    "tool_name": "agent_app_singleton_smoke_20260404",
+                }
+            ],
+        }
+        capture = {}
+
+        class _FakeDeepThinkingAgent:
+            def __init__(self, llm, agent_config):
+                capture["llm"] = llm
+                capture["agent_config"] = agent_config
+
+        monkeypatch.setattr(
+            "internal.service.app_service.AgentConfig",
+            lambda **kwargs: SimpleNamespace(**kwargs),
+        )
+        monkeypatch.setattr(
+            "internal.service.app_service.DeepThinkingAgent",
+            _FakeDeepThinkingAgent,
+        )
+
+        agent = AppService._create_runtime_agent(
+            llm=llm,
+            account=account,
+            draft_app_config=draft_app_config,
+            tools=["tool-a"],
+            enable_deep_thinking=True,
+            flask_app="flask-app",
+            invoke_from=InvokeFrom.WEB_APP.value,
+        )
+
+        assert isinstance(agent, _FakeDeepThinkingAgent)
+        assert capture["agent_config"].tools == ["tool-a"]
+        assert "已绑定 Agent 子应用" in capture["agent_config"].preset_prompt
+        assert "singleton-smoke-20260404" in capture["agent_config"].preset_prompt
+        assert "agent_app_singleton_smoke_20260404" in capture["agent_config"].preset_prompt
+        assert "通过 A2A 协议委派" in capture["agent_config"].preset_prompt
 
     def test_create_runtime_agent_should_append_runtime_mcp_tool_names(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())

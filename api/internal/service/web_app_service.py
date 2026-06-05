@@ -162,9 +162,11 @@ class WebAppService(BaseService):
         tools = AppService._build_runtime_tools_for_config(
             app_config_service=self.app_config_service,
             retrieval_service=self.retrieval_service,
+            app_service=self.app_service,
             account=account,
             draft_app_config=app_config,
             flask_app=current_app._get_current_object(),
+            runtime_context=None,
         )
 
         # 9.复用运行时Agent工厂，确保已发布WebApp与调试态应用共用深度思考链路

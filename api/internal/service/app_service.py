@@ -838,10 +838,12 @@ class AppService(BaseService):
             app_config_service=self.app_config_service,
             retrieval_service=self.retrieval_service,
             skill_service=self._get_skill_service(),
+            app_service=self,
             account=account,
             app_id=app_id,
             draft_app_config=draft_app_config,
             flask_app=flask_app,
+            runtime_context=runtime_context,
         )
 
     @staticmethod
@@ -979,10 +981,12 @@ class AppService(BaseService):
         app_config_service: AppConfigService,
         retrieval_service: RetrievalService,
         skill_service: SkillService | None = None,
+        app_service: Any | None = None,
         account: Account,
         app_id: UUID | None = None,
         draft_app_config: dict[str, Any],
         flask_app: Flask | None = None,
+        runtime_context: dict[str, Any] | None = None,
     ) -> list[Any]:
         """根据应用配置构建运行时工具列表，供多入口复用。"""
         tools = app_config_service.get_langchain_tools_by_tools_config(draft_app_config.get("tools", []))
@@ -1026,6 +1030,19 @@ class AppService(BaseService):
                 [workflow["id"] for workflow in draft_app_config.get("workflows", [])]
             )
             tools.extend(workflow_tools)
+
+        if app_service is not None and app_id is not None:
+            get_agent_binding_tools = getattr(app_service, "get_langchain_tools_by_agent_bindings", None)
+            if callable(get_agent_binding_tools):
+                tools.extend(
+                    get_agent_binding_tools(
+                        draft_app_config.get("agent_bindings", []),
+                        account=account,
+                        app_id=app_id,
+                        flask_app=flask_app,
+                        runtime_context=runtime_context,
+                    )
+                )
 
         return tools
 
@@ -1325,6 +1342,9 @@ class AppService(BaseService):
             agent_class = FunctionCallAgent if ModelFeature.TOOL_CALL.value in llm.features else ReACTAgent
 
         skill_prompt_appendix = cls._build_skill_prompt_appendix(draft_app_config.get("skills", []))
+        agent_binding_prompt_appendix = cls._build_agent_binding_prompt_appendix(
+            draft_app_config.get("agent_bindings", [])
+        )
         mcp_prompt_appendix = cls._build_mcp_prompt_appendix(draft_app_config.get("mcp_bindings", []))
         mcp_snapshot_prompt_appendix = cls._build_mcp_snapshot_prompt_appendix(
             draft_app_config.get("mcp_tool_snapshots", [])
@@ -1334,6 +1354,8 @@ class AppService(BaseService):
         prompt_parts = [preset_prompt.strip()]
         if skill_prompt_appendix:
             prompt_parts.append(skill_prompt_appendix.strip())
+        if agent_binding_prompt_appendix:
+            prompt_parts.append(agent_binding_prompt_appendix.strip())
         if mcp_prompt_appendix:
             prompt_parts.append(mcp_prompt_appendix.strip())
         if mcp_snapshot_prompt_appendix:

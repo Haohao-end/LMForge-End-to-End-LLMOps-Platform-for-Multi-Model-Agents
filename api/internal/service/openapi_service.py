@@ -126,6 +126,7 @@ class OpenAPIService(BaseService):
         tools = AppService._build_runtime_tools_for_config(
             app_config_service=self.app_config_service,
             retrieval_service=self.retrieval_service,
+            app_service=self.app_service,
             account=account,
             draft_app_config=app_config,
             flask_app=current_app._get_current_object() if has_app_context() else None,
@@ -133,12 +134,20 @@ class OpenAPIService(BaseService):
 
         # 12.根据LLM是否支持tool_call决定使用不同的Agent
         agent_class = FunctionCallAgent if ModelFeature.TOOL_CALL.value in llm.features else ReACTAgent
+        agent_binding_prompt_appendix = AppService._build_agent_binding_prompt_appendix(
+            app_config.get("agent_bindings", [])
+        )
+        preset_prompt = app_config["preset_prompt"]
+        prompt_parts = [preset_prompt.strip()]
+        if agent_binding_prompt_appendix:
+            prompt_parts.append(agent_binding_prompt_appendix.strip())
+        preset_prompt = "\n\n".join(part for part in prompt_parts if part)
         agent = agent_class(
             llm=llm,
             agent_config=AgentConfig(
                 user_id=account.id,
                 invoke_from=InvokeFrom.DEBUGGER.value,
-                preset_prompt=app_config["preset_prompt"],
+                preset_prompt=preset_prompt,
                 enable_long_term_memory=app_config["long_term_memory"]["enable"],
                 language_model_service=self.language_model_service,
                 tools=tools,
