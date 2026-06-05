@@ -59,7 +59,7 @@ const mountSidebar = () => {
       stubs: {
         RouterLink: {
           props: ['to'],
-          template: '<a><slot /></a>',
+          template: '<a :data-to="to"><slot /></a>',
         },
         'a-button': {
           template: '<button type="button"><slot /><slot name="icon" /></button>',
@@ -118,5 +118,13 @@ describe('LayoutSidebar home navigation', () => {
     await wrapper.get('[data-testid="sidebar-home-new-conversation"]').trigger('click')
 
     expect(mocks.routerPush).toHaveBeenCalledWith('/home')
+  })
+
+  it('renders the skills and mcp store entries only once', async () => {
+    const wrapper = mountSidebar()
+    await flushPromises()
+
+    expect(wrapper.findAll('a[data-to="/store/skills"]')).toHaveLength(1)
+    expect(wrapper.findAll('a[data-to="/store/mcp"]')).toHaveLength(1)
   })
 })
