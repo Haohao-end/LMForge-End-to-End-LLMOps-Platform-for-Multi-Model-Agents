@@ -75,22 +75,17 @@ const mountSidebar = () => {
         IconSpaceFull: true,
         IconApps: true,
         IconAppsFull: true,
-        IconApp: {
-          template: '<i data-icon="skills"><slot /></i>',
-        },
-        IconAppFull: {
-          template: '<i data-icon="skills"><slot /></i>',
-        },
-        IconDashboard: {
-          template: '<i data-icon="workflow"><slot /></i>',
-        },
-        IconDashboardFull: {
-          template: '<i data-icon="workflow"><slot /></i>',
+        IconRelation: {
+          template: '<i data-icon="relation"><slot /></i>',
         },
         IconTool: true,
         IconToolFull: true,
-        IconStorage: true,
-        IconStorageFull: true,
+        IconStorage: {
+          template: '<i data-icon="storage"><slot /></i>',
+        },
+        IconStorageFull: {
+          template: '<i data-icon="storage"><slot /></i>',
+        },
         IconOpenApi: true,
         IconOpenApiFull: true,
         IconMessage: true,
@@ -144,7 +139,9 @@ describe('LayoutSidebar home navigation', () => {
     const wrapper = mountSidebar()
     await flushPromises()
 
-    expect(wrapper.findAll('[data-icon="workflow"]')).toHaveLength(1)
-    expect(wrapper.findAll('[data-icon="skills"]')).toHaveLength(1)
+    expect(wrapper.findAll('a[data-to="/store/workflows"] [data-icon="relation"]')).toHaveLength(1)
+    expect(wrapper.findAll('a[data-to="/store/workflows"] [data-icon="storage"]')).toHaveLength(0)
+    expect(wrapper.findAll('a[data-to="/store/skills"] [data-icon="storage"]')).toHaveLength(1)
+    expect(wrapper.findAll('a[data-to="/store/skills"] [data-icon="relation"]')).toHaveLength(0)
   })
 })
