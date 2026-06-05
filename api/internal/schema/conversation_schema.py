@@ -79,7 +79,7 @@ class GetRecentConversationsReq(FlaskForm):
     """获取最近会话列表请求结构体"""
     limit = IntegerField("limit", default=20, validators=[
         Optional(),
-        NumberRange(min=1, max=50, message="limit范围必须在1~50之间"),
+        NumberRange(min=1, max=1000, message="limit范围必须在1~1000之间"),
     ])
 
 

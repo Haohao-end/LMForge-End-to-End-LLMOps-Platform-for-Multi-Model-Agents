@@ -1397,6 +1397,69 @@ class TestConversationServiceBasics:
         assert len(conversations) == 1
         assert conversations[0]["id"] == str(conversation_1.id)
 
+    def test_get_recent_conversations_should_allow_more_than_fifty_items(self, app_ctx):
+        service = self._build_service()
+        account_id = uuid4()
+        now = datetime(2026, 3, 1, tzinfo=UTC)
+        conversations_data = [
+            SimpleNamespace(
+                id=uuid4(),
+                name=f"会话{index + 1}",
+                created_by=account_id,
+                is_deleted=False,
+                created_at=now,
+            )
+            for index in range(60)
+        ]
+        messages_data = [
+            SimpleNamespace(
+                id=uuid4(),
+                conversation_id=conversation.id,
+                invoke_from=InvokeFrom.ASSISTANT_AGENT.value,
+                app_id=None,
+                query=f"会话{index + 1}",
+                answer=f"会话{index + 1}-answer",
+                created_at=now,
+            )
+            for index, conversation in enumerate(conversations_data)
+        ]
+
+        class _Query:
+            def __init__(self, all_result):
+                self._all_result = all_result
+
+            def filter(self, *_args, **_kwargs):
+                return self
+
+            def order_by(self, *_args, **_kwargs):
+                return self
+
+            def limit(self, *_args, **_kwargs):
+                return self
+
+            def all(self):
+                return self._all_result
+
+        class _Session:
+            def query(self, model):
+                model_name = getattr(model, "__name__", "")
+                if model_name == "Message":
+                    return _Query(messages_data)
+                if model_name == "Conversation":
+                    return _Query(conversations_data)
+                if model_name == "App":
+                    return _Query([])
+                raise AssertionError(f"unexpected query model: {model_name}")
+
+        service.db = SimpleNamespace(session=_Session())
+        account = SimpleNamespace(id=account_id, assistant_agent_conversation_id=None)
+
+        conversations = service.get_recent_conversations(account, limit=60)
+
+        assert len(conversations) == 60
+        assert conversations[0]["id"] == str(conversations_data[0].id)
+        assert conversations[-1]["id"] == str(conversations_data[-1].id)
+
     def test_get_recent_conversations_should_skip_missing_conversation_and_missing_debugger_app(self, app_ctx):
         service = self._build_service()
         account_id = uuid4()

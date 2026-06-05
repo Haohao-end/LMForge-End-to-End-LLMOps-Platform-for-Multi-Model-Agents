@@ -49,6 +49,7 @@ const updateConversationNameId = ref('')
 const updateConversationName = ref('')
 const DEFAULT_RECENT_CONVERSATIONS_LIMIT = 20
 const RECENT_CONVERSATIONS_LOAD_STEP = 20
+const MAX_RECENT_CONVERSATIONS_LIMIT = 1000
 const recentConversationsLimit = ref(DEFAULT_RECENT_CONVERSATIONS_LIMIT)
 const hasMoreRecentConversations = ref(true)
 const recentConversationsBottomLocked = ref(false)
@@ -69,9 +70,11 @@ const loadRecentConversations = async (reset = false) => {
     recentConversationsBottomLocked.value = false
   }
 
-  const limit = recentConversationsLimit.value
+  const limit = Math.min(recentConversationsLimit.value, MAX_RECENT_CONVERSATIONS_LIMIT)
+  recentConversationsLimit.value = limit
   await loadRecentConversationsHook(limit)
-  hasMoreRecentConversations.value = recentConversations.value.length >= limit
+  hasMoreRecentConversations.value =
+    limit < MAX_RECENT_CONVERSATIONS_LIMIT && recentConversations.value.length >= limit
   if (!hasMoreRecentConversations.value) {
     recentConversationsBottomLocked.value = false
   }
@@ -86,17 +89,24 @@ const loadMoreRecentConversations = async () => {
     return
   }
   recentConversationsBottomLocked.value = true
-  recentConversationsLimit.value += RECENT_CONVERSATIONS_LOAD_STEP
+  const previousLimit = recentConversationsLimit.value
+  const nextLimit = Math.min(
+    previousLimit + RECENT_CONVERSATIONS_LOAD_STEP,
+    MAX_RECENT_CONVERSATIONS_LIMIT,
+  )
+  if (nextLimit === recentConversationsLimit.value) {
+    hasMoreRecentConversations.value = false
+    recentConversationsBottomLocked.value = false
+    return
+  }
+  recentConversationsLimit.value = nextLimit
   try {
     await loadRecentConversations(false)
     if (!hasMoreRecentConversations.value) {
       recentConversationsBottomLocked.value = false
     }
   } catch (error) {
-    recentConversationsLimit.value = Math.max(
-      DEFAULT_RECENT_CONVERSATIONS_LIMIT,
-      recentConversationsLimit.value - RECENT_CONVERSATIONS_LOAD_STEP,
-    )
+    recentConversationsLimit.value = previousLimit
     recentConversationsBottomLocked.value = false
     console.error('Failed to load more recent conversations:', error)
   }
@@ -407,16 +417,6 @@ onUnmounted(() => {
         </router-link>
         <div class="flex-1 h-px bg-gray-200"></div>
       </div>
-
-      <!-- 加载骨架屏 -->
-      <a-skeleton
-        v-if="!props.collapsed"
-        :loading="getRecentConversationsLoading"
-        animation
-        class="px-2 flex-shrink-0"
-      >
-        <a-skeleton-line :rows="3" :line-height="24" :line-spacing="8" />
-      </a-skeleton>
 
       <!-- 最近对话列表 - 只在展开时显示，固定高度可滚动 -->
       <div

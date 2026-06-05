@@ -407,7 +407,7 @@ class ConversationService(BaseService):
 
     def get_recent_conversations(self, account: Account, limit: int = 20) -> list[dict]:
         """获取当前账号最近会话列表（包含辅助Agent与应用调试会话）"""
-        safe_limit = max(1, min(limit, 50))
+        safe_limit = max(1, min(limit, 1000))
         message_scan_limit = max(80, safe_limit * 30)
 
         # 1.查询当前账号的私有最近消息，并按会话去重

@@ -201,8 +201,6 @@ describe('LayoutSidebar home navigation', () => {
     await list.trigger('scroll')
     await flushPromises()
 
-    expect(mocks.loadRecentConversations).toHaveBeenCalledTimes(2)
-
     Object.defineProperty(list.element, 'scrollTop', {
       value: 120,
       writable: true,
@@ -220,6 +218,13 @@ describe('LayoutSidebar home navigation', () => {
     await flushPromises()
 
     expect(mocks.loadRecentConversations).toHaveBeenCalledWith(60)
+    expect(wrapper.text()).toContain('Conversation 60')
     expect(mocks.loadRecentConversations).toHaveBeenCalledTimes(3)
+
+    await list.trigger('scroll')
+    await flushPromises()
+
+    expect(mocks.loadRecentConversations).toHaveBeenCalledTimes(3)
+    expect(mocks.loadRecentConversations).not.toHaveBeenCalledWith(80)
   })
 })
