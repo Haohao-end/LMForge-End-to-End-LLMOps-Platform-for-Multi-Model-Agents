@@ -12,7 +12,6 @@ docs/
 !api/README.md
 !ui/README.md
 !docker/README.md
-!ATLAS_CLOUD_PROVIDER_REVIEW.md
 
 # Local Codex / browser artifacts
 .codex
