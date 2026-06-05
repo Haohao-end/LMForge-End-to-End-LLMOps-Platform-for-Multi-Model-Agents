@@ -86,6 +86,9 @@ const mountSidebar = () => {
         IconStorageFull: {
           template: '<i data-icon="storage"><slot /></i>',
         },
+        IconComputer: {
+          template: '<i data-icon="computer"><slot /></i>',
+        },
         IconOpenApi: true,
         IconOpenApiFull: true,
         IconMessage: true,
@@ -135,7 +138,7 @@ describe('LayoutSidebar home navigation', () => {
     expect(wrapper.findAll('a[data-to="/store/mcp"]')).toHaveLength(1)
   })
 
-  it('uses different icons for workflow and skills stores', async () => {
+  it('uses different icons for workflow, skills, and mcp stores', async () => {
     const wrapper = mountSidebar()
     await flushPromises()
 
@@ -143,5 +146,7 @@ describe('LayoutSidebar home navigation', () => {
     expect(wrapper.findAll('a[data-to="/store/workflows"] [data-icon="storage"]')).toHaveLength(0)
     expect(wrapper.findAll('a[data-to="/store/skills"] [data-icon="storage"]')).toHaveLength(1)
     expect(wrapper.findAll('a[data-to="/store/skills"] [data-icon="relation"]')).toHaveLength(0)
+    expect(wrapper.findAll('a[data-to="/store/mcp"] [data-icon="computer"]')).toHaveLength(1)
+    expect(wrapper.findAll('a[data-to="/store/mcp"] [data-icon="storage"]')).toHaveLength(0)
   })
 })

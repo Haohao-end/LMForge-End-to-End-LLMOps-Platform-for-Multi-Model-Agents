@@ -77,8 +77,8 @@ const globalStubs = {
   'resource-card-description': {
     template: '<div />',
   },
-  'icon-storage': {
-    template: '<span />',
+  'icon-computer': {
+    template: '<span data-icon="computer" />',
   },
   'icon-close': {
     template: '<span />',
@@ -203,6 +203,7 @@ describe('store mcp list', () => {
     expect(wrapper.text()).not.toContain('仅查看')
     expect(wrapper.text()).not.toContain('天气 MCP 草稿')
     expect(wrapper.text()).not.toContain('当前环境不支持该 MCP')
+    expect(wrapper.find('[data-icon="computer"]').exists()).toBe(true)
 
     ;['通用', '编程工具', '内容创作', '媒体音视频', '效率工具', '数据分析', '可观测运维', '其他'].forEach((category) => {
       expect(wrapper.text()).toContain(category)

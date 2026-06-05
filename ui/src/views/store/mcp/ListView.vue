@@ -161,7 +161,7 @@ onMounted(async () => {
       <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
         <div class="flex items-center gap-2">
           <a-avatar :size="32" class="bg-blue-700">
-            <icon-storage :size="18" />
+            <icon-computer :size="18" />
           </a-avatar>
           <div>
             <div class="text-lg font-medium text-gray-900">{{ t('store.mcp.title') }}</div>

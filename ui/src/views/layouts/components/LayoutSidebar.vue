@@ -311,11 +311,7 @@ onUnmounted(() => {
         active-class="bg-gray-100"
         :title="route.path.startsWith('/store/mcp') ? t('layout.sidebar.mcpStore') : ''"
       >
-        <icon-storage-full
-          v-if="route.path.startsWith('/store/mcp')"
-          class="flex-shrink-0 w-4 h-4"
-        />
-        <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
+        <icon-computer class="flex-shrink-0 w-4 h-4" />
         <span v-if="!props.collapsed" class="truncate text-sm">
           {{ $t('layout.sidebar.mcpStore') }}
         </span>
