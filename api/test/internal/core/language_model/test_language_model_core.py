@@ -418,7 +418,6 @@ def test_atlascloud_provider_should_expose_documented_models(monkeypatch):
         "kimi-k2.6",
         "kimi-k2.5",
         "kimi-k2-thinking",
-        "gpt-5.2",
         "qwen3-max-2026-01-23",
         "qwen3.6-plus",
         "qwen3.6-35b-a3b",
@@ -452,7 +451,6 @@ def test_atlascloud_provider_should_expose_documented_models(monkeypatch):
     kimi = provider.get_model_entity("kimi-k2.6")
     kimi_25 = provider.get_model_entity("kimi-k2.5")
     kimi_thinking = provider.get_model_entity("kimi-k2-thinking")
-    gpt_52 = provider.get_model_entity("gpt-5.2")
     qwen_plus = provider.get_model_entity("qwen3.6-plus")
     qwen_35b = provider.get_model_entity("qwen3.6-35b-a3b")
     qwen_122b = provider.get_model_entity("qwen3.5-122b-a10b")
@@ -515,16 +513,8 @@ def test_atlascloud_provider_should_expose_documented_models(monkeypatch):
     ]
     assert kimi_thinking.metadata["pricing"]["input"] == pytest.approx(0.6)
     assert kimi_thinking.metadata["pricing"]["output"] == pytest.approx(2.5)
-    assert gpt_52.context_window == 400_000
-    assert gpt_52.max_output_tokens == 128_000
-    assert gpt_52.attributes["model"] == "openai/gpt-5.2"
-    assert gpt_52.features == [
-        ModelFeature.TOOL_CALL.value,
-        ModelFeature.AGENT_THOUGHT.value,
-        ModelFeature.IMAGE_INPUT.value,
-    ]
-    assert gpt_52.metadata["pricing"]["input"] == pytest.approx(1.4)
-    assert gpt_52.metadata["pricing"]["output"] == pytest.approx(11.2)
+    with pytest.raises(NotFoundException):
+        provider.get_model_entity("gpt-5.2")
     assert qwen_plus.context_window == 1_000_000
     assert qwen_plus.max_output_tokens == 65_536
     assert qwen_plus.attributes["model"] == "qwen/qwen3.6-plus"

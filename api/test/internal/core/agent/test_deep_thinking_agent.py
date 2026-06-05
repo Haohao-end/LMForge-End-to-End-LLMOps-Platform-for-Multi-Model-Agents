@@ -292,6 +292,90 @@ class TestBaiduCfcSandboxBackend:
         assert create_mock.call_args.kwargs == {"timeout": 42}
         assert backend._active_template_alias is None
 
+    def test_create_sandbox_bypasses_upstream_validation_for_baidu_cfc(self):
+        """百度 CFC 的 bce-v3 凭证应绕过 upstream E2B 的本地 key 校验。"""
+        backend = BaiduCfcSandboxBackend(
+            api_key="bce-v3/ALTAK-test-key",
+            domain="sandbox-execute.bj.baidubce.com",
+            sandbox_timeout=42,
+        )
+
+        mock_sbx = MagicMock()
+        mock_sbx.sandbox_id = "sandbox-bce-v3"
+        original_validate_api_key = MagicMock(name="validate_api_key")
+        fake_e2b_api = ModuleType("e2b.api")
+        fake_e2b_api.validate_api_key = original_validate_api_key
+        fake_e2b_pkg = ModuleType("e2b")
+        fake_e2b_pkg.api = fake_e2b_api
+        observed_validate_api_keys = []
+
+        def create_mock(*, timeout, template=None):
+            observed_validate_api_keys.append(fake_e2b_api.validate_api_key)
+            assert timeout == 42
+            assert template is None
+            return mock_sbx
+
+        fake_e2b_module = SimpleNamespace(
+            Sandbox=SimpleNamespace(create=MagicMock(side_effect=create_mock)),
+        )
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "e2b": fake_e2b_pkg,
+                "e2b.api": fake_e2b_api,
+                "e2b_code_interpreter": fake_e2b_module,
+            },
+        ):
+            sandbox = backend._get_sandbox()
+
+        assert sandbox is mock_sbx
+        assert fake_e2b_module.Sandbox.create.call_count == 1
+        assert observed_validate_api_keys and observed_validate_api_keys[0] is not original_validate_api_key
+        assert fake_e2b_api.validate_api_key is original_validate_api_key
+
+    def test_create_sandbox_keeps_upstream_validation_for_e2b_keys(self):
+        """真正的 e2b_ 凭证不应被绕过本地校验逻辑污染。"""
+        backend = BaiduCfcSandboxBackend(
+            api_key="e2b_0000000000000000000000000000000000000000",
+            domain="sandbox.example.com",
+            sandbox_timeout=42,
+        )
+
+        mock_sbx = MagicMock()
+        mock_sbx.sandbox_id = "sandbox-e2b"
+        original_validate_api_key = MagicMock(name="validate_api_key")
+        fake_e2b_api = ModuleType("e2b.api")
+        fake_e2b_api.validate_api_key = original_validate_api_key
+        fake_e2b_pkg = ModuleType("e2b")
+        fake_e2b_pkg.api = fake_e2b_api
+        observed_validate_api_keys = []
+
+        def create_mock(*, timeout, template=None):
+            observed_validate_api_keys.append(fake_e2b_api.validate_api_key)
+            assert timeout == 42
+            assert template is None
+            return mock_sbx
+
+        fake_e2b_module = SimpleNamespace(
+            Sandbox=SimpleNamespace(create=MagicMock(side_effect=create_mock)),
+        )
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "e2b": fake_e2b_pkg,
+                "e2b.api": fake_e2b_api,
+                "e2b_code_interpreter": fake_e2b_module,
+            },
+        ):
+            sandbox = backend._get_sandbox()
+
+        assert sandbox is mock_sbx
+        assert fake_e2b_module.Sandbox.create.call_count == 1
+        assert observed_validate_api_keys and observed_validate_api_keys[0] is original_validate_api_key
+        assert fake_e2b_api.validate_api_key is original_validate_api_key
+
     def test_upload_files_success(self):
         """upload_files() 成功时应返回无错误的响应列表。"""
         backend = BaiduCfcSandboxBackend(api_key="k", domain="d")

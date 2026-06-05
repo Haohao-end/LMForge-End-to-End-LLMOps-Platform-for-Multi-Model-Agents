@@ -4,6 +4,12 @@
 每次 Agent 调用 execute() 时，会在沙箱内执行真实的 Python/Shell 命令，
 并返回 stdout/stderr 输出，实现安全隔离的代码执行能力。
 
+注意：
+    upstream e2b-code-interpreter 对 API key 形态做了本地校验，只接受
+    `e2b_...` 前缀。百度 CFC 使用的是 `bce-v3/...` 凭证，因此这里在
+    进入 Sandbox.create() 前会针对百度 CFC 场景临时绕过该本地校验，让
+    SDK 继续把请求发到兼容的远端沙箱。
+
 环境变量（在 .env 中配置）：
     E2B_DOMAIN                 : 百度 CFC 沙箱域名，如 sandbox-execute.bj.baidubce.com
     E2B_API_KEY                : 百度 CFC API Key（BCE v3 格式）
@@ -21,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -141,6 +148,48 @@ class BaiduCfcSandboxBackend(BaseSandbox):
             candidates.append(fallback_template_alias)
         return candidates
 
+    def _should_bypass_upstream_api_key_validation(self) -> bool:
+        """判断是否需要绕过 upstream E2B 的本地 API key 形态校验。"""
+        api_key = self._api_key.strip()
+        domain = self._domain.strip().lower()
+        if not api_key or not domain:
+            return False
+        if api_key.startswith("e2b_"):
+            return False
+        return "baidubce.com" in domain
+
+    @contextmanager
+    def _patched_upstream_api_key_validation(self):
+        """在百度 CFC 场景下临时绕过 upstream E2B 的本地 key 校验。"""
+        if not self._should_bypass_upstream_api_key_validation():
+            yield False
+            return
+
+        try:
+            import e2b.api as e2b_api  # noqa: PLC0415
+        except Exception as exc:  # pragma: no cover - 仅用于极端依赖缺失场景
+            logger.warning("无法导入 upstream E2B API 校验模块，继续尝试创建沙箱: %s", exc)
+            yield False
+            return
+
+        original_validate_api_key = getattr(e2b_api, "validate_api_key", None)
+        if not callable(original_validate_api_key):
+            yield False
+            return
+
+        def _noop_validate_api_key(*_args, **_kwargs):
+            return None
+
+        e2b_api.validate_api_key = _noop_validate_api_key
+        try:
+            logger.info(
+                "百度 CFC 沙箱将临时绕过 upstream E2B API key 校验: domain=%s",
+                self._domain,
+            )
+            yield True
+        finally:
+            e2b_api.validate_api_key = original_validate_api_key
+
     def _create_sandbox(self):
         """创建 e2b_code_interpreter Sandbox 实例（指向百度 CFC）。"""
         # 设置 E2B SDK 所需的环境变量（SDK 从 env 读取配置）
@@ -148,42 +197,43 @@ class BaiduCfcSandboxBackend(BaseSandbox):
         os.environ["E2B_DOMAIN"] = self._domain.strip()
 
         try:
-            from e2b_code_interpreter import Sandbox  # noqa: PLC0415
-            template_candidates = self._get_template_candidates()
+            with self._patched_upstream_api_key_validation():
+                from e2b_code_interpreter import Sandbox  # noqa: PLC0415
+                template_candidates = self._get_template_candidates()
 
-            if not template_candidates:
-                sbx = Sandbox.create(timeout=self._sandbox_timeout)
-                logger.info("百度 CFC 沙箱创建成功: sandbox_id=%s", sbx.sandbox_id)
-                self._sandbox_id_val = sbx.sandbox_id
-                self._active_template_alias = None
-                return sbx
-
-            last_error: Exception | None = None
-            for index, template_alias in enumerate(template_candidates):
-                try:
-                    sbx = Sandbox.create(template=template_alias, timeout=self._sandbox_timeout)
-                    logger.info(
-                        "百度 CFC 沙箱创建成功: template=%s sandbox_id=%s",
-                        template_alias,
-                        sbx.sandbox_id,
-                    )
+                if not template_candidates:
+                    sbx = Sandbox.create(timeout=self._sandbox_timeout)
+                    logger.info("百度 CFC 沙箱创建成功: sandbox_id=%s", sbx.sandbox_id)
                     self._sandbox_id_val = sbx.sandbox_id
-                    self._active_template_alias = template_alias
+                    self._active_template_alias = None
                     return sbx
-                except Exception as e:
-                    last_error = e
-                    if index < len(template_candidates) - 1:
-                        logger.warning(
-                            "百度 CFC 沙箱模板创建失败，准备尝试 fallback: template=%s, error=%s",
-                            template_alias,
-                            e,
-                        )
-                    else:
-                        logger.error("百度 CFC 沙箱创建失败: template=%s, error=%s", template_alias, e)
 
-            if last_error is not None:
-                raise last_error
-            raise RuntimeError("百度 CFC 沙箱创建失败：未能获得有效的模板候选项")
+                last_error: Exception | None = None
+                for index, template_alias in enumerate(template_candidates):
+                    try:
+                        sbx = Sandbox.create(template=template_alias, timeout=self._sandbox_timeout)
+                        logger.info(
+                            "百度 CFC 沙箱创建成功: template=%s sandbox_id=%s",
+                            template_alias,
+                            sbx.sandbox_id,
+                        )
+                        self._sandbox_id_val = sbx.sandbox_id
+                        self._active_template_alias = template_alias
+                        return sbx
+                    except Exception as e:
+                        last_error = e
+                        if index < len(template_candidates) - 1:
+                            logger.warning(
+                                "百度 CFC 沙箱模板创建失败，准备尝试 fallback: template=%s, error=%s",
+                                template_alias,
+                                e,
+                            )
+                        else:
+                            logger.error("百度 CFC 沙箱创建失败: template=%s, error=%s", template_alias, e)
+
+                if last_error is not None:
+                    raise last_error
+                raise RuntimeError("百度 CFC 沙箱创建失败：未能获得有效的模板候选项")
         except Exception as e:
             logger.error("百度 CFC 沙箱创建失败: %s", e)
             raise
