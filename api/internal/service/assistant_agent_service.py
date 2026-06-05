@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from threading import Lock
+from threading import Lock, Thread
 from typing import Any, Generator
 from uuid import UUID
 
@@ -83,6 +83,41 @@ class AssistantAgentService(BaseService):
     public_agent_registry_service: PublicAgentRegistryService | None = None
     _introduction_prewarm_lock = Lock()
     _introduction_prewarm_pending = set()
+
+    def _schedule_introduction_prewarm(self, account_id: UUID) -> None:
+        """在后台预热首页介绍缓存，降低首页首开 LLM 命中概率。"""
+        if not has_app_context():
+            return
+
+        if bool(current_app.config.get("TESTING", False)):
+            return
+
+        prewarm_flag = current_app.config.get("ASSISTANT_INTRO_PREWARM_ENABLED", True)
+        if prewarm_flag is False:
+            return
+
+        flask_app = current_app._get_current_object()
+        pending_key = str(account_id)
+        with self._introduction_prewarm_lock:
+            if pending_key in self._introduction_prewarm_pending:
+                return
+            self._introduction_prewarm_pending.add(pending_key)
+
+        def _worker() -> None:
+            try:
+                with flask_app.app_context():
+                    account = self.get(Account, account_id)
+                    if account is None:
+                        return
+                    for _ in self.generate_introduction(account):
+                        pass
+            except Exception:
+                logging.exception("首页助手介绍预热失败: account_id=%s", account_id)
+            finally:
+                with self._introduction_prewarm_lock:
+                    self._introduction_prewarm_pending.discard(pending_key)
+
+        Thread(target=_worker, daemon=True).start()
 
     @classmethod
     def _resolve_conversation_id(cls, conversation_id: str) -> UUID | None:

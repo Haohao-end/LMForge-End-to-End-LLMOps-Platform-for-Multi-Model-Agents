@@ -5,6 +5,7 @@ import OpeningAbilityItem from './abilities/OpeningAbilityItem.vue'
 import SuggestedAfterAnswerAbilityItem from './abilities/SuggestedAfterAnswerAbilityItem.vue'
 import ReviewConfigAbilityItem from './abilities/ReviewConfigAbilityItem.vue'
 import DatasetsAbilityItem from './abilities/DatasetsAbilityItem.vue'
+import AgentBindingsAbilityItem from './abilities/AgentBindingsAbilityItem.vue'
 import McpBindingsAbilityItem from './abilities/McpBindingsAbilityItem.vue'
 import SkillsAbilityItem from './abilities/SkillsAbilityItem.vue'
 import ToolsAbilityItem from './abilities/ToolsAbilityItem.vue'
@@ -23,6 +24,7 @@ const defaultActivateKeys = [
   'tools',
   'mcp_bindings',
   'skills',
+  'agent_bindings',
   'workflows',
   'datasets',
   'long_term_memory',
@@ -75,6 +77,18 @@ const defaultActivateKeys = [
               emits('update:draft_app_config', {
                 ...props.draft_app_config,
                 skills,
+              })
+          "
+          :app_id="props.app_id"
+        />
+        <!-- Agent 子应用绑定 -->
+        <agent-bindings-ability-item
+          :agent_bindings="props.draft_app_config.agent_bindings || []"
+          @update:agent_bindings="
+            (agent_bindings) =>
+              emits('update:draft_app_config', {
+                ...props.draft_app_config,
+                agent_bindings,
               })
           "
           :app_id="props.app_id"

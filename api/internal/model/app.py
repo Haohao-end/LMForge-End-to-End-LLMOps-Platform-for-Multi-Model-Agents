@@ -195,6 +195,7 @@ class AppConfig(db.Model):
     mcp_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 绑定列表
     mcp_tool_snapshots = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 工具快照
     skills = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联技能列表
+    agent_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 Agent 子应用列表
     workflows = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联的工作流列表
     retrieval_config = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 检索配置
     long_term_memory = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))  # 长期记忆配置
@@ -245,6 +246,7 @@ class AppConfigVersion(db.Model):
     mcp_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 绑定列表
     mcp_tool_snapshots = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 MCP 工具快照
     skills = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联技能列表
+    agent_bindings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联 Agent 子应用列表
     workflows = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联的工作流列表
     datasets = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 应用关联的知识库列表
     retrieval_config = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))  # 检索配置

@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
     params: {} as Record<string, unknown>,
   },
   recentConversations: [] as any[],
+  recentConversationsRef: undefined as any,
+  allRecentConversations: [] as any[],
   loadRecentConversations: vi.fn(),
   handleDeleteConversation: vi.fn(),
 }))
@@ -37,10 +39,13 @@ vi.mock('@/utils/auth', () => ({
 
 vi.mock('@/hooks/use-conversation', async () => {
   const { ref } = await import('vue')
+  if (!mocks.recentConversationsRef) {
+    mocks.recentConversationsRef = ref([])
+  }
   return {
     useGetRecentConversations: () => ({
       loading: ref(false),
-      conversations: ref(mocks.recentConversations),
+      conversations: mocks.recentConversationsRef,
       loadRecentConversations: mocks.loadRecentConversations,
     }),
     useDeleteConversation: () => ({
@@ -107,7 +112,11 @@ describe('LayoutSidebar home navigation', () => {
     mocks.route.path = '/space/apps'
     mocks.route.query = {}
     mocks.route.params = {}
-    mocks.recentConversations = []
+    mocks.recentConversations.splice(0, mocks.recentConversations.length)
+    if (mocks.recentConversationsRef) {
+      mocks.recentConversationsRef.value = []
+    }
+    mocks.allRecentConversations.splice(0, mocks.allRecentConversations.length)
   })
 
   it('navigates to plain home when a logged-in user clicks Home', async () => {
@@ -148,5 +157,69 @@ describe('LayoutSidebar home navigation', () => {
     expect(wrapper.findAll('a[data-to="/store/skills"] [data-icon="relation"]')).toHaveLength(0)
     expect(wrapper.findAll('a[data-to="/store/mcp"] [data-icon="computer"]')).toHaveLength(1)
     expect(wrapper.findAll('a[data-to="/store/mcp"] [data-icon="storage"]')).toHaveLength(0)
+  })
+
+  it('loads more recent conversations when the sidebar list reaches the bottom', async () => {
+    mocks.allRecentConversations = Array.from({ length: 80 }, (_item, index) => ({
+      id: `conversation-${index + 1}`,
+      name: `Conversation ${index + 1}`,
+      source_type: index % 2 === 0 ? 'assistant_agent' : 'app_debugger',
+      app_id: index % 2 === 0 ? '' : `app-${index + 1}`,
+      message_id: `message-${index + 1}`,
+    }))
+    mocks.loadRecentConversations.mockImplementation(async (limit: number) => {
+      const nextList = mocks.allRecentConversations.slice(0, limit)
+      mocks.recentConversationsRef.value = nextList
+    })
+
+    const wrapper = mountSidebar()
+    await flushPromises()
+
+    expect(mocks.loadRecentConversations).toHaveBeenCalledWith(20)
+
+    const list = wrapper.get('.recent-conversation-list')
+    Object.defineProperty(list.element, 'scrollTop', {
+      value: 200,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(list.element, 'clientHeight', {
+      value: 200,
+      configurable: true,
+    })
+    Object.defineProperty(list.element, 'scrollHeight', {
+      value: 380,
+      configurable: true,
+    })
+
+    await list.trigger('scroll')
+    await flushPromises()
+
+    expect(mocks.loadRecentConversations).toHaveBeenCalledWith(40)
+    expect(wrapper.text()).toContain('Conversation 40')
+
+    await list.trigger('scroll')
+    await flushPromises()
+
+    expect(mocks.loadRecentConversations).toHaveBeenCalledTimes(2)
+
+    Object.defineProperty(list.element, 'scrollTop', {
+      value: 120,
+      writable: true,
+      configurable: true,
+    })
+    await list.trigger('scroll')
+    await flushPromises()
+
+    Object.defineProperty(list.element, 'scrollTop', {
+      value: 200,
+      writable: true,
+      configurable: true,
+    })
+    await list.trigger('scroll')
+    await flushPromises()
+
+    expect(mocks.loadRecentConversations).toHaveBeenCalledWith(60)
+    expect(mocks.loadRecentConversations).toHaveBeenCalledTimes(3)
   })
 })

@@ -283,26 +283,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="analysis-page px-6 py-6 h-full overflow-y-auto scrollbar-w-none">
-    <div class="analysis-banner mb-6">
-      <div>
-        <div class="analysis-banner__title">{{ t('appStudio.analysis.title') }}</div>
-        <div class="analysis-banner__desc">
-          {{ t('appStudio.analysis.description') }}
-        </div>
-      </div>
-      <a-tag color="arcoblue" bordered>
-        <template #icon>
-          <icon-schedule />
-        </template>
-        {{ t('appStudio.analysis.recentSevenDays') }}
-      </a-tag>
-    </div>
-
-    <div class="flex flex-col gap-5 mb-6">
+  <div class="analysis-page flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div class="analysis-page__scroll flex-1 min-h-0 overflow-y-auto scrollbar-w-none px-6 py-6">
+      <div class="flex flex-col gap-5 mb-6">
       <div class="section-head">
         <div class="text-base text-gray-700 font-semibold">{{ t('appStudio.analysis.overviewTitle') }}</div>
-        <div class="text-xs text-gray-500">{{ t('appStudio.analysis.overviewDescription') }}</div>
       </div>
       <a-spin :loading="getAppAnalysisLoading">
         <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
@@ -363,12 +348,11 @@ onMounted(() => {
           </overview-indicator>
         </div>
       </a-spin>
-    </div>
+      </div>
 
-    <div class="flex flex-col gap-5">
+      <div class="flex flex-col gap-5">
       <div class="section-head">
         <div class="text-base text-gray-700 font-semibold">{{ t('appStudio.analysis.detailsTitle') }}</div>
-        <div class="text-xs text-gray-500">{{ t('appStudio.analysis.detailsDescription') }}</div>
       </div>
       <a-spin :loading="getAppAnalysisLoading">
         <div class="grid gap-4 grid-cols-1 2xl:grid-cols-2">
@@ -387,7 +371,6 @@ onMounted(() => {
                   <icon-question-circle-fill />
                 </a-tooltip>
               </div>
-              <a-tag bordered size="small">{{ t('appStudio.analysis.cardPeriod') }}</a-tag>
             </div>
             <div class="chart-card__summary">
               <div class="chart-card__value">
@@ -411,6 +394,7 @@ onMounted(() => {
           </div>
         </div>
       </a-spin>
+      </div>
     </div>
   </div>
 </template>
@@ -422,36 +406,15 @@ onMounted(() => {
     linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
-.analysis-banner {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  padding: 16px 20px;
-  border-radius: 14px;
-  border: 1px solid #dbe2f1;
-  background: linear-gradient(120deg, #ffffff 0%, #f8fbff 100%);
-}
-
-.analysis-banner__title {
-  color: #0f172a;
-  font-size: 18px;
-  line-height: 26px;
-  font-weight: 700;
-}
-
-.analysis-banner__desc {
-  margin-top: 4px;
-  color: #475569;
-  font-size: 13px;
-  line-height: 20px;
+.analysis-page__scroll {
+  min-width: 0;
 }
 
 .section-head {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  align-items: baseline;
+  align-items: center;
 }
 
 .chart-card {
@@ -527,10 +490,4 @@ onMounted(() => {
   justify-content: center;
 }
 
-@media (max-width: 768px) {
-  .analysis-banner {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
 </style>

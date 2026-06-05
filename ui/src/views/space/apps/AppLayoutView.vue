@@ -217,11 +217,15 @@ const refreshPublishedView = () => {
     </div>
     <!-- 底部内容区 -->
     <div class="flex min-h-0 flex-1 overflow-hidden">
-      <router-view
-        :key="String(route.params?.app_id ?? '')"
-        :app="app"
-        :published-refresh-token="publishedRefreshToken"
-      />
+      <router-view v-slot="{ Component }">
+        <component
+          :is="Component"
+          :key="String(route.params?.app_id ?? '')"
+          class="flex h-full min-h-0 w-full flex-1"
+          :app="app"
+          :published-refresh-token="publishedRefreshToken"
+        />
+      </router-view>
     </div>
     <!-- 发布历史抽屉组件 -->
     <publish-history-drawer

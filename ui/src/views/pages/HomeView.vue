@@ -9,6 +9,7 @@ import { useGenerateSuggestedQuestions } from '@/hooks/use-ai'
 import { useGetHomeIntent } from '@/hooks/use-home'
 import { useChatImageUpload } from '@/hooks/use-chat-image-upload'
 import { useChatQueryInput } from '@/hooks/use-chat-query-input'
+import { useGetConversationName } from '@/hooks/use-conversation'
 import {
   useAssistantAgentChat,
   useGetAssistantAgentCapabilities,
@@ -195,6 +196,11 @@ const {
   loadAssistantAgentMessages,
 } = useGetAssistantAgentMessagesWithPage()
 const {
+  loading: getConversationNameLoading,
+  name: currentConversationName,
+  loadConversationName,
+} = useGetConversationName()
+const {
   loading: deleteAssistantAgentConversationLoading,
   handleDeleteAssistantAgentConversation, //
 } = useDeleteAssistantAgentConversation()
@@ -224,6 +230,20 @@ const canAssistantImageInput = computed(() => {
 })
 
 const normalizeConversationId = (value: unknown) => String(value || '').trim()
+
+const loadSelectedConversationName = async (conversation_id: string = selectedConversationId.value) => {
+  const normalizedConversationId = normalizeConversationId(conversation_id)
+  if (!normalizedConversationId) {
+    currentConversationName.value = ''
+    return
+  }
+
+  try {
+    await loadConversationName(normalizedConversationId)
+  } catch {
+    currentConversationName.value = ''
+  }
+}
 
 const emitRecentConversationsRefresh = () => {
   if (typeof window === 'undefined') return
@@ -425,6 +445,7 @@ const initializeHomeAfterLogin = async () => {
       selectedConversationId.value = latestConversationId
       await syncRouteConversationId(latestConversationId)
     }
+    await loadSelectedConversationName(selectedConversationId.value)
   } catch (error) {
     console.error('Failed to load initial messages:', error)
   }
@@ -487,6 +508,7 @@ watch(isAuthenticated, (loggedIn) => {
   messages.value = []
   task_id.value = ''
   message_id.value = ''
+  currentConversationName.value = ''
   shouldAutoScrollToBottom.value = true
 })
 
@@ -503,6 +525,7 @@ watch(
 
     try {
       await reloadAssistantMessages(true, selectedConversationId.value)
+      await loadSelectedConversationName(selectedConversationId.value)
       await nextTick(() => scrollChatToBottom())
     } catch (error) {
       console.error('Failed to reload messages when conversation_id changed:', error)
@@ -690,6 +713,7 @@ const startNewAssistantConversation = async (
     })
 
     selectedConversationId.value = ''
+    currentConversationName.value = ''
     message_id.value = ''
     task_id.value = ''
     suggested_questions.value = []
@@ -1124,6 +1148,7 @@ const handleSubmit = async () => {
           if (latestConversationId) {
             selectedConversationId.value = latestConversationId
             void syncRouteConversationId(latestConversationId)
+            void loadSelectedConversationName(latestConversationId)
             emitRecentConversationsRefresh()
           }
         }
@@ -1271,6 +1296,7 @@ onActivated(async () => {
     messages.value = []
     task_id.value = ''
     message_id.value = ''
+    currentConversationName.value = ''
     resetAssistantIntroduction()
     resetOpeningQuestions()
   }
@@ -1344,6 +1370,26 @@ onUnmounted(() => {
         v-else-if="messages.length > 0"
         class="home-chat-thread flex-1 min-h-0 flex flex-col w-full max-w-[760px] mx-auto px-4 sm:px-6"
       >
+        <div
+          class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/35 px-4 py-3 backdrop-blur-md shadow-sm shadow-blue-500/5"
+        >
+          <div class="min-w-0">
+            <div class="text-xs text-gray-500">{{ t('home.conversation.title') }}</div>
+            <div class="truncate text-base font-semibold text-gray-700">
+              {{
+                getConversationNameLoading
+                  ? t('home.conversation.loading')
+                  : currentConversationName.trim() || t('home.conversation.empty')
+              }}
+            </div>
+          </div>
+          <div
+            v-if="selectedConversationId"
+            class="flex-shrink-0 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
+          >
+            {{ t('home.conversation.idLabel') }}：{{ selectedConversationId.slice(0, 8) }}
+          </div>
+        </div>
         <div
           ref="scroller"
           class="relative flex-1 min-h-0 overflow-y-auto scrollbar-w-none"

@@ -554,6 +554,7 @@ class AppService(BaseService):
             mcp_bindings=draft_app_config.get("mcp_bindings", []),
             mcp_tool_snapshots=draft_app_config.get("mcp_tool_snapshots", []),
             skills=[{"skill_id": skill["skill_id"]} for skill in draft_app_config.get("skills", [])],
+            agent_bindings=draft_app_config.get("agent_bindings", []),
             workflows=[workflow["id"] for workflow in draft_app_config["workflows"]],
             retrieval_config=draft_app_config["retrieval_config"],
             long_term_memory=draft_app_config["long_term_memory"],
@@ -1782,7 +1783,7 @@ class AppService(BaseService):
         # 1.校验上传的草稿配置中对应的字段，至少拥有一个可以更新的配置
         acceptable_fields = [
             "model_config", "dialog_round", "preset_prompt",
-            "tools", "mcp_bindings", "mcp_tool_snapshots", "skills", "workflows", "datasets", "retrieval_config",
+            "tools", "mcp_bindings", "mcp_tool_snapshots", "skills", "agent_bindings", "workflows", "datasets", "retrieval_config",
             "long_term_memory", "opening_statement", "opening_questions",
             "speech_to_text", "text_to_speech", "suggested_after_answer", "review_config",
         ]

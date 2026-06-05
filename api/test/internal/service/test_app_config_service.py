@@ -671,7 +671,8 @@ class TestAppConfigService:
 
         assert first == second
         assert updates == []
-        assert call_counts == {"model": 1, "tools": 1, "datasets": 1, "workflows": 1, "skills": 1, "agents": 0}
+        assert first["agent_bindings"] == []
+        assert call_counts == {"model": 1, "tools": 1, "datasets": 1, "workflows": 1, "skills": 1, "agents": 1}
 
     def test_get_draft_app_config_should_sync_invalid_refs_and_return_transformed_payload(self, monkeypatch):
         service = self._build_service()
@@ -745,6 +746,7 @@ class TestAppConfigService:
         assert result["tools"][0]["type"] == "builtin_tool"
         assert result["workflows"][0]["id"] == "wf-new"
         assert result["datasets"][0]["id"] == str(keep_dataset_id)
+        assert result["agent_bindings"] == []
 
     def test_get_draft_app_config_should_not_persist_when_disabled(self, monkeypatch):
         service = self._build_service()
@@ -901,6 +903,68 @@ class TestAppConfigService:
 
         assert result["mcp_bindings"] == []
         assert updates == []
+
+    def test_get_draft_app_config_should_include_agent_bindings_and_persist_updates(self, monkeypatch):
+        service = self._build_service()
+        app_id = uuid4()
+        account_id = uuid4()
+        target_app_id = uuid4()
+        display_bindings = [
+            {
+                "app_id": str(target_app_id),
+                "invoke_mode": "a2a",
+                "name": "客服助手",
+                "icon": "",
+                "description": "示例 Agent",
+                "source_scope": "public",
+                "is_public": True,
+                "status": "published",
+                "tool_name": "agent_app_target",
+            }
+        ]
+        validate_bindings = [dict(display_bindings[0], tool_name="agent_app_target")]
+        draft_app_config = SimpleNamespace(
+            id=uuid4(),
+            model_config={"provider": "openai", "model": "gpt-4o-mini", "parameters": {}},
+            tools=[],
+            datasets=[],
+            workflows=[],
+            mcp_bindings=[],
+            mcp_tool_snapshots=[],
+            skills=[],
+            agent_bindings=[{"app_id": str(target_app_id)}],
+            dialog_round=3,
+            preset_prompt="prompt",
+            retrieval_config={"strategy": "semantic"},
+            long_term_memory={"enable": True},
+            opening_statement="hello",
+            opening_questions=[],
+            speech_to_text={"enable": False},
+            text_to_speech={"enable": False},
+            suggested_after_answer={"enable": True},
+            review_config={"enable": False},
+            updated_at=datetime(2024, 1, 1, 0, 0, 0),
+            created_at=datetime(2024, 1, 1, 0, 0, 0),
+        )
+        app = SimpleNamespace(account_id=account_id, id=app_id, draft_app_config=draft_app_config)
+        monkeypatch.setattr(service, "_process_and_validate_model_config", lambda config: config)
+        monkeypatch.setattr(service, "_process_and_validate_tools", lambda tools: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_datasets", lambda datasets: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_workflows", lambda workflows: ([], []))
+        monkeypatch.setattr(service, "_process_and_validate_mcp_bindings", lambda mcp_bindings: ([], []))
+        monkeypatch.setattr(service.skill_service, "process_and_validate_skill_bindings", lambda skills: ([], []))
+        monkeypatch.setattr(
+            service,
+            "process_and_validate_agent_bindings",
+            lambda agent_bindings, **kwargs: (display_bindings, validate_bindings),
+        )
+        updates = []
+        monkeypatch.setattr(service, "update", lambda target, **kwargs: updates.append((target, kwargs)) or target)
+
+        result = service.get_draft_app_config(app)
+
+        assert result["agent_bindings"] == display_bindings
+        assert any(payload.get("agent_bindings") == validate_bindings for _, payload in updates)
 
     def test_get_app_config_should_skip_updates_and_dataset_cleanup_when_valid(self, monkeypatch):
         dataset_id = str(uuid4())

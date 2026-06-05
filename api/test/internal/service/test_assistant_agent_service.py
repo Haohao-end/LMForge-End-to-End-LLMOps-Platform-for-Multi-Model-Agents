@@ -30,16 +30,6 @@ def _null_context():
     yield
 
 
-@pytest.fixture(autouse=True)
-def _noop_schedule_introduction_prewarm(monkeypatch):
-    monkeypatch.setattr(
-        AssistantAgentService,
-        "_schedule_introduction_prewarm",
-        lambda *_args, **_kwargs: None,
-        raising=False,
-    )
-
-
 class _QueryStub:
     def __init__(self, *, all_result=None):
         self._all_result = all_result if all_result is not None else []
@@ -68,6 +58,81 @@ class TestAssistantAgentService:
                 delete=lambda *keys: None,
             ),
             public_agent_a2a_service=None,
+        )
+
+    def test_schedule_introduction_prewarm_should_skip_in_testing_mode(
+        self, app, monkeypatch
+    ):
+        service = self._build_service()
+        thread_calls = []
+
+        class _FakeThread:
+            def __init__(self, target=None, daemon=False):
+                thread_calls.append(("init", daemon))
+                self._target = target
+
+            def start(self):
+                thread_calls.append("start")
+                if self._target is not None:
+                    self._target()
+
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.Thread", _FakeThread
+        )
+
+        with app.app_context():
+            service._schedule_introduction_prewarm(uuid4())
+
+        assert thread_calls == []
+
+    def test_schedule_introduction_prewarm_should_warm_cache_when_enabled(
+        self, monkeypatch
+    ):
+        service = self._build_service()
+        account_id = uuid4()
+        account = SimpleNamespace(id=account_id)
+        call_log = []
+
+        class _FakeThread:
+            def __init__(self, target=None, daemon=False):
+                call_log.append(("thread", daemon))
+                self._target = target
+
+            def start(self):
+                call_log.append("start")
+                if self._target is not None:
+                    self._target()
+
+        monkeypatch.setattr(
+            "internal.service.assistant_agent_service.Thread", _FakeThread
+        )
+        monkeypatch.setattr(
+            service,
+            "get",
+            lambda model, pk: account if pk == account_id else None,
+        )
+
+        def _generate_introduction(account_arg):
+            call_log.append(("generate", account_arg.id))
+            yield "chunk"
+
+        monkeypatch.setattr(service, "generate_introduction", _generate_introduction)
+
+        flask_app = Flask(__name__)
+        flask_app.config["TESTING"] = False
+        flask_app.config["ASSISTANT_INTRO_PREWARM_ENABLED"] = True
+
+        with flask_app.app_context():
+            service._schedule_introduction_prewarm(account_id)
+
+        assert call_log == [
+            ("thread", True),
+            "start",
+            ("generate", account_id),
+        ]
+        assert (
+            str(account_id)
+            not in AssistantAgentService._introduction_prewarm_pending
         )
 
     def test_extract_chunk_content_should_support_common_types(self):

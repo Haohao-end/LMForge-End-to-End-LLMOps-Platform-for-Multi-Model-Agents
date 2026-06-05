@@ -335,7 +335,16 @@ class AppConfigService(BaseService):
         if getattr(draft_app_config, "skills", []) != validate_skills:
             self.update(draft_app_config, skills=validate_skills)
 
-        # 10.将数据转换成字典后返回
+        # 11.读取并规范化 Agent 绑定列表
+        agent_bindings, validate_agent_bindings = self.process_and_validate_agent_bindings(
+            getattr(draft_app_config, "agent_bindings", []),
+            current_account_id=getattr(app, "account_id", None),
+            current_app_id=getattr(app, "id", None),
+        )
+        if getattr(draft_app_config, "agent_bindings", []) != validate_agent_bindings:
+            self.update(draft_app_config, agent_bindings=validate_agent_bindings)
+
+        # 12.将数据转换成字典后返回
         result = self._process_and_transformer_app_config(
             validate_model_config,
             tools,
@@ -344,6 +353,7 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
+            agent_bindings,
             draft_app_config
         )
         if not persist_changes:
@@ -416,7 +426,16 @@ class AppConfigService(BaseService):
         if getattr(app_config, "skills", []) != validate_skills:
             self.update(app_config, skills=validate_skills)
 
-        # 10.将数据转换成字典后返回
+        # 11.读取并规范化 Agent 绑定列表
+        agent_bindings, validate_agent_bindings = self.process_and_validate_agent_bindings(
+            getattr(app_config, "agent_bindings", []),
+            current_account_id=getattr(app, "account_id", None),
+            current_app_id=getattr(app, "id", None),
+        )
+        if getattr(app_config, "agent_bindings", []) != validate_agent_bindings:
+            self.update(app_config, agent_bindings=validate_agent_bindings)
+
+        # 12.将数据转换成字典后返回
         result = self._process_and_transformer_app_config(
             validate_model_config,
             tools,
@@ -425,6 +444,7 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
+            agent_bindings,
             app_config
         )
         if not persist_changes:
@@ -458,6 +478,11 @@ class AppConfigService(BaseService):
             mcp_bindings,
         )
         skills, _ = self.skill_service.process_and_validate_skill_bindings(getattr(app_config_version, "skills", []))
+        agent_bindings, _ = self.process_and_validate_agent_bindings(
+            getattr(app_config_version, "agent_bindings", []),
+            current_account_id=current_account_id,
+            current_app_id=current_app_id,
+        )
 
         result = self._process_and_transformer_app_config(
             validate_model_config,
@@ -467,6 +492,7 @@ class AppConfigService(BaseService):
             mcp_bindings,
             mcp_tool_snapshots,
             skills,
+            agent_bindings,
             app_config_version,
         )
         self._set_runtime_config_cache(cache_key, result)
@@ -595,6 +621,7 @@ class AppConfigService(BaseService):
             mcp_bindings: list[dict],
             mcp_tool_snapshots: list[dict],
             skills: list[dict],
+            agent_bindings: list[dict],
             app_config: Union[AppConfig, AppConfigVersion]
     ) -> dict[str, Any]:
         """根据传递的插件列表、工作流列表、知识库列表以及应用配置创建字典信息"""
@@ -607,6 +634,7 @@ class AppConfigService(BaseService):
             "mcp_bindings": mcp_bindings,
             "mcp_tool_snapshots": mcp_tool_snapshots,
             "skills": skills,
+            "agent_bindings": agent_bindings,
             "workflows": workflows,
             "datasets": datasets,
             "retrieval_config": app_config.retrieval_config,
@@ -996,7 +1024,6 @@ class AppConfigService(BaseService):
             })
 
         return workflows, validate_workflows
-
 
 
 

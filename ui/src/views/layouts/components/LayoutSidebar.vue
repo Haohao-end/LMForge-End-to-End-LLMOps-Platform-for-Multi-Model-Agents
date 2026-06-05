@@ -47,14 +47,59 @@ const { handleDeleteConversation } = useDeleteConversation()
 const updateConversationNameVisible = ref(false)
 const updateConversationNameId = ref('')
 const updateConversationName = ref('')
+const DEFAULT_RECENT_CONVERSATIONS_LIMIT = 20
+const RECENT_CONVERSATIONS_LOAD_STEP = 20
+const recentConversationsLimit = ref(DEFAULT_RECENT_CONVERSATIONS_LIMIT)
+const hasMoreRecentConversations = ref(true)
+const recentConversationsBottomLocked = ref(false)
 
 // 2.定义加载最近会话列表函数
-const loadRecentConversations = async () => {
+const loadRecentConversations = async (reset = false) => {
   if (!isLoggedIn.value) {
     recentConversations.value = []
+    recentConversationsLimit.value = DEFAULT_RECENT_CONVERSATIONS_LIMIT
+    hasMoreRecentConversations.value = true
+    recentConversationsBottomLocked.value = false
     return
   }
-  await loadRecentConversationsHook(20)
+
+  if (reset) {
+    recentConversationsLimit.value = DEFAULT_RECENT_CONVERSATIONS_LIMIT
+    hasMoreRecentConversations.value = true
+    recentConversationsBottomLocked.value = false
+  }
+
+  const limit = recentConversationsLimit.value
+  await loadRecentConversationsHook(limit)
+  hasMoreRecentConversations.value = recentConversations.value.length >= limit
+  if (!hasMoreRecentConversations.value) {
+    recentConversationsBottomLocked.value = false
+  }
+}
+
+const loadMoreRecentConversations = async () => {
+  if (
+    getRecentConversationsLoading.value ||
+    !hasMoreRecentConversations.value ||
+    recentConversationsBottomLocked.value
+  ) {
+    return
+  }
+  recentConversationsBottomLocked.value = true
+  recentConversationsLimit.value += RECENT_CONVERSATIONS_LOAD_STEP
+  try {
+    await loadRecentConversations(false)
+    if (!hasMoreRecentConversations.value) {
+      recentConversationsBottomLocked.value = false
+    }
+  } catch (error) {
+    recentConversationsLimit.value = Math.max(
+      DEFAULT_RECENT_CONVERSATIONS_LIMIT,
+      recentConversationsLimit.value - RECENT_CONVERSATIONS_LOAD_STEP,
+    )
+    recentConversationsBottomLocked.value = false
+    console.error('Failed to load more recent conversations:', error)
+  }
 }
 
 // 3.定义会话点击切换函数
@@ -162,6 +207,17 @@ const handleRecentConversationsRefresh = () => {
   void loadRecentConversations()
 }
 
+const handleRecentConversationsScroll = (event: Event) => {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const reachedBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 12
+  if (!reachedBottom) {
+    recentConversationsBottomLocked.value = false
+    return
+  }
+  void loadMoreRecentConversations()
+}
+
 // 处理最近对话按钮 hover
 const handleRecentConversationsHover = (event: MouseEvent) => {
   const target = event.currentTarget as HTMLElement
@@ -195,9 +251,12 @@ watch(
   async (loggedIn) => {
     if (!loggedIn) {
       recentConversations.value = []
+      recentConversationsLimit.value = DEFAULT_RECENT_CONVERSATIONS_LIMIT
+      hasMoreRecentConversations.value = true
+      recentConversationsBottomLocked.value = false
       return
     }
-    await loadRecentConversations()
+    await loadRecentConversations(true)
   },
   { immediate: true },
 )
@@ -363,6 +422,7 @@ onUnmounted(() => {
       <div
         v-if="!props.collapsed"
         class="flex-1 min-h-0 overflow-y-auto pr-1 recent-conversation-list"
+        @scroll.passive="handleRecentConversationsScroll"
       >
         <div v-if="recentConversations.length === 0" class="text-xs text-gray-400 px-2 py-1">
           {{ $t('layout.sidebar.noRecentConversations') }}

@@ -75,6 +75,19 @@ describe('useGetVersions', () => {
         tools: [],
         mcp_bindings: [],
         mcp_tool_snapshots: [],
+        agent_bindings: [
+          {
+            app_id: 'agent-1',
+            invoke_mode: 'a2a',
+            name: '客服助手',
+            icon: '',
+            description: '示例 Agent',
+            source_scope: 'public',
+            is_public: true,
+            status: 'published',
+            tool_name: 'agent_app_demo',
+          },
+        ],
         workflows: [],
         speech_to_text: { enable: false },
         text_to_speech: { enable: false, voice: 'alex', auto_play: false },
@@ -90,6 +103,19 @@ describe('useGetVersions', () => {
       image_input: { enabled: true },
     })
     expect(draftAppConfigForm.value.mcp_tool_snapshots).toEqual([])
+    expect(draftAppConfigForm.value.agent_bindings).toEqual([
+      {
+        app_id: 'agent-1',
+        invoke_mode: 'a2a',
+        name: '客服助手',
+        icon: '',
+        description: '示例 Agent',
+        source_scope: 'public',
+        is_public: true,
+        status: 'published',
+        tool_name: 'agent_app_demo',
+      },
+    ])
   })
 
   it('resets loading when request fails', async () => {

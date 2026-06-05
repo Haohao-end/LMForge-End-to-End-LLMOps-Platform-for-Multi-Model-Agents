@@ -149,6 +149,17 @@ vi.mock('@/hooks/use-assistant-agent', async () => {
   }
 })
 
+vi.mock('@/hooks/use-conversation', async () => {
+  const { ref } = await import('vue')
+  return {
+    useGetConversationName: () => ({
+      loading: ref(false),
+      name: ref(''),
+      loadConversationName: vi.fn(),
+    }),
+  }
+})
+
 vi.mock('@/hooks/use-audio', async () => {
   const { ref } = await import('vue')
   return {

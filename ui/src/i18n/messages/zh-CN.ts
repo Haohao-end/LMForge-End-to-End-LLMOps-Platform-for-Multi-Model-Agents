@@ -582,6 +582,12 @@ export default {
       cta: '你可以直接点击下方推荐操作继续：',
       fallback: '继续探索你的需求',
     },
+    conversation: {
+      title: '当前会话',
+      loading: '正在加载会话信息...',
+      empty: '未命名会话',
+      idLabel: '会话 ID',
+    },
     messages: {
       imageCount: '该消息包含{count}张图片',
       empty: '该消息内容为空',

@@ -593,6 +593,12 @@ export default {
       cta: 'You can continue by clicking the recommended actions below:',
       fallback: 'Keep exploring what you need',
     },
+    conversation: {
+      title: 'Current conversation',
+      loading: 'Loading conversation info...',
+      empty: 'Untitled conversation',
+      idLabel: 'Conversation ID',
+    },
     messages: {
       imageCount: 'This message contains {count} images',
       empty: 'This message is empty',

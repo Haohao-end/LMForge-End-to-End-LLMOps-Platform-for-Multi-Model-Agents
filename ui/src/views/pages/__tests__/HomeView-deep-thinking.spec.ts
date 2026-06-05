@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   handleAudioToText: vi.fn(),
   queryRef: undefined as any,
   messagesRef: undefined as any,
+  conversationNameRef: undefined as any,
 }))
 
 vi.mock('vue-router', () => ({
@@ -156,6 +157,26 @@ vi.mock('@/hooks/use-assistant-agent', async () => {
   }
 })
 
+vi.mock('@/hooks/use-conversation', async () => {
+  const { ref } = await import('vue')
+  if (!mocks.conversationNameRef) {
+    mocks.conversationNameRef = ref('')
+  }
+  return {
+    useGetConversationName: () => ({
+      loading: ref(false),
+      name: mocks.conversationNameRef,
+      loadConversationName: vi.fn(async (conversationId: string) => {
+        if (conversationId === 'conversation-1') {
+          mocks.conversationNameRef.value = '历史会话 A'
+        } else {
+          mocks.conversationNameRef.value = '历史会话 B'
+        }
+      }),
+    }),
+  }
+})
+
 vi.mock('@/hooks/use-audio', async () => {
   const { ref } = await import('vue')
   return {
@@ -245,6 +266,9 @@ describe('HomeView deep thinking submit', () => {
     if (mocks.messagesRef) {
       mocks.messagesRef.value = []
     }
+    if (mocks.conversationNameRef) {
+      mocks.conversationNameRef.value = ''
+    }
   })
 
   it('passes enable_deep_thinking to assistant agent chat when toggle is enabled', async () => {
@@ -283,5 +307,49 @@ describe('HomeView deep thinking submit', () => {
       expect.any(Function),
       true,
     )
+  })
+
+  it('renders the current conversation header when a conversation id is provided', async () => {
+    mocks.route.fullPath = '/home?conversation_id=conversation-1'
+    mocks.route.query = { conversation_id: 'conversation-1' }
+    mocks.messagesRef.value = [
+      {
+        id: 'message-1',
+        render_id: 'message-1',
+        query: '你好',
+        image_urls: [],
+        agent_thoughts: [],
+        answer: '你好',
+        answer_parts: [],
+        artifacts: [],
+        suggested_questions: [],
+        created_at: 1717526400,
+      },
+    ] as any
+
+    const wrapper = shallowMount(HomeView, {
+      global: {
+        stubs: {
+          AiDynamicBackground: componentStub,
+          AiMessage: componentStub,
+          ChatComposer: chatComposerStub,
+          HumanMessage: componentStub,
+          ChatConversationSkeleton: componentStub,
+          LoginModal: componentStub,
+          'a-button': componentStub,
+          'icon-down': componentStub,
+          'icon-poweroff': componentStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(mocks.loadAssistantAgentMessages).toHaveBeenCalled()
+    expect(mocks.conversationNameRef.value).toBe('历史会话 A')
+    expect(wrapper.text()).toContain('当前会话')
+    expect(wrapper.text()).toContain('历史会话 A')
+    expect(wrapper.text()).toContain('会话 ID')
+    expect(wrapper.text()).toContain('conversa')
   })
 })

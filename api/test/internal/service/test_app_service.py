@@ -1069,6 +1069,46 @@ class TestAppService:
         assert updates[0][1]["model_config"]["model"] == "gpt-4o-mini"
         assert enqueued == [(app.id, AppConfigType.DRAFT.value)]
 
+    def test_validate_draft_app_config_should_allow_agent_bindings(self):
+        service = _build_service()
+        app_id = uuid4()
+        account = SimpleNamespace(id=uuid4())
+        target_app_id = uuid4()
+        validate_bindings = [
+            {
+                "app_id": str(target_app_id),
+                "invoke_mode": "a2a",
+                "name": "客服助手",
+                "icon": "",
+                "description": "示例 Agent",
+                "source_scope": "public",
+                "is_public": True,
+                "status": AppStatus.PUBLISHED.value,
+                "tool_name": "agent_app_target",
+            }
+        ]
+        calls = {}
+
+        def _process_and_validate_agent_bindings(agent_bindings, **kwargs):
+            calls["agent_bindings"] = agent_bindings
+            calls["kwargs"] = kwargs
+            return [], validate_bindings
+
+        service.app_config_service = SimpleNamespace(
+            process_and_validate_agent_bindings=_process_and_validate_agent_bindings
+        )
+
+        payload = {"agent_bindings": [{"app_id": str(target_app_id)}]}
+
+        validated = service._validate_draft_app_config(payload, account, app_id)
+
+        assert calls["agent_bindings"] == [
+            {"app_id": str(target_app_id)}
+        ]
+        assert calls["kwargs"]["current_account_id"] == account.id
+        assert calls["kwargs"]["current_app_id"] == app_id
+        assert validated["agent_bindings"] == validate_bindings
+
     def test_publish_draft_app_config_should_create_runtime_config_and_history(self, monkeypatch):
         class _DeleteQuery:
             def __init__(self):
@@ -1204,6 +1244,19 @@ class TestAppService:
                         "env": {},
                     }
                 ],
+                agent_bindings=[
+                    {
+                        "app_id": str(uuid4()),
+                        "invoke_mode": "a2a",
+                        "name": "客服助手",
+                        "icon": "",
+                        "description": "示例 Agent",
+                        "source_scope": "public",
+                        "is_public": True,
+                        "status": AppStatus.PUBLISHED.value,
+                        "tool_name": "agent_app_target",
+                    }
+                ],
                 mcp_tool_snapshots=mcp_tool_snapshots,
             ),
         )
@@ -1244,6 +1297,19 @@ class TestAppService:
                         "timeout_seconds": 30,
                         "args": [],
                         "env": {},
+                    }
+                ],
+                "agent_bindings": [
+                    {
+                        "app_id": app.draft_app_config.agent_bindings[0]["app_id"],
+                        "invoke_mode": "a2a",
+                        "name": "客服助手",
+                        "icon": "",
+                        "description": "示例 Agent",
+                        "source_scope": "public",
+                        "is_public": True,
+                        "status": AppStatus.PUBLISHED.value,
+                        "tool_name": "agent_app_target",
                     }
                 ],
                 "mcp_tool_snapshots": mcp_tool_snapshots,
@@ -1292,6 +1358,7 @@ class TestAppService:
                 "env": {},
             }
         ]
+        assert app_config_call["agent_bindings"] == app.draft_app_config.agent_bindings
         assert app_config_call["mcp_tool_snapshots"] == mcp_tool_snapshots
         history_call = [payload for model, payload in create_calls if model.__name__ == "AppConfigVersion"][0]
         assert history_call["version"] == 3
@@ -1309,6 +1376,7 @@ class TestAppService:
                 "env": {},
             }
         ]
+        assert history_call["agent_bindings"] == app.draft_app_config.agent_bindings
         assert history_call["mcp_tool_snapshots"] == mcp_tool_snapshots
         assert synced_app_ids == [str(app_id)]
         assert prewarm_calls == [(app.id, AppConfigType.PUBLISHED.value)]

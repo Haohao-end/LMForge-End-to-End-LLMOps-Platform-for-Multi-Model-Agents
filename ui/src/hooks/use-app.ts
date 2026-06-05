@@ -360,6 +360,7 @@ export const useGetDraftAppConfig = () => {
         tools: data.tools,
         mcp_bindings: data.mcp_bindings || [],
         mcp_tool_snapshots: data.mcp_tool_snapshots || [],
+        agent_bindings: data.agent_bindings || [],
         skills: data.skills,
         workflows: data.workflows,
         speech_to_text: data.speech_to_text,
