@@ -75,6 +75,18 @@ const mountSidebar = () => {
         IconSpaceFull: true,
         IconApps: true,
         IconAppsFull: true,
+        IconApp: {
+          template: '<i data-icon="skills"><slot /></i>',
+        },
+        IconAppFull: {
+          template: '<i data-icon="skills"><slot /></i>',
+        },
+        IconDashboard: {
+          template: '<i data-icon="workflow"><slot /></i>',
+        },
+        IconDashboardFull: {
+          template: '<i data-icon="workflow"><slot /></i>',
+        },
         IconTool: true,
         IconToolFull: true,
         IconStorage: true,
@@ -126,5 +138,13 @@ describe('LayoutSidebar home navigation', () => {
 
     expect(wrapper.findAll('a[data-to="/store/skills"]')).toHaveLength(1)
     expect(wrapper.findAll('a[data-to="/store/mcp"]')).toHaveLength(1)
+  })
+
+  it('uses different icons for workflow and skills stores', async () => {
+    const wrapper = mountSidebar()
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-icon="workflow"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-icon="skills"]')).toHaveLength(1)
   })
 })

@@ -13,6 +13,10 @@ import IconSpaceFull from '@/components/icons/IconSpaceFull.vue'
 import IconSpace from '@/components/icons/IconSpace.vue'
 import IconApps from '@/components/icons/IconApps.vue'
 import IconAppsFull from '@/components/icons/IconAppsFull.vue'
+import IconApp from '@/components/icons/IconApp.vue'
+import IconAppFull from '@/components/icons/IconAppFull.vue'
+import IconDashboard from '@/components/icons/IconDashboard.vue'
+import IconDashboardFull from '@/components/icons/IconDashboardFull.vue'
 import IconToolFull from '@/components/icons/IconToolFull.vue'
 import IconTool from '@/components/icons/IconTool.vue'
 import IconStorage from '@/components/icons/IconStorage.vue'
@@ -266,11 +270,11 @@ onUnmounted(() => {
         active-class="bg-gray-100"
         :title="route.path.startsWith('/store/workflows') ? t('layout.sidebar.workflowStore') : ''"
       >
-        <icon-storage-full
+        <icon-dashboard-full
           v-if="route.path.startsWith('/store/workflows')"
           class="flex-shrink-0 w-4 h-4"
         />
-        <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
+        <icon-dashboard v-else class="flex-shrink-0 w-4 h-4" />
         <span v-if="!props.collapsed" class="truncate text-sm">
           {{ $t('layout.sidebar.workflowStore') }}
         </span>
@@ -281,11 +285,11 @@ onUnmounted(() => {
         active-class="bg-gray-100"
         :title="route.path.startsWith('/store/skills') ? t('layout.sidebar.skillsStore') : ''"
       >
-        <icon-storage-full
+        <icon-app-full
           v-if="route.path.startsWith('/store/skills')"
           class="flex-shrink-0 w-4 h-4"
         />
-        <icon-storage v-else class="flex-shrink-0 w-4 h-4" />
+        <icon-app v-else class="flex-shrink-0 w-4 h-4" />
         <span v-if="!props.collapsed" class="truncate text-sm">
           {{ $t('layout.sidebar.skillsStore') }}
         </span>
