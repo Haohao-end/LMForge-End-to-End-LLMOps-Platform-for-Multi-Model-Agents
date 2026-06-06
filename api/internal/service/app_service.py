@@ -26,6 +26,7 @@ from internal.core.tools.api_tools.providers import ApiProviderManager
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
 from internal.entity.ai_entity import OPTIMIZE_PROMPT_TEMPLATE
 from internal.entity.app_entity import AppStatus, AppConfigType, DEFAULT_APP_CONFIG
+from internal.entity.tag_entity import sort_tags_by_priority
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
 from internal.exception import NotFoundException, ForbiddenException, ValidateErrorException, FailException
@@ -60,6 +61,7 @@ from .public_agent_registry_service import PublicAgentRegistryService
 from .retrieval_service import RetrievalService
 from .icon_generator_service import IconGeneratorService
 from .skill_service import SkillService
+from .tag_assignment_service import TagAssignmentService
 from ..core.language_model.entities.model_entity import ModelParameterType, ModelFeature
 from ..core.language_model.providers.deepseek.chat import Chat
 from ..entity.workflow_entity import WorkflowStatus
@@ -575,6 +577,14 @@ class AppService(BaseService):
         # 如果指定分享到广场，则设置 is_public
         if share_to_square:
             update_data["is_public"] = True
+            existing_tags = list(getattr(app, "tags", []) or [])
+            if existing_tags:
+                update_data["tags"] = sort_tags_by_priority(existing_tags)
+            else:
+                app_name = str(getattr(app, "name", "") or "")
+                app_description = str(getattr(app, "description", "") or "")
+                tags = TagAssignmentService.match_tags_by_keywords(app_name, app_description)
+                update_data["tags"] = tags if tags else ["other"]
 
         # 如果是首次发布，设置发布时间
         if not app.published_at:

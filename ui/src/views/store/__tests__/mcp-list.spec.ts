@@ -204,6 +204,9 @@ describe('store mcp list', () => {
     expect(wrapper.text()).not.toContain('天气 MCP 草稿')
     expect(wrapper.text()).not.toContain('当前环境不支持该 MCP')
     expect(wrapper.find('[data-icon="computer"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('全部')
+    expect(wrapper.html()).toContain('rounded-lg !text-gray-700 px-3')
+    expect(wrapper.html()).not.toContain('mcp-category-btn')
 
     ;['通用', '编程工具', '内容创作', '媒体音视频', '效率工具', '数据分析', '可观测运维', '其他'].forEach((category) => {
       expect(wrapper.text()).toContain(category)

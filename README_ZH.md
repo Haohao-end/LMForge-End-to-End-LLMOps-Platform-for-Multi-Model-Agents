@@ -40,8 +40,6 @@
 - [技术栈](#技术栈)
 - [快速开始](#快速开始)
 - [功能展示](#功能展示)
-- [项目结构](#项目结构)
-- [文档与说明](#文档与说明)
 - [测试](#测试)
 - [联系方式](#联系方式)
 - [鸣谢](#鸣谢)
@@ -216,25 +214,6 @@ npm run test:unit -- --run
 应用发布后，可以通过 `POST /api/openapi/chat` 进行标准调用或流式调用，并支持多轮对话所需的会话标识。
 
 <p align="right">(<a href="#readme-top">返回顶部</a>)</p>
-
-## 项目结构
-
-```text
-.
-├── api/          # Flask 后端、服务、处理器、任务、迁移和测试
-├── ui/           # Vue 3 前端、路由、页面、组件和测试
-├── docker/       # Docker Compose、nginx、postgres 初始化和部署配置
-├── README.md     # 英文项目说明
-└── README_ZH.md  # 中文项目说明
-```
-
-## 文档与说明
-
-- [README.md](README.md) - English project overview
-- [api/README.md](api/README.md) - 后端说明
-- [ui/README.md](ui/README.md) - 前端说明
-- [docker/README.md](docker/README.md) - Docker 说明
-- [api/.env.example](api/.env.example) - 环境变量参考
 
 ## 测试
 

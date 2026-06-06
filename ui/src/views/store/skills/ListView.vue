@@ -169,12 +169,6 @@ const getSkillAvatarStyle = (skill: SkillPackage) => {
   }
 }
 
-const getCategoryButtonClass = (active: boolean) =>
-  [
-    'skills-category-btn',
-    active ? 'skills-category-btn-active' : 'skills-category-btn-inactive',
-  ].join(' ')
-
 const detailMarkdown = computed(() =>
   renderMarkdown(activeSkill.value?.readme || activeSkill.value?.description || t('store.skills.noBody')),
 )
@@ -216,8 +210,8 @@ onMounted(async () => {
       <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
         <div class="flex items-center gap-2 flex-wrap">
           <a-button
-            type="text"
-            :class="getCategoryButtonClass(selectedCategory === 'all')"
+            :type="selectedCategory === 'all' ? 'secondary' : 'text'"
+            class="rounded-lg !text-gray-700 px-3"
             @click="handleCategoryChange('all')"
           >
             {{ t('store.skills.all') }}
@@ -225,8 +219,8 @@ onMounted(async () => {
           <a-button
             v-for="item in categories"
             :key="item.id"
-            type="text"
-            :class="getCategoryButtonClass(selectedCategory === item.id)"
+            :type="selectedCategory === item.id ? 'secondary' : 'text'"
+            class="rounded-lg !text-gray-700 px-3"
             @click="handleCategoryChange(item.id)"
           >
             {{ getCategoryLabel(item.id || item.name) }}
@@ -236,7 +230,7 @@ onMounted(async () => {
         <a-input-search
           v-model="searchWord"
           :placeholder="t('store.skills.searchPlaceholder')"
-          class="w-full sm:w-[260px] bg-white rounded-lg border-gray-300"
+          class="w-[240px] shrink-0 bg-white rounded-lg border-gray-300"
           @search="handleSearch"
         />
       </div>
@@ -251,11 +245,11 @@ onMounted(async () => {
               :body-style="{ padding: '10px' }"
               @click="handleCardClick(skill)"
             >
-                <div class="flex items-start gap-2.5 mb-2">
-                  <a-avatar
-                    :size="34"
-                    shape="square"
-                    class="shrink-0 overflow-hidden"
+              <div class="flex items-start gap-2.5 mb-2">
+                <a-avatar
+                  :size="34"
+                  shape="square"
+                  class="shrink-0 overflow-hidden"
                   :style="skill.icon ? { backgroundColor: '#f3f4f6' } : getSkillAvatarStyle(skill)"
                 >
                   <img
@@ -267,17 +261,19 @@ onMounted(async () => {
                   <span v-else class="text-white font-semibold text-[12px] tracking-wide">
                     {{ getSkillAvatarText(skill) }}
                   </span>
-                  </a-avatar>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5 min-w-0">
-                      <div class="text-sm font-bold text-gray-900 truncate">{{ skill.label }}</div>
-                    </div>
-                    <div class="text-[11px] text-gray-500 line-clamp-1">
-                      {{ skill.source_key }}
-                      <template v-if="skill.tool_count > 0"> · {{ t('store.skills.toolCount', { count: skill.tool_count }) }}</template>
-                    </div>
+                </a-avatar>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <div class="text-sm font-bold text-gray-900 truncate">{{ skill.label }}</div>
+                  </div>
+                  <div class="text-[11px] text-gray-500 line-clamp-1">
+                    {{ skill.source_key }}
+                    <template v-if="skill.tool_count > 0">
+                      · {{ t('store.skills.toolCount', { count: skill.tool_count }) }}
+                    </template>
                   </div>
                 </div>
+              </div>
 
               <resource-card-description :text="skill.description" />
 
@@ -311,7 +307,7 @@ onMounted(async () => {
       :visible="showDetailVisible"
       :width="560"
       :footer="false"
-        :title="t('store.skills.detailTitle')"
+      :title="t('store.skills.detailTitle')"
       :drawer-style="{ background: '#F9FAFB' }"
       @cancel="showDetailVisible = false"
     >
@@ -409,27 +405,4 @@ onMounted(async () => {
   padding-left: 1.25rem;
 }
 
-.skills-category-btn {
-  height: 32px;
-  border-radius: 10px;
-  padding: 0 12px;
-  font-size: 12px;
-}
-
-.skills-category-btn-active {
-  background: #eef2f7 !important;
-  color: #111827 !important;
-}
-
-.skills-category-btn-inactive {
-  color: #4b5563 !important;
-}
-
-.skills-category-btn:hover {
-  background: #f3f4f6 !important;
-}
-
-.skills-category-btn-active:hover {
-  background: #e5e7eb !important;
-}
 </style>

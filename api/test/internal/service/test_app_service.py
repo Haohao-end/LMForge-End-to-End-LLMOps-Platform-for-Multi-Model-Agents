@@ -1269,6 +1269,9 @@ class TestAppService:
         ]
         app = SimpleNamespace(
             id=app_id,
+            name="示例应用",
+            description="用于发布测试",
+            tags=[],
             published_at=None,
             draft_app_config=SimpleNamespace(
                 id=uuid4(),
@@ -1572,6 +1575,127 @@ class TestAppService:
         assert "is_public" not in update_payload
         assert "published_at" not in update_payload
         assert any(model.__name__ == "AppConfigVersion" for model, _ in create_calls)
+
+    def test_publish_draft_app_config_should_persist_other_tag_when_shared_to_square_and_matching_fails(self, monkeypatch):
+        class _DeleteQuery:
+            def filter(self, *_args):
+                return self
+
+            @staticmethod
+            def delete():
+                return None
+
+        class _ScalarQuery:
+            def filter(self, *_args):
+                return self
+
+            @staticmethod
+            def scalar():
+                return 1
+
+        class _Session:
+            def __init__(self):
+                self.calls = 0
+
+            def query(self, _model):
+                self.calls += 1
+                if self.calls == 1:
+                    return _DeleteQuery()
+                return _ScalarQuery()
+
+        class _DB:
+            def __init__(self):
+                self.session = _Session()
+
+            @staticmethod
+            @contextmanager
+            def auto_commit():
+                yield
+
+        service = _new_app_service(
+            db=_DB(),
+            redis_client=SimpleNamespace(),
+            cos_service=SimpleNamespace(),
+            retrieval_service=SimpleNamespace(),
+            app_config_service=SimpleNamespace(),
+            api_provider_manager=SimpleNamespace(),
+            conversation_service=SimpleNamespace(),
+            language_model_manager=SimpleNamespace(),
+            language_model_service=SimpleNamespace(),
+            builtin_provider_manager=SimpleNamespace(),
+            icon_generator_service=SimpleNamespace(),
+        )
+
+        app_id = uuid4()
+        account = SimpleNamespace(id=uuid4())
+        app = SimpleNamespace(
+            id=app_id,
+            tags=[],
+            name="1231231123",
+            description="",
+            published_at=None,
+            draft_app_config=SimpleNamespace(
+                id=uuid4(),
+                app_id=app_id,
+                version=0,
+                config_type="draft",
+                updated_at=None,
+                created_at=None,
+                model_config={"provider": "openai", "model": "gpt-4o-mini"},
+                dialog_round=3,
+                preset_prompt="prompt",
+                tools=[],
+                workflows=[],
+                datasets=[],
+                retrieval_config={},
+                long_term_memory={"enable": True},
+                opening_statement="hello",
+                opening_questions=["q1"],
+                speech_to_text={"enable": False},
+                text_to_speech={"enable": False},
+                suggested_after_answer={"enable": True},
+                review_config={"enable": False},
+            ),
+        )
+        monkeypatch.setattr(service, "get_app", lambda *_args, **_kwargs: app)
+        monkeypatch.setattr(
+            service,
+            "get_draft_app_config",
+            lambda *_args, **_kwargs: {
+                "model_config": {"provider": "openai", "model": "gpt-4o-mini"},
+                "dialog_round": 3,
+                "preset_prompt": "prompt",
+                "tools": [],
+                "workflows": [],
+                "datasets": [],
+                "retrieval_config": {},
+                "long_term_memory": {"enable": True},
+                "opening_statement": "hello",
+                "opening_questions": ["q1"],
+                "speech_to_text": {"enable": False},
+                "text_to_speech": {"enable": False},
+                "suggested_after_answer": {"enable": True},
+                "review_config": {"enable": False},
+            },
+        )
+        monkeypatch.setattr(service, "create", lambda _model, **kwargs: SimpleNamespace(id=uuid4(), **kwargs))
+        updates = []
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: updates.append((target, kwargs)) or target,
+        )
+        monkeypatch.setattr(service, "_enqueue_mcp_tool_snapshot_prewarm", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(
+            "internal.service.app_service.TagAssignmentService.match_tags_by_keywords",
+            lambda *_args, **_kwargs: [],
+        )
+
+        service.publish_draft_app_config(app_id, account)
+
+        update_payload = updates[0][1]
+        assert update_payload["is_public"] is True
+        assert update_payload["tags"] == ["other"]
 
     def test_get_publish_histories_with_page_should_use_paginator(self, monkeypatch):
         service = _build_service()
@@ -3451,6 +3575,9 @@ class TestAppServiceDraftConfigValidation:
         account = SimpleNamespace(id=uuid4())
         app = SimpleNamespace(
             id=app_id,
+            name="示例应用",
+            description="用于发布测试",
+            tags=[],
             published_at=None,
             draft_app_config=SimpleNamespace(
                 id=uuid4(),

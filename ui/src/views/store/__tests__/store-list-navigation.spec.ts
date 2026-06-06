@@ -161,6 +161,12 @@ describe('store list navigation', () => {
     await flushPromises()
     expect(appWrapper.text()).not.toContain('复制')
     expect(appWrapper.text()).not.toContain('已复制')
+    expect(appWrapper.text()).not.toContain('标签:')
+    expect(appWrapper.text()).not.toContain('Tags:')
+    expect(appWrapper.text()).toMatch(/全部|All/)
+    expect(appWrapper.html()).toContain('justify-between mb-6 gap-4')
+    expect(appWrapper.html()).not.toContain('flex flex-col gap-4 mb-6')
+    expect(appWrapper.findAll('button').some((button) => /全部|All/.test(button.text()))).toBe(true)
 
     const workflowWrapper = shallowMount(WorkflowsListView, {
       global: {
@@ -170,5 +176,11 @@ describe('store list navigation', () => {
     await flushPromises()
     expect(workflowWrapper.text()).not.toContain('复制')
     expect(workflowWrapper.text()).not.toContain('已复制')
+    expect(workflowWrapper.text()).not.toContain('标签:')
+    expect(workflowWrapper.text()).not.toContain('Tags:')
+    expect(workflowWrapper.text()).toMatch(/全部|All/)
+    expect(workflowWrapper.html()).toContain('justify-between mb-6 gap-4')
+    expect(workflowWrapper.html()).not.toContain('flex flex-col gap-4 mb-6')
+    expect(workflowWrapper.findAll('button').some((button) => /全部|All/.test(button.text()))).toBe(true)
   })
 })

@@ -31,8 +31,9 @@ class PublicWorkflowService(BaseService):
     @staticmethod
     def _resolve_public_workflow_tags(workflow: Workflow) -> list[str]:
         """优先使用已保存标签；缺失时仅做轻量关键词兜底，避免列表接口触发慢路径。"""
-        if workflow.tags:
-            return sort_tags_by_priority(list(workflow.tags))
+        tags = list(getattr(workflow, "tags", []) or [])
+        if tags:
+            return sort_tags_by_priority(tags)
         tags = TagAssignmentService.match_tags_by_keywords(workflow.name, workflow.description)
         return tags if tags else ["other"]
 
@@ -55,9 +56,13 @@ class PublicWorkflowService(BaseService):
             # 如果提供了标签，使用提供的标签
             tag_list = [t.strip() for t in tags.split(',') if t.strip()]
             tag_list = sort_tags_by_priority(tag_list)
+            if not tag_list:
+                tag_list = ["other"]
         else:
-            # 如果没有提供标签，自动分配
-            tag_list = TagAssignmentService.auto_assign_tags(workflow.name, workflow.description)
+            # 如果没有提供标签，使用轻量关键词兜底，避免公开链路触发模型调用
+            tag_list = TagAssignmentService.match_tags_by_keywords(workflow.name, workflow.description)
+            if not tag_list:
+                tag_list = ["other"]
 
         # 4.更新工作流为公开状态
         self.update(workflow, **{

@@ -86,12 +86,6 @@ const getTypeName = (value: string) => {
   return getStoreTypeDisplayName(value, locale.value as 'zh-CN' | 'en-US')
 }
 
-const getCategoryButtonClass = (active: boolean) =>
-  [
-    'mcp-category-btn',
-    active ? 'mcp-category-btn-active' : 'mcp-category-btn-inactive',
-  ].join(' ')
-
 const openCreateModal = () => {
   showCreateMcpModalVisible.value = true
 }
@@ -180,8 +174,8 @@ onMounted(async () => {
       <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
         <div class="flex items-center gap-2 flex-wrap">
           <a-button
-            type="text"
-            :class="getCategoryButtonClass(selectedCategory === 'all')"
+            :type="selectedCategory === 'all' ? 'secondary' : 'text'"
+            class="rounded-lg !text-gray-700 px-3"
             @click="handleCategoryChange('all')"
           >
             {{ t('store.mcp.all') }}
@@ -189,8 +183,8 @@ onMounted(async () => {
           <a-button
             v-for="item in categories"
             :key="item.id"
-            type="text"
-            :class="getCategoryButtonClass(selectedCategory === item.id)"
+            :type="selectedCategory === item.id ? 'secondary' : 'text'"
+            class="rounded-lg !text-gray-700 px-3"
             @click="handleCategoryChange(item.id)"
           >
             {{ getCategoryName(item.id || item.name) }}
@@ -200,7 +194,7 @@ onMounted(async () => {
         <a-input-search
           v-model="searchWord"
           :placeholder="t('store.mcp.searchPlaceholder')"
-          class="w-full sm:w-[240px] bg-white rounded-lg border-gray-300"
+          class="w-[240px] shrink-0 bg-white rounded-lg border-gray-300"
           @search="handleSearch"
         />
       </div>
@@ -233,12 +227,12 @@ onMounted(async () => {
                   </span>
                 </a-avatar>
                 <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-1.5 min-w-0">
-                  <div class="text-sm font-bold text-gray-900 truncate">{{ provider.label }}</div>
-                  <a-tag size="small" color="green">{{ t('store.mcp.bindable') }}</a-tag>
-                </div>
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <div class="text-sm font-bold text-gray-900 truncate">{{ provider.label }}</div>
+                    <a-tag size="small" color="green">{{ t('store.mcp.bindable') }}</a-tag>
+                  </div>
                   <div class="text-[11px] text-gray-500 line-clamp-1">
-                  {{ t('store.mcp.providerSummary', { name: provider.name, count: provider.tool_count }) }}
+                    {{ t('store.mcp.providerSummary', { name: provider.name, count: provider.tool_count }) }}
                   </div>
                 </div>
               </div>
@@ -301,10 +295,10 @@ onMounted(async () => {
               </span>
             </a-avatar>
             <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <div class="text-sm font-bold text-gray-900">{{ activeProvider.label }}</div>
-              <a-tag size="small" color="green">{{ t('store.mcp.bindable') }}</a-tag>
-            </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="text-sm font-bold text-gray-900">{{ activeProvider.label }}</div>
+                <a-tag size="small" color="green">{{ t('store.mcp.bindable') }}</a-tag>
+              </div>
               <div class="text-[11px] text-gray-500 mt-1">
                 {{ activeProvider.creator_name || t('store.mcp.publicDirectory') }} · {{ t('store.mcp.publicSource') }}
               </div>
@@ -401,27 +395,4 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.mcp-category-btn {
-  height: 32px;
-  border-radius: 10px;
-  padding: 0 12px;
-  font-size: 12px;
-}
-
-.mcp-category-btn-active {
-  background: #eef2f7 !important;
-  color: #111827 !important;
-}
-
-.mcp-category-btn-inactive {
-  color: #4b5563 !important;
-}
-
-.mcp-category-btn:hover {
-  background: #f3f4f6 !important;
-}
-
-.mcp-category-btn-active:hover {
-  background: #e5e7eb !important;
-}
 </style>

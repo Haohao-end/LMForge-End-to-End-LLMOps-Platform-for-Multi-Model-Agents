@@ -4,7 +4,7 @@ import { useDeleteConversation, useGetRecentConversations } from '@/hooks/use-co
 import { useCredentialStore } from '@/stores/credential'
 import { isCredentialLoggedIn } from '@/utils/auth'
 import UpdateConversationNameModal from '@/views/layouts/components/UpdateConversationNameModal.vue'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import IconHomeFull from '@/components/icons/IconHomeFull.vue'
@@ -50,9 +50,82 @@ const updateConversationName = ref('')
 const DEFAULT_RECENT_CONVERSATIONS_LIMIT = 20
 const RECENT_CONVERSATIONS_LOAD_STEP = 20
 const MAX_RECENT_CONVERSATIONS_LIMIT = 1000
+const RECENT_CONVERSATIONS_SCROLL_THRESHOLD = 12
 const recentConversationsLimit = ref(DEFAULT_RECENT_CONVERSATIONS_LIMIT)
 const hasMoreRecentConversations = ref(true)
 const recentConversationsBottomLocked = ref(false)
+const recentConversationsListRef = ref<HTMLElement | null>(null)
+const recentConversationsBootstrapRunning = ref(false)
+
+const syncRecentConversationsHasMore = (
+  previousCount: number,
+  nextCount: number,
+  limit: number,
+) => {
+  hasMoreRecentConversations.value =
+    limit < MAX_RECENT_CONVERSATIONS_LIMIT && nextCount > previousCount
+  if (!hasMoreRecentConversations.value) {
+    recentConversationsBottomLocked.value = false
+  }
+}
+
+const isRecentConversationsScrollable = () => {
+  const listElement = recentConversationsListRef.value
+  if (!listElement) return false
+  return listElement.scrollHeight > listElement.clientHeight + RECENT_CONVERSATIONS_SCROLL_THRESHOLD
+}
+
+const bootstrapRecentConversations = async () => {
+  if (
+    recentConversationsBootstrapRunning.value ||
+    props.collapsed ||
+    !isLoggedIn.value ||
+    !hasMoreRecentConversations.value ||
+    isRecentConversationsScrollable()
+  ) {
+    return
+  }
+
+  recentConversationsBootstrapRunning.value = true
+  try {
+    const maxRounds = Math.ceil(MAX_RECENT_CONVERSATIONS_LIMIT / RECENT_CONVERSATIONS_LOAD_STEP)
+    let rounds = 0
+
+    while (
+      rounds < maxRounds &&
+      hasMoreRecentConversations.value &&
+      !isRecentConversationsScrollable()
+    ) {
+      const previousCount = recentConversations.value.length
+      const nextLimit = Math.min(
+        recentConversationsLimit.value + RECENT_CONVERSATIONS_LOAD_STEP,
+        MAX_RECENT_CONVERSATIONS_LIMIT,
+      )
+
+      if (nextLimit === recentConversationsLimit.value) {
+        hasMoreRecentConversations.value = false
+        recentConversationsBottomLocked.value = false
+        break
+      }
+
+      recentConversationsLimit.value = nextLimit
+      await loadRecentConversationsHook(nextLimit)
+      const nextCount = recentConversations.value.length
+      syncRecentConversationsHasMore(previousCount, nextCount, nextLimit)
+      rounds += 1
+
+      await nextTick()
+
+      if (nextCount <= previousCount) {
+        break
+      }
+    }
+  } catch (error) {
+    console.error('Failed to bootstrap recent conversations:', error)
+  } finally {
+    recentConversationsBootstrapRunning.value = false
+  }
+}
 
 // 2.定义加载最近会话列表函数
 const loadRecentConversations = async (reset = false) => {
@@ -71,12 +144,14 @@ const loadRecentConversations = async (reset = false) => {
   }
 
   const limit = Math.min(recentConversationsLimit.value, MAX_RECENT_CONVERSATIONS_LIMIT)
+  const previousCount = reset ? 0 : recentConversations.value.length
   recentConversationsLimit.value = limit
   await loadRecentConversationsHook(limit)
-  hasMoreRecentConversations.value =
-    limit < MAX_RECENT_CONVERSATIONS_LIMIT && recentConversations.value.length >= limit
-  if (!hasMoreRecentConversations.value) {
-    recentConversationsBottomLocked.value = false
+  syncRecentConversationsHasMore(previousCount, recentConversations.value.length, limit)
+  await nextTick()
+
+  if (!props.collapsed && !recentConversationsBootstrapRunning.value) {
+    await bootstrapRecentConversations()
   }
 }
 
@@ -271,6 +346,14 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => props.collapsed,
+  (collapsed, previousCollapsed) => {
+    if (!previousCollapsed || collapsed || !isLoggedIn.value) return
+    void loadRecentConversations(true)
+  },
+)
+
 onMounted(() => {
   if (typeof window === 'undefined') return
   window.addEventListener('recent-conversations:refresh', handleRecentConversationsRefresh)
@@ -422,6 +505,7 @@ onUnmounted(() => {
       <div
         v-if="!props.collapsed"
         class="flex-1 min-h-0 overflow-y-auto pr-1 recent-conversation-list"
+        ref="recentConversationsListRef"
         @scroll.passive="handleRecentConversationsScroll"
       >
         <div v-if="recentConversations.length === 0" class="text-xs text-gray-400 px-2 py-1">

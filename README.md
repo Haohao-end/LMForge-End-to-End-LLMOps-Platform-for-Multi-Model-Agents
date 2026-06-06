@@ -40,8 +40,6 @@
 - [Built With](#built-with)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
-- [Project Structure](#project-structure)
-- [Documentation](#documentation)
 - [Testing](#testing)
 - [Contact](#contact)
 - [Acknowledgments](#acknowledgments)
@@ -216,25 +214,6 @@ Create datasets, upload documents, inspect segments, and wire retrieval nodes in
 Publish an app and call it over `POST /api/openapi/chat` with standard or streaming responses, including support for multi-turn conversation identifiers.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Project Structure
-
-```text
-.
-├── api/          # Flask backend, services, handlers, tasks, migrations, tests
-├── ui/           # Vue 3 frontend, routes, views, components, tests
-├── docker/       # Docker Compose stack, nginx, postgres init, deployment config
-├── README.md     # English project overview
-└── README_ZH.md  # Chinese project overview
-```
-
-## Documentation
-
-- [README_ZH.md](README_ZH.md) - Chinese project overview
-- [api/README.md](api/README.md) - backend notes
-- [ui/README.md](ui/README.md) - frontend notes
-- [docker/README.md](docker/README.md) - Docker stack details
-- [api/.env.example](api/.env.example) - environment reference
 
 ## Testing
 

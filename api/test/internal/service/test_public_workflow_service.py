@@ -175,6 +175,36 @@ class TestPublicWorkflowService:
         assert shared.is_public is True
         assert shared.published_at is not None
 
+    def test_share_workflow_to_square_should_fallback_to_other_when_tags_missing(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        workflow_id = uuid4()
+        published = SimpleNamespace(
+            id=workflow_id,
+            account_id=account.id,
+            status=WorkflowStatus.PUBLISHED.value,
+            is_public=False,
+            tags=[],
+            name="1231231123",
+            description="",
+            published_at=None,
+        )
+        service = _build_service(session=_QueueSession([_Query(one_or_none_result=published)]))
+        monkeypatch.setattr(
+            "internal.service.public_workflow_service.TagAssignmentService.match_tags_by_keywords",
+            lambda *_args, **_kwargs: [],
+        )
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+
+        shared = service.share_workflow_to_square(workflow_id, "", account)
+
+        assert shared.tags == ["other"]
+        assert shared.is_public is True
+        assert shared.published_at is not None
+
     def test_share_and_unshare_workflow_should_update_public_fields(self):
         account = SimpleNamespace(id=uuid4())
         workflow = SimpleNamespace(id=uuid4(), account_id=account.id, status=WorkflowStatus.PUBLISHED.value)

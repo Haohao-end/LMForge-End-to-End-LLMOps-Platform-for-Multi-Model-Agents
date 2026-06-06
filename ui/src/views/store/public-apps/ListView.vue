@@ -76,6 +76,17 @@ const handlePreview = (app: PublicApp) => {
   router.push({ name: 'store-public-apps-preview', params: { app_id: app.id } })
 }
 
+const refreshApps = () => {
+  page.value = 1
+  hasMore.value = true
+  void loadApps()
+}
+
+const handleSelectAll = () => {
+  selectedTags.value = []
+  refreshApps()
+}
+
 const toggleTag = (tagId: string) => {
   const index = selectedTags.value.indexOf(tagId)
   if (index > -1) {
@@ -83,15 +94,11 @@ const toggleTag = (tagId: string) => {
   } else {
     selectedTags.value.push(tagId)
   }
-  page.value = 1
-  hasMore.value = true
-  loadApps()
+  refreshApps()
 }
 
 const handleSearch = () => {
-  page.value = 1
-  hasMore.value = true
-  loadApps()
+  refreshApps()
 }
 
 const handleScroll = (event: Event) => {
@@ -144,25 +151,29 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="flex flex-col gap-4 mb-6">
-        <div class="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
-          <span class="text-sm text-gray-500 mr-1 whitespace-nowrap">
-            {{ t('publicApps.list.tags') }}
-          </span>
-          <a
+      <div class="flex items-center justify-between mb-6 gap-4">
+        <div class="flex flex-1 items-center gap-2 overflow-x-auto scrollbar-hide pb-1 min-w-0">
+          <a-button
+            :type="selectedTags.length === 0 ? 'secondary' : 'text'"
+            class="rounded-lg !text-gray-700 px-3"
+            @click="handleSelectAll"
+          >
+            {{ t('store.tools.all') }}
+          </a-button>
+          <a-button
             v-for="tag in tags"
             :key="tag.id"
-            class="rounded-lg px-3 h-8 leading-8 hover:bg-gray-200 transition-all cursor-pointer whitespace-nowrap text-sm"
-            :class="selectedTags.includes(tag.id) ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-gray-100 text-gray-700'"
+            :type="selectedTags.includes(tag.id) ? 'secondary' : 'text'"
+            class="rounded-lg !text-gray-700 px-3"
             @click="toggleTag(tag.id)"
           >
             {{ getTagName(tag.id) }}
-          </a>
+          </a-button>
         </div>
         <a-input-search
           v-model="searchWord"
           :placeholder="t('publicApps.list.searchPlaceholder')"
-          class="w-full sm:w-[240px] bg-white rounded-lg border-gray-300"
+          class="w-[240px] shrink-0 bg-white rounded-lg border-gray-300"
           @search="handleSearch"
         />
       </div>

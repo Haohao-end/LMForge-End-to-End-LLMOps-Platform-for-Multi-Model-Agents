@@ -54,10 +54,12 @@ class PublicAppService(BaseService):
 
     @staticmethod
     def _resolve_public_app_tags(app: App) -> list[str]:
-        """优先使用已保存标签；缺失时根据名称和描述自动兜底。"""
-        if app.tags:
-            return sort_tags_by_priority(list(app.tags))
-        return TagAssignmentService.auto_assign_tags(app.name, app.description)
+        """优先使用已保存标签；缺失时仅做轻量关键词兜底。"""
+        tags = list(getattr(app, "tags", []) or [])
+        if tags:
+            return sort_tags_by_priority(tags)
+        tags = TagAssignmentService.match_tags_by_keywords(app.name, app.description)
+        return tags if tags else ["other"]
 
     def _enrich_tools(self, tools: list[dict]) -> list[dict]:
         """填充工具的完整信息（provider 和 tool 的 label、icon 等）"""
@@ -221,9 +223,13 @@ class PublicAppService(BaseService):
             # 如果提供了标签，使用提供的标签
             tag_list = [t.strip() for t in tags.split(',') if t.strip()]
             tag_list = sort_tags_by_priority(tag_list)
+            if not tag_list:
+                tag_list = ["other"]
         else:
-            # 如果没有提供标签，自动分配
-            tag_list = TagAssignmentService.auto_assign_tags(app.name, app.description)
+            # 如果没有提供标签，使用轻量关键词兜底，避免读写链路反复触发模型
+            tag_list = TagAssignmentService.match_tags_by_keywords(app.name, app.description)
+            if not tag_list:
+                tag_list = ["other"]
 
         # 4.更新应用为公开状态
         self.update(app, **{
@@ -283,6 +289,9 @@ class PublicAppService(BaseService):
                 )
             )
 
+        if requested_tags:
+            filters.append(or_(*[App.tags.contains([tag]) for tag in requested_tags]))
+
         query = (
             self.db.session.query(
                 App,
@@ -294,16 +303,7 @@ class PublicAppService(BaseService):
             .order_by(App.published_at.desc(), App.created_at.desc())
         )
 
-        user_rows = query.all()
-        if requested_tags:
-            user_rows = [
-                row for row in user_rows
-                if set(requested_tags) & set(self._resolve_public_app_tags(row[0]))
-            ]
-
-        total_user_apps = len(user_rows)
-        end = req.current_page.data * req.page_size.data
-        user_rows = user_rows[:end]
+        user_rows = paginator.paginate(query)
 
         forked_app_ids: set[UUID] = set()
 
@@ -346,11 +346,9 @@ class PublicAppService(BaseService):
 
             user_app_list.append(app_dict)
 
-        # 6.手动分页
-        total = total_user_apps
-        start = (req.current_page.data - 1) * req.page_size.data
-        page_end = start + req.page_size.data
-        paginated_apps = user_app_list[start:page_end]
+        # 6.分页器已经在数据库层完成切片，这里直接返回当前页结果
+        total = getattr(paginator, "total_record", len(user_app_list))
+        paginated_apps = user_app_list
 
         # 7.更新分页器的总数与总页数
         if hasattr(paginator, "total_record"):

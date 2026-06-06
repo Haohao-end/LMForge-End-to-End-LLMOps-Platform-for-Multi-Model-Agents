@@ -127,6 +127,9 @@ class _FakeApp:
         def __eq__(self, _other):
             return self
 
+        def contains(self, *_args, **_kwargs):
+            return self
+
         def in_(self, *_args, **_kwargs):
             return self
 
@@ -138,6 +141,7 @@ class _FakeApp:
     status = _Col()
     account_id = _Col()
     original_app_id = _Col()
+    tags = _Col()
 
     def __init__(self, **kwargs):
         self.id = kwargs.pop("id", None)
@@ -205,6 +209,36 @@ class TestPublicAppService:
         assert shared.is_public is True
         assert shared.published_at is not None
 
+    def test_share_app_to_square_should_fallback_to_other_when_tags_missing(self, monkeypatch):
+        account = SimpleNamespace(id=uuid4())
+        app_id = uuid4()
+        published_app = SimpleNamespace(
+            id=app_id,
+            account_id=account.id,
+            status=AppStatus.PUBLISHED.value,
+            is_public=False,
+            tags=[],
+            name="1231231123",
+            description="",
+            published_at=None,
+        )
+        service = _build_service(session=_QueueSession([_Query(one_or_none_result=published_app)]))
+        monkeypatch.setattr(
+            "internal.service.public_app_service.TagAssignmentService.match_tags_by_keywords",
+            lambda *_args, **_kwargs: [],
+        )
+        monkeypatch.setattr(
+            service,
+            "update",
+            lambda target, **kwargs: target.__dict__.update(kwargs) or target,
+        )
+
+        shared = service.share_app_to_square(app_id, "", account)
+
+        assert shared.tags == ["other"]
+        assert shared.is_public is True
+        assert shared.published_at is not None
+
     def test_share_and_unshare_app_should_update_public_fields(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())
         app = SimpleNamespace(id=uuid4(), account_id=account.id, status=AppStatus.PUBLISHED.value)
@@ -266,21 +300,21 @@ class TestPublicAppService:
             created_at=datetime(2025, 12, 31, tzinfo=UTC),
         )
         creator = SimpleNamespace(name="Alice", avatar="https://creator/icon.png")
-        session = _QueueSession(
-            [
-                _Query(all_result=[(app, creator.name, creator.avatar)]),
-                _Query(all_result=[(app.id,)]),
-            ]
-        )
+        session = _QueueSession([_Query(), _Query(all_result=[(app.id,)])])
         service = _build_service(session=session)
+        captured = {}
 
         class _Paginator:
             def __init__(self, db, req):
                 self.db = db
                 self.req = req
-                self.total_record = 0
-                self.total_page = 0
-                self.total = 0
+                self.total_record = 1
+                self.total_page = 1
+                self.total = 1
+
+            def paginate(self, query):
+                captured["query"] = query
+                return [(app, creator.name, creator.avatar)]
 
         monkeypatch.setattr("internal.service.public_app_service.Paginator", _Paginator)
         apps, paginator = service.get_public_apps_with_page(
@@ -304,6 +338,8 @@ class TestPublicAppService:
         assert paginator.total_record == 1
         assert paginator.total_page == 1
         assert paginator.total == 1
+        assert len(captured["query"].filter_args) == 3
+        assert "tags" in str(captured["query"].filter_args[2])
 
     def test_get_public_apps_with_page_should_filter_by_requested_tags(self, monkeypatch):
         app_1 = SimpleNamespace(
@@ -326,18 +362,18 @@ class TestPublicAppService:
             published_at=datetime(2026, 1, 2, tzinfo=UTC),
             created_at=datetime(2025, 12, 30, tzinfo=UTC),
         )
-        session = _QueueSession([
-            _Query(all_result=[
-                (app_1, "Bob", ""),
-                (app_2, "Carol", ""),
-            ]),
-        ])
+        session = _QueueSession([_Query()])
         service = _build_service(session=session)
+        captured = {}
 
         class _Paginator:
             def __init__(self, db, req):
-                self.total_record = 0
-                self.total_page = 0
+                self.total_record = 1
+                self.total_page = 1
+
+            def paginate(self, query):
+                captured["query"] = query
+                return [(app_1, "Bob", "")]
 
         monkeypatch.setattr("internal.service.public_app_service.Paginator", _Paginator)
         apps, _paginator = service.get_public_apps_with_page(
@@ -348,6 +384,8 @@ class TestPublicAppService:
         assert [item["id"] for item in apps] == [str(app_1.id)]
         assert apps[0]["creator_name"] == "Bob"
         assert apps[0]["is_forked"] is False
+        assert len(captured["query"].filter_args) == 3
+        assert "tags" in str(captured["query"].filter_args[2])
 
     def test_fork_public_app_should_support_public_path(self, monkeypatch):
         account = SimpleNamespace(id=uuid4())
@@ -806,6 +844,41 @@ class TestPublicAppService:
         assert detail["is_forked"] is False
         assert detail["creator_name"] == "未知用户"
         assert detail["tags"] == [AppCategory.GENERAL.value]
+
+    def test_get_public_app_detail_should_fallback_to_other_without_model_call(self, monkeypatch):
+        app = SimpleNamespace(
+            id=uuid4(),
+            account_id=uuid4(),
+            is_public=True,
+            status=AppStatus.PUBLISHED.value,
+            name="1231231123",
+            icon="https://icon",
+            description="",
+            tags=[],
+            published_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2025, 1, 1, tzinfo=UTC),
+            app_config=None,
+        )
+        session = _QueueSession(
+            [
+                _Query(one_or_none_result=app),
+                _Query(one_or_none_result=None),
+            ]
+        )
+        service = _build_service(session=session)
+
+        monkeypatch.setattr(
+            "internal.service.public_app_service.TagAssignmentService.match_tags_by_keywords",
+            lambda *_args, **_kwargs: [],
+        )
+        monkeypatch.setattr(
+            "internal.service.public_app_service.TagAssignmentService.assign_tags_by_deepseek",
+            lambda *_args, **_kwargs: pytest.fail("public app detail should not call DeepSeek"),
+        )
+
+        detail = service.get_public_app_detail(str(app.id), None)
+
+        assert detail["tags"] == ["other"]
 
     def test_get_public_app_detail_should_raise_when_not_found(self):
         service = _build_service(session=_QueueSession([_Query(one_or_none_result=None)]))

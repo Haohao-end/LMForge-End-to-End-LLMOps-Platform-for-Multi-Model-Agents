@@ -22,10 +22,15 @@ const slotStub = {
   template: '<div><slot /></div>',
 }
 
+const buttonStub = {
+  emits: ['click'],
+  template: '<button type="button" v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>',
+}
+
 const globalStubs = {
   'a-spin': slotStub,
   'a-avatar': slotStub,
-  'a-button': slotStub,
+  'a-button': buttonStub,
   'a-tag': slotStub,
   'a-card': slotStub,
   'a-col': slotStub,
@@ -100,6 +105,9 @@ describe('skills store list', () => {
     expect(wrapper.text()).not.toContain('本地技能包目录')
     expect(wrapper.text()).not.toContain('当前版本')
     expect(wrapper.text()).not.toContain('版本历史')
+    expect(wrapper.text()).toContain('全部')
+    expect(wrapper.html()).toContain('rounded-lg !text-gray-700 px-3')
+    expect(wrapper.html()).not.toContain('skills-category-btn')
 
     const img = wrapper.find('img[alt="代码工坊"]')
     expect(img.exists()).toBe(true)

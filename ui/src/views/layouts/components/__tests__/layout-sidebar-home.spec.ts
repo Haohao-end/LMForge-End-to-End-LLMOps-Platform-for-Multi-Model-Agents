@@ -105,6 +105,14 @@ const mountSidebar = () => {
   })
 }
 
+const createRecentConversation = (index: number) => ({
+  id: `conversation-${index + 1}`,
+  name: `Conversation ${index + 1}`,
+  source_type: index % 2 === 0 ? 'assistant_agent' : 'app_debugger',
+  app_id: index % 2 === 0 ? '' : `app-${index + 1}`,
+  message_id: `message-${index + 1}`,
+})
+
 describe('LayoutSidebar home navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -159,6 +167,53 @@ describe('LayoutSidebar home navigation', () => {
     expect(wrapper.findAll('a[data-to="/store/mcp"] [data-icon="storage"]')).toHaveLength(0)
   })
 
+  it('keeps auto-loading recent conversations until the list becomes scrollable', async () => {
+    const calledLimits: number[] = []
+    const recentConversationPages = [
+      Array.from({ length: 13 }, (_item, index) => createRecentConversation(index)),
+      Array.from({ length: 30 }, (_item, index) => createRecentConversation(index)),
+      Array.from({ length: 35 }, (_item, index) => createRecentConversation(index)),
+      Array.from({ length: 35 }, (_item, index) => createRecentConversation(index)),
+    ]
+
+    mocks.loadRecentConversations.mockImplementation(async (limit: number) => {
+      calledLimits.push(limit)
+      const nextList =
+        limit <= 20
+          ? recentConversationPages[0]
+          : limit <= 40
+            ? recentConversationPages[1]
+            : limit <= 60
+              ? recentConversationPages[2]
+              : recentConversationPages[3]
+      mocks.recentConversationsRef.value = nextList as any
+    })
+
+    const wrapper = mountSidebar()
+    const list = wrapper.get('.recent-conversation-list')
+
+    Object.defineProperty(list.element, 'scrollTop', {
+      value: 0,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(list.element, 'clientHeight', {
+      value: 400,
+      configurable: true,
+    })
+    Object.defineProperty(list.element, 'scrollHeight', {
+      value: 400,
+      configurable: true,
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    expect(calledLimits).toEqual([20, 40, 60, 80])
+    expect(mocks.loadRecentConversations).toHaveBeenCalledTimes(4)
+    expect(wrapper.text()).toContain('Conversation 35')
+  })
+
   it('loads more recent conversations when the sidebar list reaches the bottom', async () => {
     mocks.allRecentConversations = Array.from({ length: 80 }, (_item, index) => ({
       id: `conversation-${index + 1}`,
@@ -173,10 +228,6 @@ describe('LayoutSidebar home navigation', () => {
     })
 
     const wrapper = mountSidebar()
-    await flushPromises()
-
-    expect(mocks.loadRecentConversations).toHaveBeenCalledWith(20)
-
     const list = wrapper.get('.recent-conversation-list')
     Object.defineProperty(list.element, 'scrollTop', {
       value: 200,
@@ -191,6 +242,10 @@ describe('LayoutSidebar home navigation', () => {
       value: 380,
       configurable: true,
     })
+
+    await flushPromises()
+
+    expect(mocks.loadRecentConversations).toHaveBeenCalledWith(20)
 
     await list.trigger('scroll')
     await flushPromises()
