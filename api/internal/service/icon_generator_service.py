@@ -14,6 +14,7 @@ from internal.core.language_model import LanguageModelManager
 from internal.entity.app_entity import GENERATE_ICON_PROMPT_TEMPLATE
 from internal.exception import FailException
 from internal.lib.helper import utc_now_naive
+from internal.lib.safe_http_client import safe_request
 from .base_service import BaseService
 from .cos_service import CosService
 
@@ -170,7 +171,7 @@ class IconGeneratorService(BaseService):
         }
 
         try:
-            response = requests.post(url, json=body, headers=headers, timeout=60)
+            response = safe_request("POST", url, json=body, headers=headers, timeout=60)
             response.raise_for_status()
         except Exception as e:
             self._raise_request_error(provider_name, e)
@@ -252,8 +253,7 @@ class IconGeneratorService(BaseService):
             str: COS中的图片URL
         """
         # 1. 下载图片
-        response = requests.get(image_url, timeout=30)
-        response.raise_for_status()
+        response = safe_request("GET", image_url, timeout=30)
 
         image_data = response.content
 

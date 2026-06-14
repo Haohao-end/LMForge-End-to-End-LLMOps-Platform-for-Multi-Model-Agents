@@ -303,14 +303,14 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(219,234,254,0.9),_rgba(248,250,252,1)_40%,_rgba(255,255,255,1)_100%)]">
-    <div class="grid h-full min-h-0 gap-5 p-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <div class="compare-editor-scroll min-h-0 overflow-y-auto pr-2">
+  <div class="prompt-compare-page flex-1 min-h-0 min-w-0 overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(219,234,254,0.9),_rgba(248,250,252,1)_40%,_rgba(255,255,255,1)_100%)]">
+    <div class="grid h-full min-h-0 min-w-0 gap-4 p-4 xl:grid-cols-[minmax(460px,1.45fr)_minmax(340px,2.9fr)]">
+      <div class="compare-editor-scroll min-h-0 min-w-0 overflow-y-auto pr-2">
         <div class="space-y-4">
           <div
             v-for="lane in lanes"
             :key="lane.key"
-            class="rounded-2xl border border-white/70 bg-white/85 p-5 shadow-sm backdrop-blur"
+            class="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm backdrop-blur"
           >
             <div class="flex flex-col gap-3 2xl:flex-row 2xl:items-start 2xl:justify-between">
               <div>
@@ -338,7 +338,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div class="mt-3">
+            <div class="mt-3 h-[560px]">
               <markdown-editor
                 :model-value="lane.preset_prompt"
                 :max-length="5000"
@@ -374,12 +374,12 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/70 bg-white/80 shadow-sm backdrop-blur">
-        <div class="grid min-h-0 flex-1 gap-px bg-gray-100 xl:grid-cols-2">
+      <div class="prompt-compare-page__chat-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl border border-white/70 bg-white/80 shadow-sm backdrop-blur">
+        <div class="grid min-h-0 min-w-0 flex-1 gap-px bg-gray-100 xl:grid-cols-2">
           <div
             v-for="lane in lanes"
             :key="`chat-${lane.key}`"
-            class="min-h-0 flex flex-col bg-white"
+            class="min-h-0 min-w-0 flex flex-col bg-white"
           >
             <div class="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
               <div>
@@ -395,12 +395,9 @@ onMounted(async () => {
 
             <div
               :ref="(el) => setLaneScrollRef(lane.key, el as HTMLDivElement | null)"
-              class="compare-output-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3"
+              class="compare-output-scroll flex-1 min-h-0 min-w-0 overflow-y-auto px-3 py-3"
             >
-              <div v-if="lane.messages.length === 0" class="flex h-full items-center justify-center">
-                <a-empty :description="t('appStudio.promptCompare.emptyLane')" />
-              </div>
-              <div v-else class="flex flex-col gap-6">
+              <div v-if="lane.messages.length > 0" class="flex flex-col gap-6">
                 <div v-for="message in lane.messages" :key="`${lane.key}-${message.created_at}-${message.id || message.query}`" class="flex flex-col gap-6">
                   <human-message :account="accountStore.account" :query="message.query" :image_urls="[]" />
                   <ai-message
@@ -433,34 +430,36 @@ onMounted(async () => {
               :placeholder="t('appStudio.promptCompare.queryPlaceholder')"
               @keydown.enter.exact.prevent="handleSubmit"
             />
-            <div class="mt-3 flex items-center justify-between gap-3">
-              <div class="text-xs text-gray-500">
-                {{ t('appStudio.promptCompare.keyboardHint') }}
+            <div class="mt-3 flex items-center">
+              <div class="ml-auto flex flex-wrap items-center justify-end gap-3">
+                <div class="text-xs text-gray-500 whitespace-nowrap">
+                  {{ t('appStudio.promptCompare.keyboardHint') }}
+                </div>
+                <a-space :size="8">
+                  <a-button class="rounded-lg" :disabled="anyLaneLoading" @click="handleClear">
+                    {{ t('appStudio.promptCompare.clearCompare') }}
+                  </a-button>
+                  <a-button
+                    class="rounded-lg"
+                    :loading="stopLoading"
+                    :disabled="!anyLaneLoading"
+                    @click="handleStop"
+                  >
+                    {{ t('appStudio.promptCompare.stopResponse') }}
+                  </a-button>
+                  <a-button
+                    type="primary"
+                    class="rounded-lg"
+                    :loading="anyLaneLoading"
+                    @click="handleSubmit"
+                  >
+                    <template #icon>
+                      <icon-send />
+                    </template>
+                    {{ t('appStudio.promptCompare.send') }}
+                  </a-button>
+                </a-space>
               </div>
-              <a-space :size="8">
-                <a-button class="rounded-lg" :disabled="anyLaneLoading" @click="handleClear">
-                  {{ t('appStudio.promptCompare.clearCompare') }}
-                </a-button>
-                <a-button
-                  class="rounded-lg"
-                  :loading="stopLoading"
-                  :disabled="!anyLaneLoading"
-                  @click="handleStop"
-                >
-                  {{ t('appStudio.promptCompare.stopResponse') }}
-                </a-button>
-                <a-button
-                  type="primary"
-                  class="rounded-lg"
-                  :loading="anyLaneLoading"
-                  @click="handleSubmit"
-                >
-                  <template #icon>
-                    <icon-send />
-                  </template>
-                  {{ t('appStudio.promptCompare.send') }}
-                </a-button>
-              </a-space>
             </div>
           </div>
         </div>
@@ -470,6 +469,43 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.prompt-compare-page {
+  min-width: 0;
+}
+
+.prompt-compare-page :deep(.compare-editor-scroll),
+.prompt-compare-page :deep(.compare-output-scroll) {
+  min-width: 0;
+}
+
+.prompt-compare-page :deep(.message-bubble-content) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0;
+}
+
+.prompt-compare-page :deep(.compare-output-scroll .flex.max-w-full.min-w-0.items-start.gap-2.group) {
+  width: 100%;
+}
+
+.prompt-compare-page :deep(.compare-output-scroll .flex.min-w-0.max-w-full.flex-col.items-end.gap-2) {
+  flex: 1 1 0%;
+  width: 100%;
+}
+
+.prompt-compare-page :deep(.compare-output-scroll .flex-1.min-w-0.max-w-full.flex.flex-col.items-start.gap-2) {
+  width: 100%;
+}
+
+.prompt-compare-page :deep(.message-gallery-card) {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.prompt-compare-page :deep(.message-artifact-card) {
+  width: 100%;
+}
+
 .compare-editor-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;

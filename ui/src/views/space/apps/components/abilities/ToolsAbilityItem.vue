@@ -705,7 +705,7 @@ onMounted(() => {
                   : t('appStudio.abilities.tools.builtinPlugin')
               }}
             </div>
-            <a-button size="mini" type="text" class="!text-gray-700 ml-6">
+            <a-button size="mini" type="text" class="!text-gray-700 ml-6" @click="toolsModalVisible = false">
               <template #icon>
                 <icon-close />
               </template>

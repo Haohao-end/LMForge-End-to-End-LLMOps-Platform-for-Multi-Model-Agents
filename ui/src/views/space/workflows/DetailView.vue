@@ -407,11 +407,12 @@ const canSaveDraftGraph = () => {
 const saveDraftGraph = async (is_notify: boolean = false) => {
   if (isInitializing.value || isPreviewMode.value) return // 预览模式下不保存
   if (!canSaveDraftGraph()) return
-  await handleUpdateDraftGraph(
+  const isSaved = await handleUpdateDraftGraph(
     workflowId.value,
     convertGraphToReq(nodes.value, edges.value),
     is_notify,
   )
+  if (!isSaved) return
   workflow.value.updated_at = Math.floor(Date.now() / 1000)
 }
 const debounceSaveDraftGraph = debounce(() => {

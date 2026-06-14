@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
+import socket
 
 import pytest
 import yaml
@@ -32,6 +33,43 @@ from internal.core.tools.mcp_tools.providers.mcp_provider_manager import (
     McpProviderManager,
 )
 from internal.exception import FailException, NotFoundException, ValidateErrorException
+
+
+@pytest.fixture(autouse=True)
+def _safe_http_dns(monkeypatch):
+    def _fake_getaddrinfo(host, port, *args, **kwargs):
+        normalized = str(host or "").lower().rstrip(".")
+        mapping = {
+            "private.example.com": "10.0.0.1",
+            "rebound.example.com": "93.184.216.34",
+            "api.example.com": "93.184.216.34",
+            "example.com": "93.184.216.34",
+            "a.com": "93.184.216.34",
+            "kolors.example": "93.184.216.34",
+            "qwen.example": "93.184.216.34",
+            "cos.example.com": "93.184.216.34",
+        }
+        ip = mapping.get(normalized)
+        if ip is None:
+            try:
+                socket.inet_pton(socket.AF_INET, normalized)
+                ip = normalized
+            except OSError:
+                try:
+                    socket.inet_pton(socket.AF_INET6, normalized)
+                    ip = normalized
+                except OSError:
+                    ip = "93.184.216.34"
+
+        family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+        if family == socket.AF_INET6:
+            sockaddr = (ip, port or 0, 0, 0)
+        else:
+            sockaddr = (ip, port or 0)
+        return [(family, socket.SOCK_STREAM, 6, "", sockaddr)]
+
+    monkeypatch.setattr("internal.lib.safe_http_client.socket.getaddrinfo", _fake_getaddrinfo)
+    yield
 
 
 def test_api_provider_manager_should_create_dynamic_model_from_parameters():
@@ -73,18 +111,18 @@ def test_api_provider_manager_should_create_tool_function_and_dispatch_parameter
 ):
     captured = {}
 
-    def _fake_request(method, url, params, json, headers, cookies, timeout=None):
+    def _fake_request(method, url, **kwargs):
         captured["method"] = method
         captured["url"] = url
-        captured["params"] = params
-        captured["json"] = json
-        captured["headers"] = headers
-        captured["cookies"] = cookies
-        captured["timeout"] = timeout
+        captured["params"] = kwargs.get("params")
+        captured["json"] = kwargs.get("json")
+        captured["headers"] = kwargs.get("headers")
+        captured["cookies"] = kwargs.get("cookies")
+        captured["timeout"] = kwargs.get("timeout")
         return SimpleNamespace(text="tool-response")
 
     monkeypatch.setattr(
-        "internal.core.tools.api_tools.providers.api_provider_manager.requests.request",
+        "internal.core.tools.api_tools.providers.api_provider_manager.safe_request",
         _fake_request,
     )
 
@@ -199,6 +237,37 @@ def test_openapi_schema_should_keep_only_get_and_post_interfaces():
     assert "get" in schema.paths["/items/{id}"]
     assert "post" in schema.paths["/items"]
     assert schema.paths["/items/{id}"]["get"]["operationId"] == "get_item"
+
+
+@pytest.mark.parametrize(
+    "server, message",
+    [
+        ("http://127.0.0.1", "URL解析到不允许的地址"),
+        ("http://localhost", "不允许访问本地hostname"),
+        ("http://0.0.0.0", "URL解析到不允许的地址"),
+        ("http://[::1]", "URL解析到不允许的地址"),
+        ("http://169.254.169.254/latest/meta-data/", "URL解析到不允许的地址"),
+        ("http://10.0.0.1", "URL解析到不允许的地址"),
+        ("http://172.16.0.1", "URL解析到不允许的地址"),
+        ("http://192.168.1.1", "URL解析到不允许的地址"),
+        ("https://private.example.com", "URL解析到不允许的地址"),
+        ("ftp://example.com", "URL必须是绝对的http或https地址"),
+        ("http:///path", "URL必须包含主机名"),
+    ],
+)
+def test_openapi_schema_should_reject_private_or_invalid_servers(server, message):
+    with pytest.raises(ValidateErrorException, match=message):
+        OpenAPISchema(server=server, description="tool provider", paths=_valid_openapi_paths())
+
+
+def test_openapi_schema_should_allow_public_http_and_https_urls():
+    schema = OpenAPISchema(
+        server="https://example.com/",
+        description="tool provider",
+        paths=_valid_openapi_paths(),
+    )
+
+    assert schema.server == "https://example.com"
 
 
 @pytest.mark.parametrize(

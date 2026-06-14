@@ -184,10 +184,6 @@ watch(
 
 <template>
   <div class="bg-white flex-1 w-full min-h-0 px-6 py-5">
-    <!-- 顶部提示信息 -->
-    <a-alert class="mb-5">
-      {{ t('appStudio.published.leakAlert') }}
-    </a-alert>
     <!-- 发布渠道列表 -->
     <a-spin :loading="getPublishedConfigLoading" class="w-full">
       <table class="w-full">

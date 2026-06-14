@@ -4,9 +4,8 @@ import os
 import uuid
 from urllib.parse import urlparse
 
-import requests
-
 from internal.service.cos_service import CosService
+from internal.lib.safe_http_client import safe_request
 
 
 def _guess_image_extension(image_url: str, content_type: str = "") -> str:
@@ -36,8 +35,7 @@ def persist_remote_image(image_url: str, *, source: str) -> str:
     if not image_url:
         raise ValueError("image_url is required")
 
-    response = requests.get(image_url, timeout=60)
-    response.raise_for_status()
+    response = safe_request("GET", image_url, timeout=60)
 
     extension = _guess_image_extension(
         image_url=image_url,

@@ -11,26 +11,20 @@ class _FakeResponse:
         return None
 
 
-class _FakeSession:
-    def __init__(self, handler):
-        self.handler = handler
-        self.trust_env = True
-
-    def post(self, url, json, headers, timeout):
-        return self.handler(url, json, headers, timeout)
-
-
 def test_mcp_tool_factory_should_list_remote_tools_and_call_selected_tool(monkeypatch):
     calls = []
 
-    def _fake_post(url, json, headers, timeout):
+    def _fake_safe_request(method, url, **kwargs):
         calls.append({
+            "method": method,
             "url": url,
-            "json": json,
-            "headers": headers,
-            "timeout": timeout,
+            "json": kwargs.get("json"),
+            "headers": kwargs.get("headers"),
+            "timeout": kwargs.get("timeout"),
+            "allow_redirects": kwargs.get("allow_redirects"),
         })
 
+        json = kwargs.get("json") or {}
         if json["method"] == "tools/list":
             return _FakeResponse(
                 {
@@ -81,8 +75,8 @@ def test_mcp_tool_factory_should_list_remote_tools_and_call_selected_tool(monkey
         raise AssertionError(f"unexpected method: {json['method']}")
 
     monkeypatch.setattr(
-        "internal.core.tools.mcp_tools.providers.mcp_tool_factory.requests.Session",
-        lambda: _FakeSession(_fake_post),
+        "internal.core.tools.mcp_tools.providers.mcp_tool_factory.safe_request",
+        _fake_safe_request,
     )
 
     factory = McpToolFactory()
@@ -114,6 +108,7 @@ def test_mcp_tool_factory_should_list_remote_tools_and_call_selected_tool(monkey
 
     assert result_text == "杭州今天晴"
     assert [call["json"]["method"] for call in calls] == ["tools/list", "tools/call"]
+    assert [call["method"] for call in calls] == ["POST", "POST"]
     assert calls[0]["timeout"] == 15
     assert calls[0]["headers"]["Authorization"] == "Bearer token"
 

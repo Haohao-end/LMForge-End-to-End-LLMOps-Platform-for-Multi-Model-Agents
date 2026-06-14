@@ -21,7 +21,7 @@ parameters:
   max: 65536
 metadata:
   pricing:
-    input: 0.29
-    output: 0.95
+    input: 0.00029
+    output: 0.00095
     unit: 0.001
     currency: RMB

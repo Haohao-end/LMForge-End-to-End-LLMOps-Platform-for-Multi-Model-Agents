@@ -4,15 +4,14 @@ import json
 import logging
 import hashlib
 from dataclasses import dataclass, field
-from functools import lru_cache
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-import requests
 from langchain_core.tools import BaseTool, StructuredTool
 
 from .mcp_schema_compiler import McpSchemaCompiler
+from internal.lib.safe_http_client import safe_request
 
 DEFAULT_MCP_TOOL_TIMEOUT_SECONDS = 30
 SUPPORTED_HTTP_TRANSPORTS = {"http", "sse", "streamable_http", "streamable-http"}
@@ -718,7 +717,8 @@ class McpToolFactory:
         if params is not None:
             payload["params"] = params
 
-        response = self._get_session().post(
+        response = safe_request(
+            "POST",
             url,
             json=payload,
             headers=headers,
@@ -740,11 +740,3 @@ class McpToolFactory:
                 return decoded["result"]
             return decoded
         return decoded
-
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def _get_session() -> requests.Session:
-        session = requests.Session()
-        # MCP 远端服务应直接访问公网地址，不继承当前进程里可能存在的错误代理配置。
-        session.trust_env = False
-        return session

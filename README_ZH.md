@@ -10,7 +10,7 @@
   </p>
 
   <p align="center">
-    <strong>本项目由 <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> 赞助</strong>
+    <strong>本项目由 <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> 和 <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">Bloome</a> 赞助</strong>
   </p>
 
   <p align="center">
@@ -233,7 +233,7 @@ npm run test:unit -- --run
 
 ## 鸣谢
 
-- 感谢 Atlas Cloud 为 OpenAgent 提供支持。
+- 感谢 Atlas Cloud 和 Bloome 为 OpenAgent 提供支持。
 - 感谢 Rui Yang 和 Haoyu Wang（Johns Hopkins University）以负责任披露的方式报告了内置工具图标 URL 构造中的 Host Header poisoning 问题，帮助项目进一步改进安全性。
 
 <p align="right">(<a href="#readme-top">返回顶部</a>)</p>

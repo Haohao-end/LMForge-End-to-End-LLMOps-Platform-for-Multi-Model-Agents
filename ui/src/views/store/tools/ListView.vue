@@ -73,7 +73,8 @@ const handleCreateSubmit = async ({
   errors: Record<string, ValidatedError> | undefined
 }) => {
   if (errors) return
-  await handleCreateApiToolProvider(values as CreateApiToolProviderRequest)
+  const isSaved = await handleCreateApiToolProvider(values as CreateApiToolProviderRequest)
+  if (!isSaved) return
   handleCreateCancel()
 }
 

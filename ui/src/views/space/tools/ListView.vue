@@ -223,7 +223,8 @@ const extractOpenapiSchemaJson = (content: string): string => {
 
 const handleUseOpenapiSchemaExample = async () => {
   form.value.openapi_schema = openapiSchemaInputExample
-  await handleValidateOpenAPISchema(form.value.openapi_schema)
+  const isValid = await handleValidateOpenAPISchema(form.value.openapi_schema)
+  if (!isValid) return
   showOpenapiSchemaExampleModal.value = false
   Message.success(t('space.tools.aiFilled'))
 }
@@ -257,7 +258,8 @@ const handleGenerateOpenapiSchemaByAI = async () => {
     const schemaObject = JSON.parse(schemaText)
     form.value.openapi_schema = JSON.stringify(schemaObject, null, 2)
 
-    await handleValidateOpenAPISchema(form.value.openapi_schema)
+    const isValid = await handleValidateOpenAPISchema(form.value.openapi_schema)
+    if (!isValid) return
     Message.success(t('space.tools.aiFilled'))
   } catch (_error: unknown) {
     Message.error(t('space.tools.aiFillFailed'))
@@ -357,16 +359,19 @@ const handleSubmit = async ({
   if (errors) return
 
   // 2.根据不同的类型发起不同的请求
+  let isSaved = false
   if (showCreateModal.value) {
     // 3.调用处理器发起创建请求
-    await handleCreateApiToolProvider(values as CreateApiToolProviderRequest)
+    isSaved = await handleCreateApiToolProvider(values as CreateApiToolProviderRequest)
   } else if (showUpdateModal.value) {
     // 4.调用接口发起更新API工具请求
-    await handleUpdateApiToolProvider(
+    isSaved = await handleUpdateApiToolProvider(
       api_tool_providers.value[showIdx.value]['id'],
       values as CreateApiToolProviderRequest,
     )
   }
+
+  if (!isSaved) return
 
   // 5.执行后续操作，涵盖隐藏模态窗、隐藏抽屉
   handleCancel()

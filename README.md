@@ -10,7 +10,7 @@
   </p>
 
   <p align="center">
-    <strong>Sponsored by <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a></strong>
+    <strong>Sponsored by <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> and <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">Bloome</a></strong>
   </p>
 
   <p align="center">
@@ -233,7 +233,7 @@ The repository already includes automated backend and frontend tests.
 
 ## Acknowledgments
 
-- Thanks to Atlas Cloud for supporting OpenAgent.
+- Thanks to Atlas Cloud and Bloome for supporting OpenAgent.
 - Special thanks to Rui Yang and Haoyu Wang (Johns Hopkins University) for responsibly reporting a Host Header poisoning issue in the built-in tool icon URL construction and helping improve the security of this project.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

@@ -21,12 +21,12 @@ parameters:
   max: 202752
 metadata:
   pricing:
-    input: 1.4
-    output: 4.4
+    input: 0.0014
+    output: 0.0044
     unit: 0.001
     currency: RMB
   pricing_cache_hit:
-    input: 1.26
-    output: 3.96
+    input: 0.00126
+    output: 0.00396
     unit: 0.001
     currency: RMB

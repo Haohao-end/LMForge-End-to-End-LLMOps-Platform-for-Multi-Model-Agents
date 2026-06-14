@@ -639,16 +639,17 @@ class TestHttpRequestNode:
     ):
         captured = {}
 
-        def _fake_get(url, headers, params, timeout=None):
+        def _fake_safe_request(method, url, **kwargs):
+            captured["method"] = method
             captured["url"] = url
-            captured["headers"] = headers
-            captured["params"] = params
-            captured["timeout"] = timeout
+            captured["headers"] = kwargs.get("headers")
+            captured["params"] = kwargs.get("params")
+            captured["timeout"] = kwargs.get("timeout")
             return SimpleNamespace(text="ok-get", status_code=200)
 
         monkeypatch.setattr(
-            "internal.core.workflow.nodes.http_request.http_request_node.requests.get",
-            _fake_get,
+            "internal.core.workflow.nodes.http_request.http_request_node.safe_request",
+            _fake_safe_request,
         )
 
         node_data = HttpRequestNodeData(
@@ -688,17 +689,18 @@ class TestHttpRequestNode:
     def test_http_request_node_should_send_non_get_request_with_body(self, monkeypatch):
         captured = {}
 
-        def _fake_post(url, headers, params, data, timeout=None):
+        def _fake_safe_request(method, url, **kwargs):
+            captured["method"] = method
             captured["url"] = url
-            captured["headers"] = headers
-            captured["params"] = params
-            captured["data"] = data
-            captured["timeout"] = timeout
+            captured["headers"] = kwargs.get("headers")
+            captured["params"] = kwargs.get("params")
+            captured["data"] = kwargs.get("data")
+            captured["timeout"] = kwargs.get("timeout")
             return SimpleNamespace(text="ok-post", status_code=201)
 
         monkeypatch.setattr(
-            "internal.core.workflow.nodes.http_request.http_request_node.requests.post",
-            _fake_post,
+            "internal.core.workflow.nodes.http_request.http_request_node.safe_request",
+            _fake_safe_request,
         )
 
         node_data = HttpRequestNodeData(

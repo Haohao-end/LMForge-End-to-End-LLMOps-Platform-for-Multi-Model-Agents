@@ -182,10 +182,10 @@ onMounted(async () => {
 
 <template>
   <div class="bg-gray-50 flex-1 w-full min-h-0 overflow-hidden">
-    <a-spin :loading="loading" class="h-full min-h-0">
+    <a-spin :loading="loading" class="h-full min-h-0 w-full">
       <div
         data-testid="versions-scroll-container"
-        class="h-full min-h-0 overflow-y-auto overflow-x-hidden scrollbar-w-none"
+        class="h-full min-h-0 overflow-y-scroll overflow-x-hidden scrollbar-w-none"
       >
         <div class="space-y-4 p-6">
           <div class="overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm">

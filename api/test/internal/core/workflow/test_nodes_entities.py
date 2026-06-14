@@ -113,6 +113,29 @@ def test_http_request_node_data_should_normalize_url_outputs_and_validate_inputs
         )
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1",
+        "http://0.0.0.0",
+        "http://[::1]",
+        "http://10.0.0.1",
+        "http://172.16.0.1",
+        "http://192.168.1.1",
+        "https://private.example.com",
+    ],
+)
+def test_http_request_node_data_should_reject_blocked_urls(url):
+    with pytest.raises(ValidateErrorException, match="URL解析到不允许的地址"):
+        HttpRequestNodeData(
+            id=uuid4(),
+            node_type="http_request",
+            title="http",
+            url=url,
+            inputs=[],
+        )
+
+
 @pytest.mark.parametrize("outputs_value", [None, [], "invalid"])
 def test_tool_node_data_should_fallback_default_outputs(outputs_value):
     node_data = ToolNodeData(

@@ -14,6 +14,11 @@ import { Message, Modal } from '@arco-design/web-vue'
 import type { CreateApiToolProviderRequest, UpdateApiToolProviderRequest } from '@/models/api-tool'
 import { getErrorMessage } from '@/utils/error'
 
+const notifyRequestError = (error: unknown, fallbackMessage: string) => {
+  Message.error(getErrorMessage(error, fallbackMessage))
+  return false
+}
+
 export const useGetApiToolProvider = () => {
   // 1.定义hooks所需数据
   const loading = ref(false)
@@ -140,6 +145,9 @@ export const useUpdateApiToolProvider = () => {
       loading.value = true
       const resp = await updateApiToolProvider(provider_id, req)
       Message.success(resp.message)
+      return true
+    } catch (error: unknown) {
+      return notifyRequestError(error, '更新插件失败，请稍后重试')
     } finally {
       loading.value = false
     }
@@ -158,6 +166,9 @@ export const useCreateApiToolProvider = () => {
       loading.value = true
       const resp = await createApiToolProvider(req)
       Message.success(resp.message)
+      return true
+    } catch (error: unknown) {
+      return notifyRequestError(error, '创建插件失败，请稍后重试')
     } finally {
       loading.value = false
     }
@@ -176,6 +187,9 @@ export const useValidateOpenAPISchema = () => {
       loading.value = true
       const resp = await validateOpenAPISchema(openapi_schema)
       Message.success(resp.message)
+      return true
+    } catch (error: unknown) {
+      return notifyRequestError(error, '校验 OpenAPI Schema 失败，请稍后重试')
     } finally {
       loading.value = false
     }

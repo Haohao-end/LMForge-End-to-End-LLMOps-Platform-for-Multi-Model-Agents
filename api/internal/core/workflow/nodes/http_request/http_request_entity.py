@@ -4,6 +4,7 @@ from pydantic import Field, HttpUrl, field_validator
 from internal.core.workflow.entities.node_entity import BaseNodeData
 from internal.core.workflow.entities.variable_entity import VariableEntity, VariableType, VariableValueType
 from internal.exception import ValidateErrorException
+from internal.lib.safe_http_client import validate_safe_http_url
 
 
 class HttpRequestMethod(str, Enum):
@@ -42,7 +43,9 @@ class HttpRequestNodeData(BaseNodeData):
 
     @field_validator("url", mode="before")
     def validate_url(cls, url: Optional[HttpUrl]):
-        return url if url != "" else None
+        if url in (None, ""):
+            return None
+        return validate_safe_http_url(str(url))
 
     @field_validator("outputs", mode="before")
     def validate_outputs(cls, outputs: list[VariableEntity]):

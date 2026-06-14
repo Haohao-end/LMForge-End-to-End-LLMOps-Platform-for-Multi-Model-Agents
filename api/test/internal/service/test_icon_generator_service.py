@@ -24,6 +24,21 @@ def _build_service(cos_service=None, language_model_manager=None):
     )
 
 
+def _mock_safe_request(response, snapshot=None):
+    def _safe_request(method, url, **kwargs):
+        if snapshot is not None:
+            snapshot.update(
+                {
+                    "method": method,
+                    "url": url,
+                    "kwargs": kwargs,
+                }
+            )
+        return response
+
+    return _safe_request
+
+
 @pytest.fixture(autouse=True)
 def _mock_icon_prompt_generation(monkeypatch):
     """默认阻断提示词外部调用，避免测试触发真实网络重试。"""
@@ -53,8 +68,13 @@ class TestIconGeneratorService:
         mock_download_response.content = b"fake-image-data"
         mock_download_response.raise_for_status = Mock()
 
-        with patch("internal.service.icon_generator_service.requests.post", return_value=mock_response):
-            with patch("internal.service.icon_generator_service.requests.get", return_value=mock_download_response):
+        with patch(
+            "internal.service.icon_generator_service.safe_request",
+            side_effect=[
+                mock_response,
+                mock_download_response,
+            ],
+        ):
                 mock_cos_client = Mock()
                 mock_cos_service = SimpleNamespace(
                     _get_client=Mock(return_value=mock_cos_client),
@@ -188,7 +208,10 @@ class TestIconGeneratorService:
         mock_download_response.content = b"fake-image-data"
         mock_download_response.raise_for_status = Mock()
 
-        with patch("internal.service.icon_generator_service.requests.get", return_value=mock_download_response):
+        with patch(
+            "internal.service.icon_generator_service.safe_request",
+            return_value=mock_download_response,
+        ):
             mock_cos_client = Mock()
             mock_cos_service = SimpleNamespace(
                 _get_client=Mock(return_value=mock_cos_client),
@@ -216,7 +239,7 @@ class TestIconGeneratorService:
         mock_download_response = Mock()
         mock_download_response.content = b"image"
         mock_download_response.raise_for_status = Mock()
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.get", lambda *_args, **_kwargs: mock_download_response)
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", lambda *_args, **_kwargs: mock_download_response)
 
         mock_cos_service = SimpleNamespace(
             _get_client=Mock(return_value=Mock()),
@@ -235,7 +258,7 @@ class TestIconGeneratorService:
         mock_response = Mock()
         mock_response.json.return_value = {"images": []}
         mock_response.raise_for_status = Mock()
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.post", lambda *_args, **_kwargs: mock_response)
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", lambda *_args, **_kwargs: mock_response)
 
         service = _build_service()
 
@@ -250,7 +273,7 @@ class TestIconGeneratorService:
         mock_response = Mock()
         mock_response.json.return_value = {"images": [{}]}
         mock_response.raise_for_status = Mock()
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.post", lambda *_args, **_kwargs: mock_response)
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", lambda *_args, **_kwargs: mock_response)
 
         service = _build_service()
 
@@ -265,7 +288,7 @@ class TestIconGeneratorService:
         mock_response = Mock()
         mock_response.json.return_value = {"images": []}
         mock_response.raise_for_status = Mock()
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.post", lambda *_args, **_kwargs: mock_response)
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", lambda *_args, **_kwargs: mock_response)
 
         service = _build_service()
 
@@ -280,7 +303,7 @@ class TestIconGeneratorService:
         mock_response = Mock()
         mock_response.json.return_value = {"images": [{}]}
         mock_response.raise_for_status = Mock()
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.post", lambda *_args, **_kwargs: mock_response)
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", lambda *_args, **_kwargs: mock_response)
 
         service = _build_service()
 
@@ -302,7 +325,7 @@ class TestIconGeneratorService:
             def raise_for_status(self):
                 raise requests.exceptions.HTTPError("too-many-requests", response=self)
 
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.post", lambda *_args, **_kwargs: _Response())
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", lambda *_args, **_kwargs: _Response())
 
         service = _build_service()
 
@@ -374,14 +397,15 @@ class TestIconGeneratorService:
         response.raise_for_status = Mock()
         response.json.return_value = {"images": [{"url": "https://kolors.example/icon.png"}]}
 
-        def _mock_post(url, *args, **kwargs):
+        def _mock_safe_request(method, url, **kwargs):
+            request_snapshot["method"] = method
             request_snapshot["url"] = url
             request_snapshot["json"] = kwargs.get("json")
             request_snapshot["headers"] = kwargs.get("headers")
             request_snapshot["timeout"] = kwargs.get("timeout")
             return response
 
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.post", _mock_post)
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", _mock_safe_request)
 
         service = _build_service()
         monkeypatch.setattr(
@@ -421,14 +445,15 @@ class TestIconGeneratorService:
         response.raise_for_status = Mock()
         response.json.return_value = {"images": [{"url": "https://qwen.example/icon.png"}]}
 
-        def _mock_post(url, *args, **kwargs):
+        def _mock_safe_request(method, url, **kwargs):
+            request_snapshot["method"] = method
             request_snapshot["url"] = url
             request_snapshot["json"] = kwargs.get("json")
             request_snapshot["headers"] = kwargs.get("headers")
             request_snapshot["timeout"] = kwargs.get("timeout")
             return response
 
-        monkeypatch.setattr("internal.service.icon_generator_service.requests.post", _mock_post)
+        monkeypatch.setattr("internal.service.icon_generator_service.safe_request", _mock_safe_request)
 
         service = _build_service()
         monkeypatch.setattr(

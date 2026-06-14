@@ -6,6 +6,8 @@ from wtforms import BooleanField, IntegerField, StringField
 from wtforms.validators import DataRequired, Length, NumberRange, Optional, URL, ValidationError
 
 from internal.entity.mcp_entity import MCP_CATEGORY_OPTIONS
+from internal.exception import ValidateErrorException
+from internal.lib.safe_http_client import validate_safe_http_url
 from internal.schema import DictField, ListField
 from pkg.paginator import PaginatorReq
 
@@ -101,6 +103,21 @@ class CreateMcpProviderReq(FlaskForm):
         if not isinstance(field.data, dict):
             raise ValidationError("env 必须是对象")
 
+    def validate_url(self, field: StringField) -> None:
+        normalized_url = str(field.data or "").strip()
+        transport = str(self.transport.data or "").strip().lower() or "streamable_http"
+
+        if transport == "stdio":
+            return
+
+        if not normalized_url:
+            raise ValidationError("url 不能为空")
+
+        try:
+            validate_safe_http_url(normalized_url)
+        except ValidateErrorException as exc:
+            raise ValidationError(str(exc)) from exc
+
 
 class UpdateMcpProviderReq(CreateMcpProviderReq):
     """更新 MCP 提供者请求。"""
@@ -168,4 +185,3 @@ class GetMcpCategoriesResp(Schema):
 
     def dump(self, obj, **kwargs):
         return {"categories": MCP_CATEGORY_OPTIONS}
-

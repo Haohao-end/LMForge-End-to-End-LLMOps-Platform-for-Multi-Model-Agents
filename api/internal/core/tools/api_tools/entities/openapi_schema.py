@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from internal.exception import ValidateErrorException
 from enum import Enum
+from internal.lib.safe_http_client import validate_safe_http_url
 
 class ParameterType(str, Enum):
     """参数支持的类型"""
@@ -35,7 +36,8 @@ class OpenAPISchema(BaseModel):
         """校验server数据"""
         if server is None or server == "":
             raise ValidateErrorException("server不能为空且为字符串")
-        return server
+        normalized_server = validate_safe_http_url(server)
+        return normalized_server.rstrip("/")
 
     @field_validator("description", mode="before")
     def validate_description(cls, description: str) -> str:
@@ -121,7 +123,6 @@ class OpenAPISchema(BaseModel):
             }
 
         return extra_paths
-
 
 
 

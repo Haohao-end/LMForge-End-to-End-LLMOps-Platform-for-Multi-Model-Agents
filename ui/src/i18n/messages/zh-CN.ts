@@ -1333,7 +1333,6 @@ export default {
       },
     },
     published: {
-      leakAlert: '如应用访问链接或二维码意外泄露，请及时重新生成或进行停止分发，避免资源出现异常消耗',
       columns: {
         channel: '发布渠道',
         status: '状态',

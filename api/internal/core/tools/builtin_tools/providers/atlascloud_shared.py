@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import requests
 
 from internal.exception import FailException
+from internal.lib.safe_http_client import safe_request
 from internal.service.cos_service import CosService
 
 
@@ -74,7 +75,7 @@ def _request_json(
     json_body: dict | None = None,
     timeout_seconds: int = 60,
 ) -> dict:
-    response = requests.request(
+    response = safe_request(
         method,
         url,
         headers=_build_headers(),
@@ -276,8 +277,7 @@ def _persist_remote_asset(asset_url: str, *, source: str, folder: str, kind: str
     if not asset_url:
         raise FailException("Atlas Cloud 生成失败：未返回资源 URL")
 
-    response = requests.get(asset_url, timeout=120)
-    response.raise_for_status()
+    response = safe_request("GET", asset_url, timeout=120)
 
     extension = _guess_extension(
         asset_url,

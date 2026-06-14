@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import Type, Optional, Callable
 from injector import inject
-import requests
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel,create_model, Field
 from internal.core.tools.api_tools.entities import ToolEntity,ParameterTypeMap, ParameterIn
+from internal.lib.safe_http_client import safe_request
 
 DEFAULT_API_TOOL_TIMEOUT_SECONDS = 30
 
@@ -41,7 +41,7 @@ class ApiProviderManager(BaseModel):
                 parameters[parameter.get("in", ParameterIn.QUERY)][key] = value
 
             # 6.构建request请求并返回采集的内容
-            return requests.request(
+            return safe_request(
                 method=tool_entity.method,
                 url=tool_entity.url.format(**parameters[ParameterIn.PATH]),
                 params=parameters[ParameterIn.QUERY],

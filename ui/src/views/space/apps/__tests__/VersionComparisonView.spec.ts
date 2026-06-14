@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -31,6 +34,11 @@ vi.mock('@/services/app', async () => {
 vi.mock('@/utils/time-formatter', () => ({
   formatTimestampLong: (value: number) => `时间-${value}`,
 }))
+
+const versionComparisonSource = readFileSync(
+  resolve(process.cwd(), 'src/views/space/apps/VersionComparisonView.vue'),
+  'utf8',
+)
 
 const slotStub = {
   props: ['color', 'size', 'bordered', 'loading', 'placeholder', 'modelValue', 'value'],
@@ -130,6 +138,13 @@ const mountView = async () => {
 describe('VersionComparisonView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('keeps the comparison shell full width and the scroll container stable', () => {
+    expect(versionComparisonSource).toContain('<a-spin :loading="loading" class="h-full min-h-0 w-full">')
+    expect(versionComparisonSource).toContain(
+      'class="h-full min-h-0 overflow-y-scroll overflow-x-hidden scrollbar-w-none"',
+    )
   })
 
   it('renders structured compare cards instead of raw JSON blocks', async () => {
@@ -262,10 +277,11 @@ describe('VersionComparisonView', () => {
     const wrapper = await mountView()
 
     const scrollContainer = wrapper.get('[data-testid="versions-scroll-container"]')
-    expect(scrollContainer.classes()).toContain('overflow-y-auto')
+    expect(scrollContainer.classes()).toContain('overflow-y-scroll')
     expect(scrollContainer.classes()).toContain('overflow-x-hidden')
     expect(scrollContainer.classes()).toContain('scrollbar-w-none')
     expect(scrollContainer.classes()).not.toContain('overflow-auto')
+    expect(scrollContainer.classes()).not.toContain('overflow-y-auto')
 
     expect(wrapper.find('[data-testid="comparison-section-dialog_round"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="comparison-section-model_config"]').exists()).toBe(true)

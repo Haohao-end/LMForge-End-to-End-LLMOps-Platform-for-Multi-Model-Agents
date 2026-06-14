@@ -1352,7 +1352,6 @@ export default {
       },
     },
     published: {
-      leakAlert: 'If the access link or QR code is exposed unexpectedly, regenerate it or stop distribution promptly to avoid abnormal resource consumption.',
       columns: {
         channel: 'Channel',
         status: 'Status',

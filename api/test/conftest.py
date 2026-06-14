@@ -1,4 +1,6 @@
 import os
+import ipaddress
+import socket
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -19,6 +21,66 @@ def _disable_external_tracing(monkeypatch):
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
     monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    yield
+
+
+def _build_fake_getaddrinfo_result(ip: str, port: int | None):
+    family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+    if family == socket.AF_INET6:
+        sockaddr = (ip, port or 0, 0, 0)
+    else:
+        sockaddr = (ip, port or 0)
+    return [(family, socket.SOCK_STREAM, 6, "", sockaddr)]
+
+
+@pytest.fixture(autouse=True)
+def _stable_safe_http_dns(monkeypatch):
+    """
+    为安全 HTTP 校验提供稳定的离线 DNS 行为。
+
+    说明：
+    - 已知的测试域名固定到公网 IP，避免依赖真实 DNS。
+    - localhost / loopback 保持为回环地址，便于相关拦截测试。
+    - 未知域名默认解析到公网 IP，避免 CI 因外网 DNS 抖动失败。
+    """
+
+    public_ip = "93.184.216.34"
+    loopback_ip = "127.0.0.1"
+    private_ip = "10.0.0.1"
+
+    def _fake_getaddrinfo(host, port, *args, **kwargs):
+        normalized = str(host or "").strip().lower().rstrip(".")
+        mapping = {
+            "localhost": loopback_ip,
+            "private.example.com": private_ip,
+            "rebound.example.com": public_ip,
+            "api.example.com": public_ip,
+            "example.com": public_ip,
+            "a.com": public_ip,
+            "baidu.com": public_ip,
+            "kolors.example": public_ip,
+            "qwen.example": public_ip,
+            "cos.example.com": public_ip,
+            "mcp.example.com": public_ip,
+            "img.example.com": public_ip,
+            "temporary.example.com": public_ip,
+            "sandbox.example.com": public_ip,
+            "ui.example.com": public_ip,
+        }
+
+        if normalized.endswith(".localhost"):
+            ip = loopback_ip
+        elif normalized in mapping:
+            ip = mapping[normalized]
+        else:
+            try:
+                ip = str(ipaddress.ip_address(normalized))
+            except ValueError:
+                ip = public_ip
+
+        return _build_fake_getaddrinfo_result(ip, port)
+
+    monkeypatch.setattr("internal.lib.safe_http_client.socket.getaddrinfo", _fake_getaddrinfo)
     yield
 
 

@@ -156,14 +156,6 @@ const insertMarkdown = (syntax: string, placeholder = '') => {
       newText = `[${textToInsert || t('chat.markdown.linkText')}](url)`
       cursorOffset = textToInsert ? newText.length - 4 : 1
       break
-    case 'ul':
-      newText = `\n- ${textToInsert || t('chat.markdown.listItem')}\n`
-      cursorOffset = textToInsert ? newText.length : 3
-      break
-    case 'ol':
-      newText = `\n1. ${textToInsert || t('chat.markdown.listItem')}\n`
-      cursorOffset = textToInsert ? newText.length : 4
-      break
     case 'quote':
       newText = `\n> ${textToInsert || t('chat.markdown.quoteText')}\n`
       cursorOffset = textToInsert ? newText.length : 3
@@ -233,22 +225,6 @@ const handleMarkdownClick = async (event: MouseEvent) => {
                 <icon-italic />
               </template>
             </a-button>
-
-            <a-divider direction="vertical" class="!my-0" />
-
-            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ul')">
-              <template #icon>
-                <icon-unordered-list />
-              </template>
-            </a-button>
-            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ol')">
-              <template #icon>
-                <icon-ordered-list />
-              </template>
-            </a-button>
-
-            <a-divider direction="vertical" class="!my-0" />
-
             <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('code')">
               <template #icon>
                 <icon-code />
@@ -296,21 +272,6 @@ const handleMarkdownClick = async (event: MouseEvent) => {
             </a-button>
 
             <a-divider direction="vertical" class="!my-0" />
-
-            <!-- 列表 -->
-            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ul')">
-              <template #icon>
-                <icon-unordered-list />
-              </template>
-            </a-button>
-            <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('ol')">
-              <template #icon>
-                <icon-ordered-list />
-              </template>
-            </a-button>
-
-            <a-divider direction="vertical" class="!my-0" />
-
             <!-- 其他 -->
             <a-button size="mini" class="toolbar-btn" @click="insertMarkdown('quote')">
               <template #icon>
@@ -341,8 +302,9 @@ const handleMarkdownClick = async (event: MouseEvent) => {
         <a-space :size="4">
           <a-button
             size="mini"
-            :type="mode === 'edit' ? 'primary' : 'text'"
-            class="toolbar-btn"
+            type="text"
+            class="toolbar-btn toolbar-mode-btn"
+            :class="{ 'toolbar-mode-btn--active': mode === 'edit' }"
             @click="mode = 'edit'"
           >
             <template #icon>
@@ -352,8 +314,9 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           </a-button>
           <a-button
             size="mini"
-            :type="mode === 'split' ? 'primary' : 'text'"
-            class="toolbar-btn"
+            type="text"
+            class="toolbar-btn toolbar-mode-btn"
+            :class="{ 'toolbar-mode-btn--active': mode === 'split' }"
             @click="mode = 'split'"
           >
             <template #icon>
@@ -363,8 +326,9 @@ const handleMarkdownClick = async (event: MouseEvent) => {
           </a-button>
           <a-button
             size="mini"
-            :type="mode === 'preview' ? 'primary' : 'text'"
-            class="toolbar-btn"
+            type="text"
+            class="toolbar-btn toolbar-mode-btn"
+            :class="{ 'toolbar-mode-btn--active': mode === 'preview' }"
             @click="mode = 'preview'"
           >
             <template #icon>
@@ -380,20 +344,17 @@ const handleMarkdownClick = async (event: MouseEvent) => {
     <div class="editor-body" :class="{ 'split-mode': mode === 'split' }">
       <!-- 编辑区 -->
       <div v-show="mode === 'edit' || mode === 'split'" class="editor-pane">
-        <textarea
-          ref="textareaRef"
-          :value="props.modelValue"
-          :placeholder="resolvedPlaceholder"
-          :maxlength="props.maxLength"
-          class="editor-textarea"
-          @input="handleInput"
-          @blur="handleBlur"
-          @scroll="syncScrollFromEditor"
-        />
-        <div class="editor-footer">
-          <span class="text-xs text-gray-400">
-            {{ wordCount }} / {{ props.maxLength }}
-          </span>
+        <div class="editor-surface editor-surface--edit">
+          <textarea
+            ref="textareaRef"
+            :value="props.modelValue"
+            :placeholder="resolvedPlaceholder"
+            :maxlength="props.maxLength"
+            class="editor-textarea"
+            @input="handleInput"
+            @blur="handleBlur"
+            @scroll="syncScrollFromEditor"
+          />
         </div>
       </div>
 
@@ -403,13 +364,21 @@ const handleMarkdownClick = async (event: MouseEvent) => {
         ref="previewPaneRef"
         class="preview-pane"
         @scroll="syncScrollFromPreview"
-      >
-        <div
-          class="markdown-body preview-content"
-          v-html="compiledMarkdown"
-          @click="handleMarkdownClick"
-        />
+        >
+        <div class="editor-surface editor-surface--preview">
+          <div
+            class="markdown-body preview-content"
+            v-html="compiledMarkdown"
+            @click="handleMarkdownClick"
+          />
+        </div>
       </div>
+    </div>
+
+    <div class="editor-footer">
+      <span class="text-xs text-gray-400">
+        {{ wordCount }} / {{ props.maxLength }}
+      </span>
     </div>
   </div>
 </template>
@@ -424,6 +393,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   background: #fff;
   height: 100%; /* 关键：占满父容器高度 */
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .editor-toolbar {
@@ -465,6 +435,22 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   background: #e5e7eb;
 }
 
+.toolbar-mode-btn {
+  min-width: 68px;
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.toolbar-mode-btn--active {
+  color: #165dff;
+  background: #e8f2ff;
+  box-shadow: inset 0 0 0 1px #b6d4fe;
+}
+
+.toolbar-mode-btn--active:hover {
+  background: #e8f2ff;
+}
+
 .toolbar-text-btn {
   min-width: 36px;
   padding: 0 10px;
@@ -474,14 +460,15 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 }
 
 .editor-body {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   flex: 1;
   overflow: hidden;
   min-height: var(--editor-min-height, 200px);
+  align-items: stretch;
 }
 
 .editor-body.split-mode {
-  display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   /* Split mode should still be sized by the parent container.
      A hard 600px floor clips the preview in shorter layouts. */
@@ -493,8 +480,25 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   flex: 1;
   position: relative;
   overflow: hidden;
+  height: 100%;
   min-height: 0; /* 关键：允许 flex 子元素正确计算高度 */
   min-width: 0;
+}
+
+.editor-surface {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.editor-surface--edit,
+.editor-surface--preview {
+  background: #fff;
 }
 
 .split-mode .editor-pane {
@@ -504,10 +508,14 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 .editor-textarea {
   flex: 1;
   width: 100%;
-  padding: 16px;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
   border: none;
   outline: none;
   resize: none;
+  box-sizing: border-box;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
     monospace;
   font-size: 14px;
@@ -535,6 +543,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 }
 
 .editor-footer {
+  flex-shrink: 0;
   padding: 8px 16px;
   border-top: 1px solid #f3f4f6;
   background: #fafafa;
@@ -544,6 +553,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 
 .preview-pane {
   flex: 1;
+  height: 100%;
   overflow: auto;
   background: #fff;
   min-height: 0; /* 关键：允许 flex 子元素正确计算高度 */
@@ -554,8 +564,10 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 }
 
 .preview-content {
-  padding: 16px;
   background: transparent;
+  min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* 隐藏预览区滚动条但保持滚动功能 */

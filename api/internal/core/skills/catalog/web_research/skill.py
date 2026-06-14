@@ -7,7 +7,8 @@ import re
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
-from urllib.request import Request, urlopen
+
+from internal.lib.safe_http_client import safe_request
 
 
 def _normalize_text(value: Any) -> str:
@@ -19,10 +20,14 @@ def _strip_html_tags(text: str) -> str:
 
 
 def _fetch_url(url: str, timeout: int = 15) -> str:
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request, timeout=timeout) as response:
-        content_type = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(content_type, errors="ignore")
+    response = safe_request(
+        "GET",
+        url,
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=timeout,
+    )
+    response.encoding = response.encoding or "utf-8"
+    return response.text
 
 
 class _DuckDuckGoResultParser(HTMLParser):

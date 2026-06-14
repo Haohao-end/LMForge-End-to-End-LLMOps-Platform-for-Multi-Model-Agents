@@ -249,6 +249,10 @@ export const useUpdateDraftGraph = () => {
       loading.value = true
       const resp = await updateDraftGraph(workflow_id, req)
       is_notify && Message.success(resp.message)
+      return true
+    } catch (error: unknown) {
+      Message.error(getErrorMessage(error, '保存工作流失败，请稍后重试'))
+      return false
     } finally {
       loading.value = false
     }
