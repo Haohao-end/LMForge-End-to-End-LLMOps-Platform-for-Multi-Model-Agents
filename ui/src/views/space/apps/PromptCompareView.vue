@@ -304,13 +304,13 @@ onMounted(async () => {
 
 <template>
   <div class="prompt-compare-page flex-1 min-h-0 min-w-0 overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(219,234,254,0.9),_rgba(248,250,252,1)_40%,_rgba(255,255,255,1)_100%)]">
-    <div class="grid h-full min-h-0 min-w-0 gap-4 p-4 xl:grid-cols-[minmax(460px,1.45fr)_minmax(340px,2.9fr)]">
-      <div class="compare-editor-scroll min-h-0 min-w-0 overflow-y-auto pr-2">
+    <div class="grid h-full min-h-0 min-w-0 overflow-hidden gap-4 p-4 xl:grid-cols-[minmax(460px,1.45fr)_minmax(340px,2.9fr)]">
+      <div class="compare-editor-scroll min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pr-2">
         <div class="space-y-4">
           <div
             v-for="lane in lanes"
             :key="lane.key"
-            class="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm backdrop-blur"
+            class="rounded-2xl border border-white/70 bg-white/85 p-4 shadow-sm backdrop-blur overflow-clip min-w-0"
           >
             <div class="flex flex-col gap-3 2xl:flex-row 2xl:items-start 2xl:justify-between">
               <div>
@@ -338,7 +338,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div class="mt-3 h-[560px]">
+            <div class="mt-3 h-[560px] overflow-clip min-w-0">
               <markdown-editor
                 :model-value="lane.preset_prompt"
                 :max-length="5000"
@@ -476,6 +476,16 @@ onMounted(async () => {
 .prompt-compare-page :deep(.compare-editor-scroll),
 .prompt-compare-page :deep(.compare-output-scroll) {
   min-width: 0;
+}
+
+/*
+ * 关键修复：用 overflow: clip 替代 overflow: hidden 在 editor-body 上
+ * overflow: hidden 仍然允许 min-content-size 向上传播，导致 split-mode 下宽度翻倍（550→1109px）
+ * overflow: clip 彻底截断 min-content-size 传播（不创建 scroll container）
+ * 只在 prompt-compare 页面生效，不影响其他使用 MarkdownEditor 的页面
+ */
+.prompt-compare-page :deep(.editor-body) {
+  overflow: clip;
 }
 
 .prompt-compare-page :deep(.message-bubble-content) {

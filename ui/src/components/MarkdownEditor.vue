@@ -465,6 +465,7 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   flex: 1;
   overflow: hidden;
   min-height: var(--editor-min-height, 200px);
+  min-width: 0;
   align-items: stretch;
 }
 
@@ -496,9 +497,22 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   box-sizing: border-box;
 }
 
-.editor-surface--edit,
+.editor-surface--edit {
+  background: #fff;
+}
+
 .editor-surface--preview {
   background: #fff;
+  /* 滚动责任从 preview-pane 转移到这里，外层 overflow:hidden 不影响宽度计算 */
+  overflow-y: auto;
+  overflow-x: hidden; /* 阻断 CSS 隐式规则：overflow-y:auto 会把 overflow-x 强制为 auto，导致双轴滚动条槽位各占 17px 共 34px */
+  scroll-behavior: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.editor-surface--preview::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .split-mode .editor-pane {
@@ -552,15 +566,14 @@ const handleMarkdownClick = async (event: MouseEvent) => {
 }
 
 .preview-pane {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   height: 100%;
-  overflow: auto;
+  overflow: hidden; /* 外层裁剪，不参与滚动条宽度计算，与 editor-pane 行为一致 */
   background: #fff;
   min-height: 0; /* 关键：允许 flex 子元素正确计算高度 */
   min-width: 0;
-  scroll-behavior: auto; /* 禁用平滑滚动，避免抖动 */
-  will-change: scroll-position; /* 提示浏览器优化滚动性能 */
-  transform: translateZ(0); /* 启用硬件加速 */
 }
 
 .preview-content {
@@ -568,16 +581,6 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   min-height: 100%;
   width: 100%;
   box-sizing: border-box;
-}
-
-/* 隐藏预览区滚动条但保持滚动功能 */
-.preview-pane {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
-}
-
-.preview-pane::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
 }
 
 /* Markdown 样式增强 */
