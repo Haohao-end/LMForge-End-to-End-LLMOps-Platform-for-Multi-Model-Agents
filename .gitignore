@@ -82,6 +82,10 @@ htmlcov/
 *.swo
 *~
 .DS_Store
+*.Zone.Identifier
+
+# Windows NTFS metadata
+# Contains download source URL (privacy risk)
 
 # Docker
 docker/volumes/
