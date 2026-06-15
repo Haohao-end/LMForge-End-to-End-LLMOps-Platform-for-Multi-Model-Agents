@@ -76,23 +76,23 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
 - 基础设施与交付：Docker Compose、Nginx、OpenAPI、SSE
 - 模型接入：OpenAI、Atlas Cloud、DeepSeek、Grok、Google、Moonshot、Tongyi、Wenxin、Ollama、Zhipu
 
-### 供应商生态
+### 供应商生态（赞助商）
 
-#### Atlas Cloud（赞助商）
+#### Atlas Cloud
 
 <p align="center">
-  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="520" />
+  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="720" />
 </p>
 
 - Atlas Cloud 现已作为 OpenAI 兼容提供商可用，可通过 `ATLASCLOUD_API_KEY` 和 `ATLASCLOUD_API_BASE` 接入。
 - 官方网站：[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent)
 - 接入文档：[https://www.atlascloud.ai/docs](https://www.atlascloud.ai/docs)
 
-#### Bloome（赞助商）
+#### Bloome
 
 <p align="center">
   <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">
-    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="520" />
+    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="720" />
   </a>
 </p>
 
