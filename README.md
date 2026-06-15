@@ -76,7 +76,7 @@ Click the diagram to view the full-resolution architecture image.
 - Infrastructure and delivery: Docker Compose, Nginx, OpenAPI, SSE
 - Model integrations: OpenAI, Atlas Cloud, DeepSeek, Grok, Google, Moonshot, Tongyi, Wenxin, Ollama, Zhipu
 
-### Supported By
+### Sponsored By
 
 #### Atlas Cloud
 
