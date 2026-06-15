@@ -78,6 +78,8 @@ Click the diagram to view the full-resolution architecture image.
 
 ### Provider Ecosystem
 
+#### Atlas Cloud (Sponsor)
+
 <p align="center">
   <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="520" />
 </p>
@@ -85,6 +87,16 @@ Click the diagram to view the full-resolution architecture image.
 - Atlas Cloud is now available as an OpenAI-compatible provider with `ATLASCLOUD_API_KEY` and `ATLASCLOUD_API_BASE`.
 - Official website: [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent)
 - Integration docs: [https://www.atlascloud.ai/docs](https://www.atlascloud.ai/docs)
+
+#### Bloome (Sponsor)
+
+<p align="center">
+  <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">
+    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="520" />
+  </a>
+</p>
+
+- Official website: [Bloome](https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
