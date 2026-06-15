@@ -76,7 +76,7 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
 - 基础设施与交付：Docker Compose、Nginx、OpenAPI、SSE
 - 模型接入：OpenAI、Atlas Cloud、DeepSeek、Grok、Google、Moonshot、Tongyi、Wenxin、Ollama、Zhipu
 
-### 供应商生态（赞助商）
+### 赞助商
 
 #### Atlas Cloud
 
