@@ -247,5 +247,6 @@ The repository already includes automated backend and frontend tests.
 
 - Thanks to Atlas Cloud and Bloome for supporting OpenAgent.
 - Special thanks to Rui Yang and Haoyu Wang (Johns Hopkins University) for responsibly reporting a Host Header poisoning issue in the built-in tool icon URL construction and helping improve the security of this project.
+- Special thanks to Ryan B for responsibly reporting an SSRF vulnerability in the custom API-tool server URL and helping improve the project's outbound request security.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
