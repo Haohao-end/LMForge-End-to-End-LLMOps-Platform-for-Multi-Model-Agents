@@ -81,7 +81,7 @@ Click the diagram to view the full-resolution architecture image.
 #### Atlas Cloud
 
 <p align="center">
-  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="850" />
+  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="560" />
 </p>
 
 - Atlas Cloud is now available as an OpenAI-compatible provider with `ATLASCLOUD_API_KEY` and `ATLASCLOUD_API_BASE`.
