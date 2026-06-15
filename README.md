@@ -76,23 +76,23 @@ Click the diagram to view the full-resolution architecture image.
 - Infrastructure and delivery: Docker Compose, Nginx, OpenAPI, SSE
 - Model integrations: OpenAI, Atlas Cloud, DeepSeek, Grok, Google, Moonshot, Tongyi, Wenxin, Ollama, Zhipu
 
-### Provider Ecosystem
+### Provider Ecosystem (Sponsors)
 
-#### Atlas Cloud (Sponsor)
+#### Atlas Cloud
 
 <p align="center">
-  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="520" />
+  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="720" />
 </p>
 
 - Atlas Cloud is now available as an OpenAI-compatible provider with `ATLASCLOUD_API_KEY` and `ATLASCLOUD_API_BASE`.
 - Official website: [Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent)
 - Integration docs: [https://www.atlascloud.ai/docs](https://www.atlascloud.ai/docs)
 
-#### Bloome (Sponsor)
+#### Bloome
 
 <p align="center">
   <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">
-    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="520" />
+    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="720" />
   </a>
 </p>
 
