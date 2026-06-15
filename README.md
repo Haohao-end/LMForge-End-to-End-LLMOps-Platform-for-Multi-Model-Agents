@@ -81,7 +81,7 @@ Click the diagram to view the full-resolution architecture image.
 #### Atlas Cloud
 
 <p align="center">
-  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="720" />
+  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="850" />
 </p>
 
 - Atlas Cloud is now available as an OpenAI-compatible provider with `ATLASCLOUD_API_KEY` and `ATLASCLOUD_API_BASE`.
@@ -92,11 +92,11 @@ Click the diagram to view the full-resolution architecture image.
 
 <p align="center">
   <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">
-    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="720" />
+    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="850" />
   </a>
 </p>
 
-- Official website: [Bloome](https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd)
+- Bloome is an AI-agent IM platform where you can interact with AI agents and build collaborative communities. Official website: [Bloome](https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

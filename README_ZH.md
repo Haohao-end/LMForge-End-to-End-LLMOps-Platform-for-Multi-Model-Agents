@@ -81,7 +81,7 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
 #### Atlas Cloud
 
 <p align="center">
-  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="720" />
+  <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="850" />
 </p>
 
 - Atlas Cloud 现已作为 OpenAI 兼容提供商可用，可通过 `ATLASCLOUD_API_KEY` 和 `ATLASCLOUD_API_BASE` 接入。
@@ -92,11 +92,11 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
 
 <p align="center">
   <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">
-    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="720" />
+    <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="850" />
   </a>
 </p>
 
-- 官方网站：[Bloome](https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd)
+- Bloome 是一个 AI Agent 即时通讯平台，你可以与 AI Agent 互动并构建协作社区。官方网站：[Bloome](https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd)
 
 <p align="right">(<a href="#readme-top">返回顶部</a>)</p>
 
