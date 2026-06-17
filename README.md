@@ -54,6 +54,7 @@ What the current codebase already supports:
 
 - Use the home assistant to route user requests to published public agents through A2A, or turn natural-language requirements into new AI app creation flows.
 - Build and manage AI apps from a dedicated workspace with draft, publish, analysis, version comparison, and prompt comparison flows.
+- Enable Deep Research to let the app decompose complex tasks and coordinate bound capabilities across multi-step execution, suitable for scenarios requiring deep reasoning and concrete outputs.
 - Design workflows visually with nodes for LLMs, tool calls, dataset retrieval, code execution, HTTP requests, branching, text processing, template transforms, and structured parameter extraction.
 - Manage datasets, upload documents, inspect segments, and connect retrieval to agents and workflows.
 - Browse public apps, tools, and workflows through store-style views.
