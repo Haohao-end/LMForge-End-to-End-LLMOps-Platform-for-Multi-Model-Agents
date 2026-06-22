@@ -17,6 +17,8 @@ docs/
 !/CODE_OF_CONDUCT.md
 !/SECURITY.md
 !/CONTRIBUTING.md
+# PR template is intentionally tracked (path-anchored, won't un-ignore other *.md).
+!.github/PULL_REQUEST_TEMPLATE.md
 
 # Local Codex / browser artifacts
 .codex
