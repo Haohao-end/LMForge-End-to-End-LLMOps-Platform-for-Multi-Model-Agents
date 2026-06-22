@@ -12,6 +12,11 @@ docs/
 !api/README.md
 !ui/README.md
 !docker/README.md
+# Community / governance docs at repo root are intentionally tracked.
+# 仓库根目录的社区与治理文档为有意跟踪(前导 / 锚定到根,避免误伤子目录同名文件)。
+!/CODE_OF_CONDUCT.md
+!/SECURITY.md
+!/CONTRIBUTING.md
 
 # Local Codex / browser artifacts
 .codex

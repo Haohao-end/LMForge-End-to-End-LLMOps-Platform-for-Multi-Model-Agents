@@ -1,5 +1,9 @@
 # Contributor Covenant Code of Conduct
 
+> **中文说明 / Chinese note**: 本行为准则基于 Contributor Covenant 2.0。
+> 官方中文翻译请见 <https://www.contributor-covenant.org/translations/>。
+> 投诉与执行联系邮箱 / Enforcement contact: **2227625024@qq.com**
+
 ## Our Pledge
 
 We as members, contributors, and leaders pledge to make participation in our
@@ -60,7 +64,7 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at
-.
+**2227625024@qq.com**.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
