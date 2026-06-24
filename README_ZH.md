@@ -85,7 +85,7 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
   <img src="ui/public/atlas-cloudXopenagent.jpg" alt="Atlas Cloud" width="560" />
 </p>
 
-- Atlas Cloud 现已作为 OpenAI 兼容提供商可用，可通过 `ATLASCLOUD_API_KEY` 和 `ATLASCLOUD_API_BASE` 接入。
+- Atlas Cloud 是 OpenRouter 的模型提供商。本项目可通过 `ATLASCLOUD_API_KEY` 和 `ATLASCLOUD_API_BASE` 接入。
 - 官方网站：[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent)
 - 接入文档：[https://www.atlascloud.ai/docs](https://www.atlascloud.ai/docs)
 
