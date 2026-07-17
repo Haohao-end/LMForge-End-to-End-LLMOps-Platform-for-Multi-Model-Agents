@@ -10,7 +10,7 @@
   </p>
 
   <p align="center">
-    <strong>本项目由 <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> 和 <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">Bloome</a> 赞助</strong>
+    <strong>本项目由 <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> 和 <a href="https://bloome.im/app?ref=uqIIEORd&utm_medium=github&utm_source=Haohao-end-openagent-ivor-202606">Bloome</a> 赞助</strong>
   </p>
 
   <p align="center">
@@ -92,12 +92,12 @@ OpenAgent 不是单一的聊天 Demo，而是一个面向团队和产品化场�
 #### Bloome
 
 <p align="center">
-  <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">
+  <a href="https://bloome.im/app?ref=uqIIEORd&utm_medium=github&utm_source=Haohao-end-openagent-ivor-202606">
     <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="850" />
   </a>
 </p>
 
-- Bloome 是一个 AI Agent 即时通讯平台，你可以与 AI Agent 互动并构建协作社区。官方网站：[Bloome](https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd)
+- Bloome 是一个 AI Agent 即时通讯平台，你可以与 AI Agent 互动并构建协作社区。官方网站：[Bloome](https://bloome.im/app?ref=uqIIEORd&utm_medium=github&utm_source=Haohao-end-openagent-ivor-202606)
 
 <p align="right">(<a href="#readme-top">返回顶部</a>)</p>
 

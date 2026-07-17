@@ -10,7 +10,7 @@
   </p>
 
   <p align="center">
-    <strong>Sponsored by <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> and <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">Bloome</a></strong>
+    <strong>Sponsored by <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=openagent">Atlas Cloud</a> and <a href="https://bloome.im/app?ref=uqIIEORd&utm_medium=github&utm_source=Haohao-end-openagent-ivor-202606">Bloome</a></strong>
   </p>
 
   <p align="center">
@@ -92,12 +92,12 @@ Click the diagram to view the full-resolution architecture image.
 #### Bloome
 
 <p align="center">
-  <a href="https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd">
+  <a href="https://bloome.im/app?ref=uqIIEORd&utm_medium=github&utm_source=Haohao-end-openagent-ivor-202606">
     <img src="ui/public/bloome-outreach-tmp.png" alt="Bloome" width="850" />
   </a>
 </p>
 
-- Bloome is an AI-agent IM platform where you can interact with AI agents and build collaborative communities. Official website: [Bloome](https://bloome.im/agent/join/j5CfmWJj?ref=uqIIEORd)
+- Bloome is an AI-agent IM platform where you can interact with AI agents and build collaborative communities. Official website: [Bloome](https://bloome.im/app?ref=uqIIEORd&utm_medium=github&utm_source=Haohao-end-openagent-ivor-202606)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
